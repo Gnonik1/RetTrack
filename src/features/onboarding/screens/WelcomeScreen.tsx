@@ -5,7 +5,17 @@ import { AppScreen } from '../../../components/AppScreen';
 import { AppText } from '../../../components/AppText';
 import { theme } from '../../../constants/theme';
 
-export function WelcomeScreen() {
+type WelcomeScreenProps = {
+  onContinueAsGuest?: () => void;
+  onContinueWithEmail?: () => void;
+  onSignIn?: () => void;
+};
+
+export function WelcomeScreen({
+  onContinueAsGuest,
+  onContinueWithEmail,
+  onSignIn,
+}: WelcomeScreenProps) {
   return (
     <AppScreen style={styles.screen}>
       <View style={styles.hero}>
@@ -33,10 +43,22 @@ export function WelcomeScreen() {
       <View style={styles.actions}>
         <AppButton title="Continue with Apple" variant="outline" />
         <AppButton title="Continue with Google" variant="primary" />
-        <AppButton title="Continue with Email" variant="outline" />
-        <AppButton title="Continue as guest" variant="secondary" />
+        <AppButton
+          onPress={onContinueWithEmail}
+          title="Continue with Email"
+          variant="outline"
+        />
+        <AppButton
+          onPress={onContinueAsGuest}
+          title="Continue as guest"
+          variant="secondary"
+        />
 
-        <Pressable accessibilityRole="button" style={styles.signInButton}>
+        <Pressable
+          accessibilityRole="button"
+          onPress={onSignIn}
+          style={styles.signInButton}
+        >
           <View style={styles.signInRow}>
             <AppText style={styles.signInPrompt} variant="body">
               Already have an account?{' '}

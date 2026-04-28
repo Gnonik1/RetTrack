@@ -6,12 +6,12 @@ import { AppText } from '../../../components/AppText';
 import { AppTextField } from '../../../components/AppTextField';
 import { theme } from '../../../constants/theme';
 
-type SignInScreenProps = {
+type SignUpScreenProps = {
   onBack?: () => void;
-  onSignIn?: () => void;
+  onCreateAccount?: () => void;
 };
 
-export function SignInScreen({ onBack, onSignIn }: SignInScreenProps) {
+export function SignUpScreen({ onBack, onCreateAccount }: SignUpScreenProps) {
   return (
     <AppScreen style={styles.screen}>
       <View style={styles.content}>
@@ -28,14 +28,20 @@ export function SignInScreen({ onBack, onSignIn }: SignInScreenProps) {
 
         <View style={styles.header}>
           <AppText style={styles.title} variant="title">
-            Sign in
+            Create account
           </AppText>
           <AppText style={styles.subtitle} variant="subtitle">
-            Access your purchases across devices
+            Save your purchases and sync them everywhere.
           </AppText>
         </View>
 
         <View style={styles.fields}>
+          <AppTextField
+            autoCapitalize="words"
+            label="Full name"
+            placeholder="Your name"
+            textContentType="name"
+          />
           <AppTextField
             autoCapitalize="none"
             keyboardType="email-address"
@@ -49,19 +55,17 @@ export function SignInScreen({ onBack, onSignIn }: SignInScreenProps) {
             placeholder={'\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022'}
             secureTextEntry
             showPasswordToggle
-            textContentType="password"
+            textContentType="newPassword"
           />
         </View>
-
-        <Pressable accessibilityRole="button" style={styles.forgotButton}>
-          <AppText style={styles.forgotText} variant="button">
-            Forgot password?
-          </AppText>
-        </Pressable>
       </View>
 
       <View style={styles.actions}>
-        <AppButton onPress={onSignIn} title="Sign in" variant="primary" />
+        <AppButton
+          onPress={onCreateAccount}
+          title="Create account"
+          variant="primary"
+        />
         <AppButton title="Continue with Google" variant="outline" />
         <AppButton title="Continue with Apple" variant="outline" />
       </View>
@@ -72,7 +76,7 @@ export function SignInScreen({ onBack, onSignIn }: SignInScreenProps) {
 const styles = StyleSheet.create({
   screen: {
     justifyContent: 'space-between',
-    paddingBottom: theme.spacing.lg,
+    paddingBottom: theme.spacing.xl + theme.spacing.xs,
     paddingTop: theme.spacing.lg,
   },
   content: {
@@ -98,7 +102,9 @@ const styles = StyleSheet.create({
     marginTop: theme.spacing.xl,
   },
   title: {
-    ...theme.typography.screenTitle,
+    color: theme.colors.text,
+    fontSize: 30,
+    fontWeight: theme.fontWeight.bold,
   },
   subtitle: {
     ...theme.typography.screenSubtitle,
@@ -108,16 +114,6 @@ const styles = StyleSheet.create({
   fields: {
     gap: 14,
     marginTop: theme.spacing.xl + theme.spacing.sm,
-  },
-  forgotButton: {
-    alignSelf: 'flex-start',
-    marginTop: theme.spacing.sm,
-    paddingVertical: theme.spacing.xs,
-  },
-  forgotText: {
-    ...theme.typography.textLink,
-    color: theme.colors.green,
-    fontWeight: theme.fontWeight.medium,
   },
   actions: {
     gap: 12,

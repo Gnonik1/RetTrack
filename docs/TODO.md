@@ -6,7 +6,25 @@
 - Keep button surface contrast consistent across screens: outline buttons should use white/card background with soft border; secondary buttons should use sage background with subtle border.
 - Use the same bottom action spacing pattern from Welcome screen across onboarding screens where appropriate.
 - Keep screen title typography consistent across similar auth/onboarding screens.
-- Remember that app/index.tsx is temporarily used for screen preview until navigation is implemented.
+- Add high-quality optional field icons later using a consistent icon approach; avoid emoji-style text icons.
+- Evaluate and add a professional icon system later, such as lucide-react-native, only after checking Expo SDK compatibility and dependency requirements.
+- Avoid npm --legacy-peer-deps or --force unless explicitly approved after reviewing the dependency conflict.
+- Revisit currency symbols later after confirming reliable font/rendering support for GEL/Lari symbol.
+- Evaluate adding a blurred backdrop for centered picker/modals, such as currency/date/photo pickers, after reviewing dependency fit such as expo-blur.
+
+## Purchases / Add First Purchase
+
+- Add Add First Purchase form state and validation.
+- Required fields should include item name and return date.
+- Require either store or product link before saving.
+- Add disabled/enabled Save item behavior.
+- Add local mock saved-item flow before backend persistence.
+
+## Purchases / Photos
+
+- Add real photo picker later for Add photos.
+- Enforce max 3 photos per item.
+- Review photo permissions and iOS behavior before adding dependencies.
 
 ## Auth / Validation
 
