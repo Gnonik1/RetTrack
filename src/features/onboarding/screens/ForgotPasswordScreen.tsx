@@ -1,12 +1,5 @@
-import { useRef, useState } from 'react';
-import {
-  Keyboard,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  TextInput,
-  View,
-} from 'react-native';
+import { useState } from 'react';
+import { Keyboard, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { AppButton } from '../../../components/AppButton';
 import { AppScreen } from '../../../components/AppScreen';
@@ -14,15 +7,14 @@ import { AppText } from '../../../components/AppText';
 import { AppTextField } from '../../../components/AppTextField';
 import { theme } from '../../../constants/theme';
 
-type SignInScreenProps = {
+type ForgotPasswordScreenProps = {
   onBack?: () => void;
-  onForgotPassword?: () => void;
 };
 
-type SignInErrors = {
-  email?: string;
-  password?: string;
-};
+const forgotPasswordSubtitle =
+  'Enter your email and we\u2019ll send reset instructions.';
+const resetConfirmationMessage =
+  'If an account exists for that email, we\u2019ll send password reset instructions.';
 
 function isValidEmailForMvp(email: string) {
   const atIndex = email.indexOf('@');
@@ -35,55 +27,34 @@ function isValidEmailForMvp(email: string) {
   );
 }
 
-export function SignInScreen({
-  onBack,
-  onForgotPassword,
-}: SignInScreenProps) {
+export function ForgotPasswordScreen({ onBack }: ForgotPasswordScreenProps) {
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [errors, setErrors] = useState<SignInErrors>({});
-  const passwordInputRef = useRef<TextInput>(null);
-
-  const clearFieldError = (field: keyof SignInErrors) => {
-    setErrors((currentErrors) => {
-      if (!currentErrors[field]) {
-        return currentErrors;
-      }
-
-      const nextErrors = { ...currentErrors };
-      delete nextErrors[field];
-
-      return nextErrors;
-    });
-  };
+  const [emailError, setEmailError] = useState<string | undefined>();
+  const [isConfirmationVisible, setIsConfirmationVisible] = useState(false);
 
   const handleEmailChange = (text: string) => {
     setEmail(text);
-    clearFieldError('email');
+    setEmailError(undefined);
+    setIsConfirmationVisible(false);
   };
 
-  const handlePasswordChange = (text: string) => {
-    setPassword(text);
-    clearFieldError('password');
-  };
-
-  const validateForm = () => {
-    const nextErrors: SignInErrors = {};
+  const validateEmail = () => {
     const trimmedEmail = email.trim();
 
     if (!trimmedEmail) {
-      nextErrors.email = 'Email is required';
-    } else if (!isValidEmailForMvp(trimmedEmail)) {
-      nextErrors.email = 'Enter a valid email';
+      setEmailError('Email is required');
+      setIsConfirmationVisible(false);
+      return false;
     }
 
-    if (!password) {
-      nextErrors.password = 'Password is required';
+    if (!isValidEmailForMvp(trimmedEmail)) {
+      setEmailError('Enter a valid email');
+      setIsConfirmationVisible(false);
+      return false;
     }
 
-    setErrors(nextErrors);
-
-    return Object.keys(nextErrors).length === 0;
+    setEmailError(undefined);
+    return true;
   };
 
   const handleBackPress = () => {
@@ -91,17 +62,14 @@ export function SignInScreen({
     onBack?.();
   };
 
-  const handleSignInPress = () => {
+  const handleSendResetLink = () => {
     Keyboard.dismiss();
 
-    if (!validateForm()) {
+    if (!validateEmail()) {
       return;
     }
-  };
 
-  const handleForgotPasswordPress = () => {
-    Keyboard.dismiss();
-    onForgotPassword?.();
+    setIsConfirmationVisible(true);
   };
 
   return (
@@ -127,68 +95,42 @@ export function SignInScreen({
 
           <View style={styles.header}>
             <AppText style={styles.title} variant="title">
-              Sign in
+              Forgot password?
             </AppText>
             <AppText style={styles.subtitle} variant="subtitle">
-              Access your purchases across devices
+              {forgotPasswordSubtitle}
             </AppText>
           </View>
 
           <View style={styles.fields}>
             <AppTextField
               autoCapitalize="none"
-              error={errors.email}
+              error={emailError}
               keyboardType="email-address"
               label="Email"
               onChangeText={handleEmailChange}
-              onSubmitEditing={() => passwordInputRef.current?.focus()}
+              onSubmitEditing={handleSendResetLink}
               placeholder="you@example.com"
-              returnKeyType="next"
+              returnKeyType="done"
               textContentType="emailAddress"
               value={email}
             />
-            <AppTextField
-              ref={passwordInputRef}
-              autoCapitalize="none"
-              error={errors.password}
-              label="Password"
-              onChangeText={handlePasswordChange}
-              onSubmitEditing={Keyboard.dismiss}
-              placeholder={'\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022'}
-              returnKeyType="done"
-              secureTextEntry
-              showPasswordToggle
-              textContentType="password"
-              value={password}
-            />
-          </View>
 
-          <Pressable
-            accessibilityRole="button"
-            onPress={handleForgotPasswordPress}
-            style={styles.forgotButton}
-          >
-            <AppText style={styles.forgotText} variant="button">
-              Forgot password?
-            </AppText>
-          </Pressable>
+            {isConfirmationVisible ? (
+              <View style={styles.confirmationNote}>
+                <AppText style={styles.confirmationText} variant="caption">
+                  {resetConfirmationMessage}
+                </AppText>
+              </View>
+            ) : null}
+          </View>
         </View>
 
         <View style={styles.actions}>
           <AppButton
-            onPress={handleSignInPress}
-            title="Sign in"
+            onPress={handleSendResetLink}
+            title="Send reset link"
             variant="primary"
-          />
-          <AppButton
-            onPress={Keyboard.dismiss}
-            title="Continue with Google"
-            variant="outline"
-          />
-          <AppButton
-            onPress={Keyboard.dismiss}
-            title="Continue with Apple"
-            variant="outline"
           />
         </View>
       </ScrollView>
@@ -242,15 +184,17 @@ const styles = StyleSheet.create({
     gap: 14,
     marginTop: theme.spacing.xl + theme.spacing.sm,
   },
-  forgotButton: {
-    alignSelf: 'flex-start',
-    marginTop: theme.spacing.sm,
-    paddingVertical: theme.spacing.xs,
+  confirmationNote: {
+    backgroundColor: theme.colors.sage,
+    borderRadius: theme.radius.md,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: 10,
   },
-  forgotText: {
-    ...theme.typography.textLink,
-    color: theme.colors.green,
+  confirmationText: {
+    color: theme.colors.greenDark,
+    fontSize: 12,
     fontWeight: theme.fontWeight.medium,
+    lineHeight: 18,
   },
   actions: {
     gap: 12,

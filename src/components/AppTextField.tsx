@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { forwardRef, useState } from 'react';
 import {
   Pressable,
   StyleSheet,
@@ -14,11 +14,14 @@ import { AppText } from './AppText';
 
 type AppTextFieldProps = {
   autoCapitalize?: TextInputProps['autoCapitalize'];
+  error?: string;
   keyboardType?: TextInputProps['keyboardType'];
   label: string;
   leftIcon?: string;
   onChangeText?: (text: string) => void;
+  onSubmitEditing?: TextInputProps['onSubmitEditing'];
   placeholder: string;
+  returnKeyType?: TextInputProps['returnKeyType'];
   secureTextEntry?: boolean;
   showPasswordToggle?: boolean;
   style?: StyleProp<ViewStyle>;
@@ -26,69 +29,92 @@ type AppTextFieldProps = {
   value?: string;
 };
 
-export function AppTextField({
-  autoCapitalize,
-  keyboardType,
-  label,
-  leftIcon,
-  onChangeText,
-  placeholder,
-  secureTextEntry = false,
-  showPasswordToggle = false,
-  style,
-  textContentType,
-  value,
-}: AppTextFieldProps) {
-  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
-  const hasLeftIcon = Boolean(leftIcon);
-  const effectiveSecureTextEntry = showPasswordToggle
-    ? !isPasswordVisible
-    : secureTextEntry;
-  const passwordToggleLabel = isPasswordVisible ? 'Hide' : 'Show';
+export const AppTextField = forwardRef<TextInput, AppTextFieldProps>(
+  function AppTextField(
+    {
+      autoCapitalize,
+      error,
+      keyboardType,
+      label,
+      leftIcon,
+      onChangeText,
+      onSubmitEditing,
+      placeholder,
+      returnKeyType,
+      secureTextEntry = false,
+      showPasswordToggle = false,
+      style,
+      textContentType,
+      value,
+    },
+    ref,
+  ) {
+    const [isPasswordVisible, setIsPasswordVisible] = useState(false);
+    const hasLeftIcon = Boolean(leftIcon);
+    const effectiveSecureTextEntry = showPasswordToggle
+      ? !isPasswordVisible
+      : secureTextEntry;
+    const passwordToggleLabel = isPasswordVisible ? 'Hide' : 'Show';
 
-  return (
-    <View style={[styles.fieldGroup, style]}>
-      <AppText style={styles.label} variant="caption">
-        {label}
-      </AppText>
-      <View style={[styles.inputCard, hasLeftIcon && styles.inputCardWithIcon]}>
-        {hasLeftIcon ? (
-          <AppText style={styles.leftIcon} variant="body">
-            {leftIcon}
+    return (
+      <View style={[styles.fieldGroup, style]}>
+        <AppText style={styles.label} variant="caption">
+          {label}
+        </AppText>
+        <View
+          style={[
+            styles.inputCard,
+            hasLeftIcon && styles.inputCardWithIcon,
+            Boolean(error) && styles.inputCardError,
+          ]}
+        >
+          {hasLeftIcon ? (
+            <AppText style={styles.leftIcon} variant="body">
+              {leftIcon}
+            </AppText>
+          ) : null}
+          <TextInput
+            autoCapitalize={autoCapitalize}
+            blurOnSubmit={returnKeyType !== 'next'}
+            keyboardType={keyboardType}
+            onChangeText={onChangeText}
+            onSubmitEditing={onSubmitEditing}
+            placeholder={placeholder}
+            placeholderTextColor={theme.colors.muted}
+            ref={ref}
+            returnKeyType={returnKeyType}
+            secureTextEntry={effectiveSecureTextEntry}
+            selectionColor={theme.colors.green}
+            style={styles.input}
+            textContentType={textContentType}
+            value={value}
+          />
+          {showPasswordToggle ? (
+            <Pressable
+              accessibilityLabel={`${passwordToggleLabel} password`}
+              accessibilityRole="button"
+              hitSlop={8}
+              onPress={() => setIsPasswordVisible((current) => !current)}
+              style={({ pressed }) => [
+                styles.passwordToggle,
+                pressed && styles.passwordTogglePressed,
+              ]}
+            >
+              <AppText style={styles.passwordToggleText} variant="caption">
+                {passwordToggleLabel}
+              </AppText>
+            </Pressable>
+          ) : null}
+        </View>
+        {error ? (
+          <AppText style={styles.errorText} variant="caption">
+            {error}
           </AppText>
         ) : null}
-        <TextInput
-          autoCapitalize={autoCapitalize}
-          keyboardType={keyboardType}
-          onChangeText={onChangeText}
-          placeholder={placeholder}
-          placeholderTextColor={theme.colors.muted}
-          secureTextEntry={effectiveSecureTextEntry}
-          selectionColor={theme.colors.green}
-          style={styles.input}
-          textContentType={textContentType}
-          value={value}
-        />
-        {showPasswordToggle ? (
-          <Pressable
-            accessibilityLabel={`${passwordToggleLabel} password`}
-            accessibilityRole="button"
-            hitSlop={8}
-            onPress={() => setIsPasswordVisible((current) => !current)}
-            style={({ pressed }) => [
-              styles.passwordToggle,
-              pressed && styles.passwordTogglePressed,
-            ]}
-          >
-            <AppText style={styles.passwordToggleText} variant="caption">
-              {passwordToggleLabel}
-            </AppText>
-          </Pressable>
-        ) : null}
       </View>
-    </View>
-  );
-}
+    );
+  },
+);
 
 const styles = StyleSheet.create({
   fieldGroup: {
@@ -114,6 +140,15 @@ const styles = StyleSheet.create({
   },
   inputCardWithIcon: {
     gap: 10,
+  },
+  inputCardError: {
+    borderColor: theme.colors.pending,
+  },
+  errorText: {
+    color: theme.colors.pending,
+    fontSize: 12,
+    fontWeight: theme.fontWeight.medium,
+    lineHeight: 18,
   },
   leftIcon: {
     color: theme.colors.greenDark,

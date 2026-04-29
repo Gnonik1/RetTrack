@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState, type Ref } from 'react';
 import {
   Keyboard,
   Modal,
@@ -6,13 +6,15 @@ import {
   ScrollView,
   StyleSheet,
   TextInput,
+  type StyleProp,
+  type TextInputProps,
+  type ViewStyle,
   View,
 } from 'react-native';
 
 import { AppButton } from '../../../components/AppButton';
 import { AppScreen } from '../../../components/AppScreen';
 import { AppText } from '../../../components/AppText';
-import { AppTextField } from '../../../components/AppTextField';
 import { theme } from '../../../constants/theme';
 
 type AddFirstPurchaseScreenProps = {
@@ -22,6 +24,27 @@ type AddFirstPurchaseScreenProps = {
 type OptionalSectionKey = 'price' | 'purchaseDate' | 'photos' | 'comment';
 
 type DatePickerMode = 'return' | 'purchase';
+
+type FormErrors = {
+  itemName?: string;
+  returnDate?: string;
+  storeOrLink?: string;
+};
+
+type PurchaseTextFieldProps = {
+  autoCapitalize?: TextInputProps['autoCapitalize'];
+  inputRef?: Ref<TextInput>;
+  keyboardType?: TextInputProps['keyboardType'];
+  label: string;
+  onChangeText: (text: string) => void;
+  onSubmitEditing?: TextInputProps['onSubmitEditing'];
+  placeholder: string;
+  returnKeyType?: TextInputProps['returnKeyType'];
+  style?: StyleProp<ViewStyle>;
+  value: string;
+};
+
+const storeOrLinkErrorMessage = 'Add a store or product link to continue';
 
 const optionalDetailRows = [
   {
@@ -141,17 +164,62 @@ function isSameDate(firstDate: Date, secondDate: Date) {
   );
 }
 
+function PurchaseTextField({
+  autoCapitalize,
+  inputRef,
+  keyboardType,
+  label,
+  onChangeText,
+  onSubmitEditing,
+  placeholder,
+  returnKeyType,
+  style,
+  value,
+}: PurchaseTextFieldProps) {
+  return (
+    <View style={[styles.fieldGroup, style]}>
+      <AppText style={styles.fieldLabel} variant="caption">
+        {label}
+      </AppText>
+      <View style={styles.inputCard}>
+        <TextInput
+          autoCapitalize={autoCapitalize}
+          blurOnSubmit={returnKeyType !== 'next'}
+          keyboardType={keyboardType}
+          onChangeText={onChangeText}
+          onSubmitEditing={onSubmitEditing}
+          placeholder={placeholder}
+          placeholderTextColor={theme.colors.muted}
+          ref={inputRef}
+          returnKeyType={returnKeyType}
+          selectionColor={theme.colors.green}
+          style={styles.input}
+          value={value}
+        />
+      </View>
+    </View>
+  );
+}
+
 export function AddFirstPurchaseScreen({ onBack }: AddFirstPurchaseScreenProps) {
-  const [isPriceModalOpen, setIsPriceModalOpen] = useState(false);
-  const [priceText, setPriceText] = useState('');
-  const [draftPriceText, setDraftPriceText] = useState('');
-  const [priceCurrency, setPriceCurrency] =
-    useState<CurrencyCode>(defaultCurrency);
+  const [itemName, setItemName] = useState('');
+  const [store, setStore] = useState('');
+  const [productLink, setProductLink] = useState('');
+  const [returnDate, setReturnDate] = useState<Date | null>(() =>
+    getDefaultReturnDate(),
+  );
+  const [priceAmount, setPriceAmount] = useState('');
   const [selectedCurrency, setSelectedCurrency] =
     useState<CurrencyCode>(defaultCurrency);
-  const [isCurrencyModalOpen, setIsCurrencyModalOpen] = useState(false);
-  const [returnDate, setReturnDate] = useState(() => getDefaultReturnDate());
   const [purchaseDate, setPurchaseDate] = useState<Date | null>(null);
+  const [comment, setComment] = useState('');
+  const [formErrors, setFormErrors] = useState<FormErrors>({});
+  const [isSaveSuccessful, setIsSaveSuccessful] = useState(false);
+  const [isPriceModalOpen, setIsPriceModalOpen] = useState(false);
+  const [draftPriceAmount, setDraftPriceAmount] = useState('');
+  const [draftCurrency, setDraftCurrency] =
+    useState<CurrencyCode>(defaultCurrency);
+  const [isCurrencyModalOpen, setIsCurrencyModalOpen] = useState(false);
   const [activeDatePicker, setActiveDatePicker] =
     useState<DatePickerMode | null>(null);
   const [draftDate, setDraftDate] = useState(() => getDefaultReturnDate());
@@ -160,27 +228,134 @@ export function AddFirstPurchaseScreen({ onBack }: AddFirstPurchaseScreenProps) 
   );
   const [isPhotosModalOpen, setIsPhotosModalOpen] = useState(false);
   const [isCommentModalOpen, setIsCommentModalOpen] = useState(false);
-  const [commentText, setCommentText] = useState('');
   const [draftComment, setDraftComment] = useState('');
+  const storeInputRef = useRef<TextInput>(null);
+  const productLinkInputRef = useRef<TextInput>(null);
+  const saveSuccessTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
 
-  const returnDateDisplay = formatDate(returnDate);
+  const returnDateDisplay = returnDate
+    ? formatDate(returnDate)
+    : 'Select return date';
   const datePickerTitle =
     activeDatePicker === 'purchase'
       ? 'Select purchase date'
       : 'Select return date';
   const calendarRows = getCalendarRows(visibleMonth);
-  const pricePreview = priceText ? `${priceCurrency} ${priceText}` : '';
+  const pricePreview = priceAmount ? `${selectedCurrency} ${priceAmount}` : '';
+
+  useEffect(() => {
+    return () => {
+      if (saveSuccessTimerRef.current) {
+        clearTimeout(saveSuccessTimerRef.current);
+      }
+    };
+  }, []);
+
+  const clearSaveSuccess = () => {
+    if (saveSuccessTimerRef.current) {
+      clearTimeout(saveSuccessTimerRef.current);
+      saveSuccessTimerRef.current = null;
+    }
+
+    setIsSaveSuccessful(false);
+  };
+
+  const showLocalSuccess = () => {
+    if (saveSuccessTimerRef.current) {
+      clearTimeout(saveSuccessTimerRef.current);
+    }
+
+    setIsSaveSuccessful(true);
+    saveSuccessTimerRef.current = setTimeout(() => {
+      setIsSaveSuccessful(false);
+      saveSuccessTimerRef.current = null;
+    }, 2400);
+  };
+
+  const clearFormError = (field: keyof FormErrors) => {
+    setFormErrors((currentErrors) => {
+      if (!currentErrors[field]) {
+        return currentErrors;
+      }
+
+      const nextErrors = { ...currentErrors };
+      delete nextErrors[field];
+
+      return nextErrors;
+    });
+  };
+
+  const handleItemNameChange = (text: string) => {
+    setItemName(text);
+    clearSaveSuccess();
+
+    if (text.trim()) {
+      clearFormError('itemName');
+    }
+  };
+
+  const handleStoreChange = (text: string) => {
+    setStore(text);
+    clearSaveSuccess();
+
+    if (text.trim() || productLink.trim()) {
+      clearFormError('storeOrLink');
+    }
+  };
+
+  const handleProductLinkChange = (text: string) => {
+    setProductLink(text);
+    clearSaveSuccess();
+
+    if (store.trim() || text.trim()) {
+      clearFormError('storeOrLink');
+    }
+  };
+
+  const validateForm = () => {
+    const nextErrors: FormErrors = {};
+
+    if (!itemName.trim()) {
+      nextErrors.itemName = 'Item name is required';
+    }
+
+    if (!returnDate) {
+      nextErrors.returnDate = 'Choose a return date to continue';
+    }
+
+    if (!store.trim() && !productLink.trim()) {
+      nextErrors.storeOrLink = storeOrLinkErrorMessage;
+    }
+
+    setFormErrors(nextErrors);
+
+    return Object.keys(nextErrors).length === 0;
+  };
+
+  const handleSaveItem = () => {
+    Keyboard.dismiss();
+
+    if (!validateForm()) {
+      clearSaveSuccess();
+      return;
+    }
+
+    showLocalSuccess();
+  };
 
   const openPriceModal = () => {
-    setSelectedCurrency(priceCurrency);
-    setDraftPriceText(priceText);
+    Keyboard.dismiss();
+    setDraftCurrency(selectedCurrency);
+    setDraftPriceAmount(priceAmount);
     setIsCurrencyModalOpen(false);
     setIsPriceModalOpen(true);
   };
 
   const closePriceModal = () => {
-    setSelectedCurrency(priceCurrency);
-    setDraftPriceText(priceText);
+    setDraftCurrency(selectedCurrency);
+    setDraftPriceAmount(priceAmount);
     setIsCurrencyModalOpen(false);
     setIsPriceModalOpen(false);
   };
@@ -195,15 +370,19 @@ export function AddFirstPurchaseScreen({ onBack }: AddFirstPurchaseScreenProps) 
   };
 
   const confirmPriceModal = () => {
-    setPriceText(draftPriceText.trim());
-    setPriceCurrency(selectedCurrency);
+    setPriceAmount(draftPriceAmount.trim());
+    setSelectedCurrency(draftCurrency);
+    clearSaveSuccess();
     setIsCurrencyModalOpen(false);
     setIsPriceModalOpen(false);
   };
 
   const openDatePicker = (mode: DatePickerMode) => {
+    Keyboard.dismiss();
     const initialDate =
-      mode === 'return' ? returnDate : purchaseDate ?? new Date();
+      mode === 'return'
+        ? returnDate ?? getDefaultReturnDate()
+        : purchaseDate ?? new Date();
 
     setDraftDate(initialDate);
     setVisibleMonth(getMonthStart(initialDate));
@@ -217,12 +396,14 @@ export function AddFirstPurchaseScreen({ onBack }: AddFirstPurchaseScreenProps) 
   const confirmDatePicker = () => {
     if (activeDatePicker === 'return') {
       setReturnDate(draftDate);
+      clearFormError('returnDate');
     }
 
     if (activeDatePicker === 'purchase') {
       setPurchaseDate(draftDate);
     }
 
+    clearSaveSuccess();
     closeDatePicker();
   };
 
@@ -240,16 +421,20 @@ export function AddFirstPurchaseScreen({ onBack }: AddFirstPurchaseScreenProps) 
   };
 
   const openCommentModal = () => {
-    setDraftComment(commentText);
+    Keyboard.dismiss();
+    setDraftComment(comment);
     setIsCommentModalOpen(true);
   };
 
   const confirmCommentModal = () => {
-    setCommentText(draftComment.trim());
+    setComment(draftComment.trim());
+    clearSaveSuccess();
     setIsCommentModalOpen(false);
   };
 
   const handleOptionalRowPress = (section: OptionalSectionKey) => {
+    Keyboard.dismiss();
+
     if (section === 'price') {
       openPriceModal();
       return;
@@ -294,29 +479,68 @@ export function AddFirstPurchaseScreen({ onBack }: AddFirstPurchaseScreenProps) 
 
       <ScrollView
         contentContainerStyle={styles.formContent}
+        keyboardDismissMode="on-drag"
+        keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
         style={styles.form}
       >
         <View style={styles.fields}>
-          <AppTextField label="Item name *" placeholder="Cashmere coat" />
-          <View style={styles.storeLinkRow}>
-            <AppTextField
-              label="Store"
-              placeholder="Farfetch"
-              style={styles.storeLinkField}
+          <View style={styles.fieldWithError}>
+            <PurchaseTextField
+              label="Item name *"
+              onChangeText={handleItemNameChange}
+              onSubmitEditing={() => storeInputRef.current?.focus()}
+              placeholder="e.g. Cashmere coat"
+              returnKeyType="next"
+              value={itemName}
             />
-            <AppTextField
+            {formErrors.itemName ? (
+              <AppText style={styles.errorText} variant="caption">
+                {formErrors.itemName}
+              </AppText>
+            ) : null}
+          </View>
+
+          <View style={styles.storeLinkRow}>
+            <PurchaseTextField
+              inputRef={storeInputRef}
+              label="Store"
+              onChangeText={handleStoreChange}
+              onSubmitEditing={() => productLinkInputRef.current?.focus()}
+              placeholder="e.g. Farfetch"
+              returnKeyType="next"
+              style={styles.storeLinkField}
+              value={store}
+            />
+            <PurchaseTextField
               autoCapitalize="none"
+              inputRef={productLinkInputRef}
               keyboardType="url"
               label="Link"
+              onChangeText={handleProductLinkChange}
+              onSubmitEditing={Keyboard.dismiss}
               placeholder="Paste URL"
+              returnKeyType="done"
               style={styles.storeLinkField}
+              value={productLink}
             />
           </View>
 
-          <View style={styles.helperNote}>
-            <AppText style={styles.helperText} variant="caption">
-              Add either a store or product link to continue
+          <View
+            style={[
+              styles.helperNote,
+              formErrors.storeOrLink && styles.helperNoteError,
+            ]}
+          >
+            <AppText
+              style={[
+                styles.helperText,
+                formErrors.storeOrLink && styles.helperTextError,
+              ]}
+              variant="caption"
+            >
+              {formErrors.storeOrLink ??
+                'Add either a store or product link to continue'}
             </AppText>
           </View>
 
@@ -332,11 +556,21 @@ export function AddFirstPurchaseScreen({ onBack }: AddFirstPurchaseScreenProps) 
               <AppText style={styles.returnDateLabel} variant="caption">
                 Return date *
               </AppText>
-              <View style={styles.returnDateCard}>
+              <View
+                style={[
+                  styles.returnDateCard,
+                  formErrors.returnDate && styles.returnDateCardError,
+                ]}
+              >
                 <AppText style={styles.returnDateValue} variant="body">
                   {returnDateDisplay}
                 </AppText>
               </View>
+              {formErrors.returnDate ? (
+                <AppText style={styles.errorText} variant="caption">
+                  {formErrors.returnDate}
+                </AppText>
+              ) : null}
             </View>
           </Pressable>
         </View>
@@ -353,7 +587,7 @@ export function AddFirstPurchaseScreen({ onBack }: AddFirstPurchaseScreenProps) 
                   ? pricePreview
                   : key === 'purchaseDate' && purchaseDate
                     ? formatDate(purchaseDate)
-                    : key === 'comment' && commentText.trim()
+                    : key === 'comment' && comment.trim()
                       ? 'Added'
                       : '';
 
@@ -395,7 +629,12 @@ export function AddFirstPurchaseScreen({ onBack }: AddFirstPurchaseScreenProps) 
       </ScrollView>
 
       <View style={styles.actions}>
-        <AppButton title="Save item" variant="primary" />
+        {isSaveSuccessful ? (
+          <AppText style={styles.successText} variant="caption">
+            Purchase added
+          </AppText>
+        ) : null}
+        <AppButton onPress={handleSaveItem} title="Save item" variant="primary" />
       </View>
 
       <Modal
@@ -420,14 +659,14 @@ export function AddFirstPurchaseScreen({ onBack }: AddFirstPurchaseScreenProps) 
 
               <View style={styles.currencyModalOptions}>
                 {currencyOptions.map(({ code, name }) => {
-                  const isSelected = code === selectedCurrency;
+                  const isSelected = code === draftCurrency;
 
                   return (
                     <Pressable
                       accessibilityRole="button"
                       key={code}
                       onPress={() => {
-                        setSelectedCurrency(code);
+                        setDraftCurrency(code);
                         setIsCurrencyModalOpen(false);
                       }}
                       style={({ pressed }) => [
@@ -481,19 +720,19 @@ export function AddFirstPurchaseScreen({ onBack }: AddFirstPurchaseScreenProps) 
                   ]}
                 >
                   <AppText style={styles.currencyChipText} variant="button">
-                    {selectedCurrency} {'\u25be'}
+                    {draftCurrency} {'\u25be'}
                   </AppText>
                 </Pressable>
 
                 <View style={styles.priceInputCard}>
                   <TextInput
                     keyboardType="decimal-pad"
-                    onChangeText={setDraftPriceText}
+                    onChangeText={setDraftPriceAmount}
                     placeholder="117.00"
                     placeholderTextColor={theme.colors.muted}
                     selectionColor={theme.colors.green}
                     style={styles.priceInput}
-                    value={draftPriceText}
+                    value={draftPriceAmount}
                   />
                 </View>
               </View>
@@ -858,6 +1097,46 @@ const styles = StyleSheet.create({
   formContent: {
     paddingBottom: theme.spacing.xl + theme.spacing.lg,
   },
+  fieldGroup: {
+    gap: 7,
+  },
+  fieldLabel: {
+    ...theme.typography.fieldLabel,
+    color: theme.colors.text,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.semibold,
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+  },
+  inputCard: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.card,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    flexDirection: 'row',
+    height: 56,
+    paddingHorizontal: theme.spacing.md,
+  },
+  input: {
+    ...theme.typography.input,
+    color: theme.colors.text,
+    flex: 1,
+    fontSize: 15,
+    lineHeight: 22,
+    minHeight: 28,
+    padding: 0,
+    paddingVertical: 0,
+  },
+  fieldWithError: {
+    gap: theme.spacing.xs,
+  },
+  errorText: {
+    color: theme.colors.pending,
+    fontSize: 12,
+    fontWeight: theme.fontWeight.medium,
+    lineHeight: 18,
+  },
   tappableField: {
     borderRadius: theme.radius.lg,
   },
@@ -885,6 +1164,9 @@ const styles = StyleSheet.create({
     height: 52,
     paddingHorizontal: theme.spacing.md,
   },
+  returnDateCardError: {
+    borderColor: theme.colors.pending,
+  },
   returnDateValue: {
     color: theme.colors.text,
     fontSize: 15,
@@ -906,11 +1188,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.md,
     paddingVertical: 10,
   },
+  helperNoteError: {
+    backgroundColor: theme.colors.softPending,
+  },
   helperText: {
     color: theme.colors.greenDark,
     fontSize: 12,
     fontWeight: theme.fontWeight.medium,
     lineHeight: 18,
+  },
+  helperTextError: {
+    color: theme.colors.pending,
   },
   optionalSection: {
     marginTop: theme.spacing.lg,
@@ -1287,7 +1575,15 @@ const styles = StyleSheet.create({
     paddingVertical: 0,
   },
   actions: {
+    gap: theme.spacing.sm,
     paddingTop: theme.spacing.xs,
     width: '100%',
+  },
+  successText: {
+    color: theme.colors.greenDark,
+    fontSize: 12,
+    fontWeight: theme.fontWeight.medium,
+    lineHeight: 18,
+    textAlign: 'center',
   },
 });

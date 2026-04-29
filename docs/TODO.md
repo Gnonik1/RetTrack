@@ -14,11 +14,8 @@
 
 ## Purchases / Add First Purchase
 
-- Add Add First Purchase form state and validation.
-- Required fields should include item name and return date.
-- Require either store or product link before saving.
 - Add disabled/enabled Save item behavior.
-- Add local mock saved-item flow before backend persistence.
+- Decide post-save destination after first purchase is added, such as Purchases home/list screen.
 
 ## Purchases / Photos
 
@@ -28,17 +25,13 @@
 
 ## Auth / Validation
 
-- Add Sign In validation: required email, valid email format, required password, and login error state.
-- Add Sign Up validation: required full name, valid email format, required password, and password minimum 8 characters.
-- Add inline error states for input fields using the app error/pending color.
 - Decide disabled/enabled button behavior for invalid forms before auth integration.
+- Replace frontend-only auth validation success/no-op behavior with real auth integration later.
 
 ## Auth / Password Reset
 
-- Add Forgot Password screen.
-- Flow: user enters email, taps Send reset link, then sees a neutral confirmation message.
-- Confirmation copy: “If an account exists for that email, we’ll send password reset instructions.”
 - Later connect password reset to the selected auth provider.
+- Decide final resend/disabled state after password reset email is requested.
 
 ## App Config / Assets
 

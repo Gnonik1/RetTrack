@@ -1,4 +1,12 @@
-import { Pressable, StyleSheet, View } from 'react-native';
+import { useRef, useState } from 'react';
+import {
+  Keyboard,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  View,
+} from 'react-native';
 
 import { AppButton } from '../../../components/AppButton';
 import { AppScreen } from '../../../components/AppScreen';
@@ -11,73 +19,202 @@ type SignUpScreenProps = {
   onCreateAccount?: () => void;
 };
 
-export function SignUpScreen({ onBack, onCreateAccount }: SignUpScreenProps) {
+type SignUpErrors = {
+  fullName?: string;
+  email?: string;
+  password?: string;
+};
+
+function isValidEmailForMvp(email: string) {
+  const atIndex = email.indexOf('@');
+  const dotAfterAtIndex = email.indexOf('.', atIndex + 1);
+
+  return (
+    atIndex > 0 &&
+    dotAfterAtIndex > atIndex + 1 &&
+    dotAfterAtIndex < email.length - 1
+  );
+}
+
+export function SignUpScreen({ onBack }: SignUpScreenProps) {
+  const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [errors, setErrors] = useState<SignUpErrors>({});
+  const emailInputRef = useRef<TextInput>(null);
+  const passwordInputRef = useRef<TextInput>(null);
+
+  const clearFieldError = (field: keyof SignUpErrors) => {
+    setErrors((currentErrors) => {
+      if (!currentErrors[field]) {
+        return currentErrors;
+      }
+
+      const nextErrors = { ...currentErrors };
+      delete nextErrors[field];
+
+      return nextErrors;
+    });
+  };
+
+  const handleFullNameChange = (text: string) => {
+    setFullName(text);
+    clearFieldError('fullName');
+  };
+
+  const handleEmailChange = (text: string) => {
+    setEmail(text);
+    clearFieldError('email');
+  };
+
+  const handlePasswordChange = (text: string) => {
+    setPassword(text);
+    clearFieldError('password');
+  };
+
+  const validateForm = () => {
+    const nextErrors: SignUpErrors = {};
+    const trimmedEmail = email.trim();
+
+    if (!fullName.trim()) {
+      nextErrors.fullName = 'Full name is required';
+    }
+
+    if (!trimmedEmail) {
+      nextErrors.email = 'Email is required';
+    } else if (!isValidEmailForMvp(trimmedEmail)) {
+      nextErrors.email = 'Enter a valid email';
+    }
+
+    if (!password) {
+      nextErrors.password = 'Password is required';
+    } else if (password.length < 8) {
+      nextErrors.password = 'Password must be at least 8 characters';
+    }
+
+    setErrors(nextErrors);
+
+    return Object.keys(nextErrors).length === 0;
+  };
+
+  const handleBackPress = () => {
+    Keyboard.dismiss();
+    onBack?.();
+  };
+
+  const handleCreateAccountPress = () => {
+    Keyboard.dismiss();
+
+    if (!validateForm()) {
+      return;
+    }
+  };
+
   return (
     <AppScreen style={styles.screen}>
-      <View style={styles.content}>
-        <Pressable
-          accessibilityLabel="Back"
-          accessibilityRole="button"
-          onPress={onBack}
-          style={styles.backButton}
-        >
-          <AppText style={styles.backButtonText} variant="body">
-            {'\u2039'}
-          </AppText>
-        </Pressable>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardDismissMode="on-drag"
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        style={styles.scroll}
+      >
+        <View style={styles.content}>
+          <Pressable
+            accessibilityLabel="Back"
+            accessibilityRole="button"
+            onPress={handleBackPress}
+            style={styles.backButton}
+          >
+            <AppText style={styles.backButtonText} variant="body">
+              {'\u2039'}
+            </AppText>
+          </Pressable>
 
-        <View style={styles.header}>
-          <AppText style={styles.title} variant="title">
-            Create account
-          </AppText>
-          <AppText style={styles.subtitle} variant="subtitle">
-            Save your purchases and sync them everywhere.
-          </AppText>
+          <View style={styles.header}>
+            <AppText style={styles.title} variant="title">
+              Create account
+            </AppText>
+            <AppText style={styles.subtitle} variant="subtitle">
+              Save your purchases and sync them everywhere.
+            </AppText>
+          </View>
+
+          <View style={styles.fields}>
+            <AppTextField
+              autoCapitalize="words"
+              error={errors.fullName}
+              label="Full name"
+              onChangeText={handleFullNameChange}
+              onSubmitEditing={() => emailInputRef.current?.focus()}
+              placeholder="Your name"
+              returnKeyType="next"
+              textContentType="name"
+              value={fullName}
+            />
+            <AppTextField
+              ref={emailInputRef}
+              autoCapitalize="none"
+              error={errors.email}
+              keyboardType="email-address"
+              label="Email"
+              onChangeText={handleEmailChange}
+              onSubmitEditing={() => passwordInputRef.current?.focus()}
+              placeholder="you@example.com"
+              returnKeyType="next"
+              textContentType="emailAddress"
+              value={email}
+            />
+            <AppTextField
+              ref={passwordInputRef}
+              autoCapitalize="none"
+              error={errors.password}
+              label="Password"
+              onChangeText={handlePasswordChange}
+              onSubmitEditing={Keyboard.dismiss}
+              placeholder={'\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022'}
+              returnKeyType="done"
+              secureTextEntry
+              showPasswordToggle
+              textContentType="newPassword"
+              value={password}
+            />
+          </View>
         </View>
 
-        <View style={styles.fields}>
-          <AppTextField
-            autoCapitalize="words"
-            label="Full name"
-            placeholder="Your name"
-            textContentType="name"
+        <View style={styles.actions}>
+          <AppButton
+            onPress={handleCreateAccountPress}
+            title="Create account"
+            variant="primary"
           />
-          <AppTextField
-            autoCapitalize="none"
-            keyboardType="email-address"
-            label="Email"
-            placeholder="you@example.com"
-            textContentType="emailAddress"
+          <AppButton
+            onPress={Keyboard.dismiss}
+            title="Continue with Google"
+            variant="outline"
           />
-          <AppTextField
-            autoCapitalize="none"
-            label="Password"
-            placeholder={'\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022'}
-            secureTextEntry
-            showPasswordToggle
-            textContentType="newPassword"
+          <AppButton
+            onPress={Keyboard.dismiss}
+            title="Continue with Apple"
+            variant="outline"
           />
         </View>
-      </View>
-
-      <View style={styles.actions}>
-        <AppButton
-          onPress={onCreateAccount}
-          title="Create account"
-          variant="primary"
-        />
-        <AppButton title="Continue with Google" variant="outline" />
-        <AppButton title="Continue with Apple" variant="outline" />
-      </View>
+      </ScrollView>
     </AppScreen>
   );
 }
 
 const styles = StyleSheet.create({
   screen: {
-    justifyContent: 'space-between',
     paddingBottom: theme.spacing.xl + theme.spacing.xs,
     paddingTop: theme.spacing.lg,
+  },
+  scroll: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: 'space-between',
   },
   content: {
     paddingTop: 0,

@@ -17,7 +17,7 @@ export default function SignInRoute() {
   return (
     <SignInScreen
       onBack={handleBack}
-      onSignIn={() => router.push('/notifications')}
+      onForgotPassword={() => router.push('/forgot-password')}
     />
   );
 }
