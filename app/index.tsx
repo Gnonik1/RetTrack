@@ -1,15 +1,7 @@
-import { useRouter } from 'expo-router';
-
-import { WelcomeScreen } from '../src/features/onboarding/screens/WelcomeScreen';
+import { Redirect } from 'expo-router';
 
 export default function Index() {
-  const router = useRouter();
-
-  return (
-    <WelcomeScreen
-      onContinueAsGuest={() => router.push('/notifications')}
-      onContinueWithEmail={() => router.push('/sign-up')}
-      onSignIn={() => router.push('/sign-in')}
-    />
-  );
+  // Temporary development shortcut for Purchases Home UI testing.
+  // Restore the WelcomeScreen root flow before final onboarding testing/production.
+  return <Redirect href="/purchases" />;
 }

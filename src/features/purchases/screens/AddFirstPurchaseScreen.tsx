@@ -19,6 +19,7 @@ import { theme } from '../../../constants/theme';
 
 type AddFirstPurchaseScreenProps = {
   onBack?: () => void;
+  onSaveItem?: () => void;
 };
 
 type OptionalSectionKey = 'price' | 'purchaseDate' | 'photos' | 'comment';
@@ -201,7 +202,10 @@ function PurchaseTextField({
   );
 }
 
-export function AddFirstPurchaseScreen({ onBack }: AddFirstPurchaseScreenProps) {
+export function AddFirstPurchaseScreen({
+  onBack,
+  onSaveItem,
+}: AddFirstPurchaseScreenProps) {
   const [itemName, setItemName] = useState('');
   const [store, setStore] = useState('');
   const [productLink, setProductLink] = useState('');
@@ -339,6 +343,11 @@ export function AddFirstPurchaseScreen({ onBack }: AddFirstPurchaseScreenProps) 
 
     if (!validateForm()) {
       clearSaveSuccess();
+      return;
+    }
+
+    if (onSaveItem) {
+      onSaveItem();
       return;
     }
 

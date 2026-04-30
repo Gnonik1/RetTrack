@@ -14,5 +14,10 @@ export default function AddFirstPurchaseRoute() {
     router.replace('/');
   };
 
-  return <AddFirstPurchaseScreen onBack={handleBack} />;
+  return (
+    <AddFirstPurchaseScreen
+      onBack={handleBack}
+      onSaveItem={() => router.replace('/purchases')}
+    />
+  );
 }
