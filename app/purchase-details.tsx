@@ -15,5 +15,18 @@ export default function PurchaseDetailsRoute() {
     router.replace('/purchases');
   };
 
-  return <PurchaseDetailsScreen itemId={itemId} onBack={handleBack} />;
+  return (
+    <PurchaseDetailsScreen
+      itemId={itemId}
+      onBack={handleBack}
+      onEdit={(selectedItemId) =>
+        router.push({
+          pathname: '/edit-purchase',
+          params: {
+            itemId: selectedItemId,
+          },
+        })
+      }
+    />
+  );
 }

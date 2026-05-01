@@ -16,10 +16,20 @@ import { AppButton } from '../../../components/AppButton';
 import { AppScreen } from '../../../components/AppScreen';
 import { AppText } from '../../../components/AppText';
 import { theme } from '../../../constants/theme';
+import type { AddPurchaseInput } from '../state/PurchasesState';
 
 type AddFirstPurchaseScreenProps = {
+  initialValues?: PurchaseFormInitialValues;
+  mode?: AddPurchaseMode;
   onBack?: () => void;
-  onSaveItem?: () => void;
+  onSaveItem?: (input: AddPurchaseInput) => void;
+  onSkip?: () => void;
+};
+
+type AddPurchaseMode = 'addPurchase' | 'editPurchase' | 'firstPurchase';
+
+type PurchaseFormInitialValues = Partial<AddPurchaseInput> & {
+  returnByDetail?: string;
 };
 
 type OptionalSectionKey = 'price' | 'purchaseDate' | 'photos' | 'comment';
@@ -46,6 +56,27 @@ type PurchaseTextFieldProps = {
 };
 
 const storeOrLinkErrorMessage = 'Add a store or product link to continue';
+
+const screenCopy: Record<
+  AddPurchaseMode,
+  {
+    subtitle: string;
+    title: string;
+  }
+> = {
+  addPurchase: {
+    subtitle: 'Track return details',
+    title: 'Add purchase',
+  },
+  editPurchase: {
+    subtitle: 'Update return details',
+    title: 'Edit purchase',
+  },
+  firstPurchase: {
+    subtitle: 'Start with the essentials',
+    title: 'Add first purchase',
+  },
+};
 
 const optionalDetailRows = [
   {
@@ -117,6 +148,24 @@ function formatDate(date: Date) {
   return `${monthLabels[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
 }
 
+function parseDisplayDate(value?: string) {
+  const dateMatch = value?.match(/^([A-Z][a-z]{2})\s+(\d{1,2})(?:,\s+(\d{4}))?$/);
+
+  if (!dateMatch) {
+    return null;
+  }
+
+  const monthIndex = monthLabels.findIndex((month) => month === dateMatch[1]);
+  const day = Number(dateMatch[2]);
+  const year = dateMatch[3] ? Number(dateMatch[3]) : new Date().getFullYear();
+
+  if (monthIndex < 0 || Number.isNaN(day) || Number.isNaN(year)) {
+    return null;
+  }
+
+  return new Date(year, monthIndex, day);
+}
+
 function getDefaultReturnDate() {
   return addDays(new Date(), 14);
 }
@@ -165,6 +214,45 @@ function isSameDate(firstDate: Date, secondDate: Date) {
   );
 }
 
+function getInitialReturnDate(initialValues?: PurchaseFormInitialValues) {
+  return (
+    parseDisplayDate(initialValues?.returnByDetail ?? initialValues?.returnBy) ??
+    getDefaultReturnDate()
+  );
+}
+
+function getInitialPurchaseDate(initialValues?: PurchaseFormInitialValues) {
+  return parseDisplayDate(initialValues?.purchased);
+}
+
+function getInitialPriceParts(initialValues?: PurchaseFormInitialValues): {
+  amount: string;
+  currency: CurrencyCode;
+} {
+  const price = initialValues?.price?.trim();
+
+  if (!price) {
+    return {
+      amount: '',
+      currency: defaultCurrency,
+    };
+  }
+
+  const priceMatch = price.match(/^(USD|EUR|GBP|GEL)\s+(.+)$/);
+
+  if (!priceMatch) {
+    return {
+      amount: price,
+      currency: defaultCurrency,
+    };
+  }
+
+  return {
+    amount: priceMatch[2].trim(),
+    currency: priceMatch[1] as CurrencyCode,
+  };
+}
+
 function PurchaseTextField({
   autoCapitalize,
   inputRef,
@@ -203,36 +291,48 @@ function PurchaseTextField({
 }
 
 export function AddFirstPurchaseScreen({
+  initialValues,
+  mode = 'firstPurchase',
   onBack,
   onSaveItem,
+  onSkip,
 }: AddFirstPurchaseScreenProps) {
-  const [itemName, setItemName] = useState('');
-  const [store, setStore] = useState('');
-  const [productLink, setProductLink] = useState('');
-  const [returnDate, setReturnDate] = useState<Date | null>(() =>
-    getDefaultReturnDate(),
+  const initialPrice = getInitialPriceParts(initialValues);
+  const initialReturnDate = getInitialReturnDate(initialValues);
+  const initialPurchaseDate = getInitialPurchaseDate(initialValues);
+  const [itemName, setItemName] = useState(initialValues?.itemName ?? '');
+  const [store, setStore] = useState(initialValues?.store ?? '');
+  const [productLink, setProductLink] = useState(
+    initialValues?.productLink ?? '',
   );
-  const [priceAmount, setPriceAmount] = useState('');
+  const [returnDate, setReturnDate] = useState<Date | null>(() =>
+    initialReturnDate,
+  );
+  const [priceAmount, setPriceAmount] = useState(initialPrice.amount);
   const [selectedCurrency, setSelectedCurrency] =
-    useState<CurrencyCode>(defaultCurrency);
-  const [purchaseDate, setPurchaseDate] = useState<Date | null>(null);
-  const [comment, setComment] = useState('');
+    useState<CurrencyCode>(initialPrice.currency);
+  const [purchaseDate, setPurchaseDate] = useState<Date | null>(
+    initialPurchaseDate,
+  );
+  const [comment, setComment] = useState(initialValues?.comment ?? '');
   const [formErrors, setFormErrors] = useState<FormErrors>({});
   const [isSaveSuccessful, setIsSaveSuccessful] = useState(false);
   const [isPriceModalOpen, setIsPriceModalOpen] = useState(false);
   const [draftPriceAmount, setDraftPriceAmount] = useState('');
+  const [priceModalError, setPriceModalError] = useState('');
   const [draftCurrency, setDraftCurrency] =
-    useState<CurrencyCode>(defaultCurrency);
+    useState<CurrencyCode>(initialPrice.currency);
   const [isCurrencyModalOpen, setIsCurrencyModalOpen] = useState(false);
   const [activeDatePicker, setActiveDatePicker] =
     useState<DatePickerMode | null>(null);
-  const [draftDate, setDraftDate] = useState(() => getDefaultReturnDate());
+  const [draftDate, setDraftDate] = useState(() => initialReturnDate);
   const [visibleMonth, setVisibleMonth] = useState(() =>
-    getMonthStart(getDefaultReturnDate()),
+    getMonthStart(initialReturnDate),
   );
   const [isPhotosModalOpen, setIsPhotosModalOpen] = useState(false);
   const [isCommentModalOpen, setIsCommentModalOpen] = useState(false);
-  const [draftComment, setDraftComment] = useState('');
+  const [draftComment, setDraftComment] = useState(initialValues?.comment ?? '');
+  const [commentModalError, setCommentModalError] = useState('');
   const storeInputRef = useRef<TextInput>(null);
   const productLinkInputRef = useRef<TextInput>(null);
   const saveSuccessTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
@@ -242,6 +342,11 @@ export function AddFirstPurchaseScreen({
   const returnDateDisplay = returnDate
     ? formatDate(returnDate)
     : 'Select return date';
+  const headerCopy = screenCopy[mode];
+  const saveButtonTitle =
+    mode === 'editPurchase' ? 'Save changes' : 'Save item';
+  const saveSuccessText =
+    mode === 'editPurchase' ? 'Purchase updated' : 'Purchase added';
   const datePickerTitle =
     activeDatePicker === 'purchase'
       ? 'Select purchase date'
@@ -338,6 +443,49 @@ export function AddFirstPurchaseScreen({
     return Object.keys(nextErrors).length === 0;
   };
 
+  const getPurchaseInput = (): AddPurchaseInput => {
+    const trimmedPriceAmount = priceAmount.trim();
+
+    return {
+      comment: comment.trim() || undefined,
+      itemName: itemName.trim(),
+      price: trimmedPriceAmount
+        ? `${selectedCurrency} ${trimmedPriceAmount}`
+        : undefined,
+      productLink: productLink.trim() || undefined,
+      purchased: purchaseDate ? formatDate(purchaseDate) : undefined,
+      returnBy: returnDate ? formatDate(returnDate) : returnDateDisplay,
+      store: store.trim() || undefined,
+    };
+  };
+
+  const resetForm = () => {
+    const nextReturnDate = getDefaultReturnDate();
+
+    clearSaveSuccess();
+    setItemName('');
+    setStore('');
+    setProductLink('');
+    setReturnDate(nextReturnDate);
+    setPriceAmount('');
+    setSelectedCurrency(defaultCurrency);
+    setPurchaseDate(null);
+    setComment('');
+    setFormErrors({});
+    setIsPriceModalOpen(false);
+    setDraftPriceAmount('');
+    setPriceModalError('');
+    setDraftCurrency(defaultCurrency);
+    setIsCurrencyModalOpen(false);
+    setActiveDatePicker(null);
+    setDraftDate(nextReturnDate);
+    setVisibleMonth(getMonthStart(nextReturnDate));
+    setIsPhotosModalOpen(false);
+    setIsCommentModalOpen(false);
+    setDraftComment('');
+    setCommentModalError('');
+  };
+
   const handleSaveItem = () => {
     Keyboard.dismiss();
 
@@ -347,7 +495,13 @@ export function AddFirstPurchaseScreen({
     }
 
     if (onSaveItem) {
-      onSaveItem();
+      const purchaseInput = getPurchaseInput();
+
+      if (mode !== 'editPurchase') {
+        resetForm();
+      }
+
+      onSaveItem(purchaseInput);
       return;
     }
 
@@ -358,6 +512,7 @@ export function AddFirstPurchaseScreen({
     Keyboard.dismiss();
     setDraftCurrency(selectedCurrency);
     setDraftPriceAmount(priceAmount);
+    setPriceModalError('');
     setIsCurrencyModalOpen(false);
     setIsPriceModalOpen(true);
   };
@@ -365,6 +520,7 @@ export function AddFirstPurchaseScreen({
   const closePriceModal = () => {
     setDraftCurrency(selectedCurrency);
     setDraftPriceAmount(priceAmount);
+    setPriceModalError('');
     setIsCurrencyModalOpen(false);
     setIsPriceModalOpen(false);
   };
@@ -379,11 +535,27 @@ export function AddFirstPurchaseScreen({
   };
 
   const confirmPriceModal = () => {
-    setPriceAmount(draftPriceAmount.trim());
+    const nextPriceAmount = draftPriceAmount.trim();
+
+    if (!nextPriceAmount) {
+      setPriceModalError('Enter a price');
+      return;
+    }
+
+    setPriceAmount(nextPriceAmount);
     setSelectedCurrency(draftCurrency);
+    setPriceModalError('');
     clearSaveSuccess();
     setIsCurrencyModalOpen(false);
     setIsPriceModalOpen(false);
+  };
+
+  const handleDraftPriceAmountChange = (text: string) => {
+    setDraftPriceAmount(text);
+
+    if (text.trim()) {
+      setPriceModalError('');
+    }
   };
 
   const openDatePicker = (mode: DatePickerMode) => {
@@ -432,13 +604,36 @@ export function AddFirstPurchaseScreen({
   const openCommentModal = () => {
     Keyboard.dismiss();
     setDraftComment(comment);
+    setCommentModalError('');
     setIsCommentModalOpen(true);
   };
 
+  const closeCommentModal = () => {
+    setDraftComment(comment);
+    setCommentModalError('');
+    setIsCommentModalOpen(false);
+  };
+
   const confirmCommentModal = () => {
-    setComment(draftComment.trim());
+    const nextComment = draftComment.trim();
+
+    if (!nextComment) {
+      setCommentModalError('Enter a comment or cancel');
+      return;
+    }
+
+    setComment(nextComment);
+    setCommentModalError('');
     clearSaveSuccess();
     setIsCommentModalOpen(false);
+  };
+
+  const handleDraftCommentChange = (text: string) => {
+    setDraftComment(text);
+
+    if (text.trim()) {
+      setCommentModalError('');
+    }
   };
 
   const handleOptionalRowPress = (section: OptionalSectionKey) => {
@@ -478,12 +673,27 @@ export function AddFirstPurchaseScreen({
 
         <View style={styles.headerCopy}>
           <AppText style={styles.title} variant="title">
-            Add first purchase
+            {headerCopy.title}
           </AppText>
           <AppText style={styles.subtitle} variant="subtitle">
-            Start with the essentials
+            {headerCopy.subtitle}
           </AppText>
         </View>
+
+        {mode === 'firstPurchase' ? (
+          <Pressable
+            accessibilityRole="button"
+            onPress={onSkip}
+            style={({ pressed }) => [
+              styles.skipButton,
+              pressed && styles.skipButtonPressed,
+            ]}
+          >
+            <AppText style={styles.skipButtonText} variant="button">
+              Skip
+            </AppText>
+          </Pressable>
+        ) : null}
       </View>
 
       <ScrollView
@@ -640,10 +850,14 @@ export function AddFirstPurchaseScreen({
       <View style={styles.actions}>
         {isSaveSuccessful ? (
           <AppText style={styles.successText} variant="caption">
-            Purchase added
+            {saveSuccessText}
           </AppText>
         ) : null}
-        <AppButton onPress={handleSaveItem} title="Save item" variant="primary" />
+        <AppButton
+          onPress={handleSaveItem}
+          title={saveButtonTitle}
+          variant="primary"
+        />
       </View>
 
       <Modal
@@ -733,11 +947,16 @@ export function AddFirstPurchaseScreen({
                   </AppText>
                 </Pressable>
 
-                <View style={styles.priceInputCard}>
+                <View
+                  style={[
+                    styles.priceInputCard,
+                    priceModalError ? styles.modalInputCardError : null,
+                  ]}
+                >
                   <TextInput
                     keyboardType="decimal-pad"
-                    onChangeText={setDraftPriceAmount}
-                    placeholder="117.00"
+                    onChangeText={handleDraftPriceAmountChange}
+                    placeholder="0.00"
                     placeholderTextColor={theme.colors.muted}
                     selectionColor={theme.colors.green}
                     style={styles.priceInput}
@@ -745,6 +964,12 @@ export function AddFirstPurchaseScreen({
                   />
                 </View>
               </View>
+
+              {priceModalError ? (
+                <AppText style={styles.modalErrorText} variant="caption">
+                  {priceModalError}
+                </AppText>
+              ) : null}
 
               <View style={styles.modalActions}>
                 <Pressable
@@ -994,7 +1219,7 @@ export function AddFirstPurchaseScreen({
 
       <Modal
         animationType="none"
-        onRequestClose={() => setIsCommentModalOpen(false)}
+        onRequestClose={closeCommentModal}
         transparent
         visible={isCommentModalOpen}
       >
@@ -1002,7 +1227,7 @@ export function AddFirstPurchaseScreen({
           <Pressable
             accessibilityLabel="Close comment modal"
             accessibilityRole="button"
-            onPress={() => setIsCommentModalOpen(false)}
+            onPress={closeCommentModal}
             style={styles.centeredModalBackdrop}
           />
 
@@ -1011,10 +1236,15 @@ export function AddFirstPurchaseScreen({
               Add comment
             </AppText>
 
-            <View style={styles.modalCommentInputCard}>
+            <View
+              style={[
+                styles.modalCommentInputCard,
+                commentModalError ? styles.modalInputCardError : null,
+              ]}
+            >
               <TextInput
                 multiline
-                onChangeText={setDraftComment}
+                onChangeText={handleDraftCommentChange}
                 placeholder="Size, fit, packaging, notes..."
                 placeholderTextColor={theme.colors.muted}
                 selectionColor={theme.colors.green}
@@ -1024,10 +1254,16 @@ export function AddFirstPurchaseScreen({
               />
             </View>
 
+            {commentModalError ? (
+              <AppText style={styles.modalErrorText} variant="caption">
+                {commentModalError}
+              </AppText>
+            ) : null}
+
             <View style={styles.modalActions}>
               <Pressable
                 accessibilityRole="button"
-                onPress={() => setIsCommentModalOpen(false)}
+                onPress={closeCommentModal}
                 style={({ pressed }) => [
                   styles.modalActionButton,
                   pressed && styles.modalActionButtonPressed,
@@ -1098,6 +1334,25 @@ const styles = StyleSheet.create({
     ...theme.typography.screenSubtitle,
     lineHeight: 20,
     marginTop: 2,
+  },
+  skipButton: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    borderRadius: theme.radius.pill,
+    justifyContent: 'center',
+    marginTop: -2,
+    minHeight: 40,
+    paddingHorizontal: theme.spacing.sm,
+  },
+  skipButtonPressed: {
+    opacity: 0.72,
+  },
+  skipButtonText: {
+    color: theme.colors.greenDark,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.medium,
+    lineHeight: 18,
+    opacity: 0.88,
   },
   form: {
     flex: 1,
@@ -1297,6 +1552,16 @@ const styles = StyleSheet.create({
     height: 48,
     justifyContent: 'center',
     paddingHorizontal: theme.spacing.md,
+  },
+  modalInputCardError: {
+    borderColor: theme.colors.pending,
+  },
+  modalErrorText: {
+    color: theme.colors.pending,
+    fontSize: 12,
+    fontWeight: theme.fontWeight.medium,
+    lineHeight: 16,
+    marginTop: 6,
   },
   priceInput: {
     ...theme.typography.input,

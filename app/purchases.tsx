@@ -7,7 +7,7 @@ export default function PurchasesRoute() {
 
   return (
     <PurchasesHomeScreen
-      onAddItem={() => router.push('/add-first-purchase')}
+      onAddItem={() => router.push('/add-purchase')}
       onPurchasePress={(itemId) =>
         router.push({
           pathname: '/purchase-details',

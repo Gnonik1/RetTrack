@@ -5,14 +5,15 @@ import { AppScreen } from '../../../components/AppScreen';
 import { AppText } from '../../../components/AppText';
 import { theme } from '../../../constants/theme';
 import {
-  getMockPurchaseById,
   purchaseStatusLabels,
   type PurchaseStatus,
 } from '../data/mockPurchases';
+import { usePurchases } from '../state/PurchasesState';
 
 type PurchaseDetailsScreenProps = {
   itemId?: string | string[];
   onBack?: () => void;
+  onEdit?: (itemId: string) => void;
 };
 
 function BackChevron() {
@@ -77,8 +78,10 @@ function getConfirmationTextStyle(status: PurchaseStatus) {
 export function PurchaseDetailsScreen({
   itemId,
   onBack,
+  onEdit,
 }: PurchaseDetailsScreenProps) {
-  const purchaseDetails = getMockPurchaseById(itemId);
+  const { getPurchaseById, resolvePurchase } = usePurchases();
+  const purchaseDetails = getPurchaseById(itemId);
   const storeMetaLine = purchaseDetails.productDomain
     ? `${purchaseDetails.store} · ${purchaseDetails.productDomain}`
     : purchaseDetails.store;
@@ -89,7 +92,7 @@ export function PurchaseDetailsScreen({
     },
     {
       label: 'Return by',
-      value: purchaseDetails.returnBy,
+      value: purchaseDetails.returnByDetail ?? purchaseDetails.returnBy,
     },
     {
       label: 'Purchased',
@@ -128,6 +131,7 @@ export function PurchaseDetailsScreen({
 
         <Pressable
           accessibilityRole="button"
+          onPress={() => onEdit?.(purchaseDetails.id)}
           style={({ pressed }) => [
             styles.editButton,
             pressed && styles.controlPressed,
@@ -234,11 +238,13 @@ export function PurchaseDetailsScreen({
       {canResolveItem ? (
         <View style={styles.bottomActions}>
           <AppButton
+            onPress={() => resolvePurchase(purchaseDetails.id, 'kept')}
             style={styles.actionButton}
             title="Keep Item"
             variant="secondary"
           />
           <AppButton
+            onPress={() => resolvePurchase(purchaseDetails.id, 'returned')}
             style={styles.actionButton}
             title="Mark Returned"
             variant="primary"

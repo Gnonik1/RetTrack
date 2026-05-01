@@ -12,11 +12,14 @@ import { AppScreen } from '../../../components/AppScreen';
 import { AppText } from '../../../components/AppText';
 import { theme } from '../../../constants/theme';
 import {
-  mockPurchases,
   purchaseStatusLabels,
   type MockPurchase,
   type PurchaseStatus,
 } from '../data/mockPurchases';
+import {
+  usePurchases,
+  type ResolvedPurchaseStatus,
+} from '../state/PurchasesState';
 
 type PurchasesHomeScreenProps = {
   onAddItem?: () => void;
@@ -78,23 +81,152 @@ const sectionHeadings: Record<
   },
 };
 
-type UrgentActiveSummaryLabel = 'Due today' | 'Due tomorrow' | 'Due soon';
-
-const mostUrgentActiveSummary: {
-  label: UrgentActiveSummaryLabel;
-  value: string;
-} = {
-  label: 'Due tomorrow',
-  value: 'Leather Loafers',
+const emptyStateContent: Record<
+  FilterKey,
+  {
+    body: string;
+    title: string;
+  }
+> = {
+  active: {
+    body: "You're all caught up. Add a purchase to track its return window.",
+    title: 'No active returns',
+  },
+  kept: {
+    body: 'Items you decide to keep will appear here.',
+    title: 'No kept items yet',
+  },
+  pending: {
+    body: 'Items past their return date will appear here.',
+    title: 'No pending decisions',
+  },
+  returned: {
+    body: 'Items you mark as returned will appear here.',
+    title: 'No returned items yet',
+  },
 };
 
-const attentionSummaries = [
-  mostUrgentActiveSummary,
-  {
-    label: 'Pending',
-    value: '2 items',
-  },
-] as const;
+type UrgentActiveSummaryLabel = 'Due today' | 'Due tomorrow' | 'Due soon';
+
+type ActiveAttentionSummary = {
+  item: MockPurchase;
+  label: UrgentActiveSummaryLabel;
+  rank: number;
+};
+
+type AttentionSummary = {
+  countText: string;
+  summaries: {
+    label: string;
+    value: string;
+  }[];
+};
+
+function getItemCountText(count: number) {
+  return `${count} ${count === 1 ? 'item' : 'items'}`;
+}
+
+function getPurchaseCountText(count: number) {
+  return count === 0
+    ? 'All clear'
+    : `${count} ${count === 1 ? 'Purchase' : 'Purchases'}`;
+}
+
+function getActiveAttentionSummary(
+  item: MockPurchase,
+): ActiveAttentionSummary | null {
+  if (item.status !== 'active') {
+    return null;
+  }
+
+  if (item.days === 'Today') {
+    return {
+      item,
+      label: 'Due today',
+      rank: 0,
+    };
+  }
+
+  if (item.days === 'Tomorrow') {
+    return {
+      item,
+      label: 'Due tomorrow',
+      rank: 1,
+    };
+  }
+
+  const daysLeftMatch = item.days.match(/^([1-3]) days? left$/i);
+
+  if (daysLeftMatch) {
+    return {
+      item,
+      label: 'Due soon',
+      rank: 2 + Number(daysLeftMatch[1]) / 10,
+    };
+  }
+
+  return null;
+}
+
+function getAttentionSummary(purchases: MockPurchase[]): AttentionSummary {
+  const activeAttentionItems = purchases
+    .map(getActiveAttentionSummary)
+    .filter((summary): summary is ActiveAttentionSummary => Boolean(summary))
+    .sort((firstItem, secondItem) => firstItem.rank - secondItem.rank);
+  const activeCount = purchases.filter(
+    (purchase) => purchase.status === 'active',
+  ).length;
+  const pendingCount = purchases.filter(
+    (purchase) => purchase.status === 'pending',
+  ).length;
+  const attentionCount = activeCount + pendingCount;
+  const mostUrgentActiveItem = activeAttentionItems[0];
+
+  return {
+    countText: getPurchaseCountText(attentionCount),
+    summaries: [
+      mostUrgentActiveItem
+        ? {
+            label: mostUrgentActiveItem.label,
+            value: mostUrgentActiveItem.item.itemName,
+          }
+        : {
+            label: 'All clear',
+            value: 'No urgent returns',
+          },
+      {
+        label: 'Pending',
+        value: getItemCountText(pendingCount),
+      },
+    ],
+  };
+}
+
+function getResolvedSortValue(item: MockPurchase) {
+  return item.resolvedAt ?? 0;
+}
+
+function getHomeReturnDate(returnBy: string) {
+  return returnBy.split(',')[0].trim();
+}
+
+function getVisiblePurchaseItems(
+  purchases: MockPurchase[],
+  selectedFilter: FilterKey,
+) {
+  const filteredItems = purchases.filter(
+    (item) => item.status === selectedFilter,
+  );
+
+  if (selectedFilter === 'returned' || selectedFilter === 'kept') {
+    return [...filteredItems].sort(
+      (firstItem, secondItem) =>
+        getResolvedSortValue(secondItem) - getResolvedSortValue(firstItem),
+    );
+  }
+
+  return filteredItems;
+}
 
 function NotificationBell() {
   return (
@@ -115,6 +247,44 @@ function ProductIcon() {
       <View style={styles.bagBody}>
         <View style={styles.bagFold} />
       </View>
+    </View>
+  );
+}
+
+function PurchaseEmptyState({
+  onAddItem,
+  selectedFilter,
+}: {
+  onAddItem?: () => void;
+  selectedFilter: FilterKey;
+}) {
+  const copy = emptyStateContent[selectedFilter];
+  const showAddAction = selectedFilter === 'active' && onAddItem;
+
+  return (
+    <View style={styles.emptyStateCard}>
+      <ProductIcon />
+      <AppText style={styles.emptyStateTitle} variant="body">
+        {copy.title}
+      </AppText>
+      <AppText style={styles.emptyStateBody} variant="caption">
+        {copy.body}
+      </AppText>
+
+      {showAddAction ? (
+        <Pressable
+          accessibilityRole="button"
+          onPress={onAddItem}
+          style={({ pressed }) => [
+            styles.emptyStateAction,
+            pressed && styles.emptyStateActionPressed,
+          ]}
+        >
+          <AppText style={styles.emptyStateActionText} variant="button">
+            Add item
+          </AppText>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -219,11 +389,14 @@ function getGestureLock(dx: number, dy: number): GestureLock {
 function PurchaseCard({
   item,
   onPress,
+  onResolveItem,
 }: {
   item: MockPurchase;
   onPress?: () => void;
+  onResolveItem?: (itemId: string, status: ResolvedPurchaseStatus) => void;
 }) {
   const canResolveItem = item.status === 'active' || item.status === 'pending';
+  const showActions = canResolveItem && onResolveItem;
 
   return (
     <View style={[styles.itemCard, getItemCardStyle(item.status)]}>
@@ -266,7 +439,7 @@ function PurchaseCard({
 
         <View style={styles.returnInfoRow}>
           <AppText style={styles.returnByText} variant="caption">
-            Return by {item.returnBy}
+            Return by {getHomeReturnDate(item.returnBy)}
           </AppText>
           <AppText
             style={[styles.daysText, getUrgencyTextStyle(item)]}
@@ -277,10 +450,11 @@ function PurchaseCard({
         </View>
       </Pressable>
 
-      {canResolveItem ? (
+      {showActions ? (
         <View style={styles.cardActions}>
           <Pressable
             accessibilityRole="button"
+            onPress={() => onResolveItem?.(item.id, 'returned')}
             style={[styles.cardActionButton, styles.returnedActionButton]}
           >
             <AppText
@@ -292,6 +466,7 @@ function PurchaseCard({
           </Pressable>
           <Pressable
             accessibilityRole="button"
+            onPress={() => onResolveItem?.(item.id, 'kept')}
             style={[styles.cardActionButton, styles.keepActionButton]}
           >
             <AppText style={styles.cardActionText} variant="button">
@@ -354,6 +529,7 @@ export function PurchasesHomeScreen({
   onAddItem,
   onPurchasePress,
 }: PurchasesHomeScreenProps) {
+  const { purchases, resolvePurchase } = usePurchases();
   const [isScrollEnabled, setIsScrollEnabled] = useState(true);
   const [selectedFilter, setSelectedFilter] = useState<FilterKey>('active');
   const selectedFilterIndex = filterItems.findIndex(
@@ -362,9 +538,13 @@ export function PurchasesHomeScreen({
   const gestureLock = useRef<GestureLock>('undecided');
   const tabTransition = useRef(new Animated.Value(1)).current;
   const transitionDirection = useRef(1);
+  const attentionSummary = useMemo(
+    () => getAttentionSummary(purchases),
+    [purchases],
+  );
   const visiblePurchaseItems = useMemo(
-    () => mockPurchases.filter((item) => item.status === selectedFilter),
-    [selectedFilter],
+    () => getVisiblePurchaseItems(purchases, selectedFilter),
+    [purchases, selectedFilter],
   );
   const sectionHeading = sectionHeadings[selectedFilter];
   const selectFilter = useCallback(
@@ -536,12 +716,12 @@ export function PurchasesHomeScreen({
               Needs attention
             </AppText>
             <AppText style={styles.attentionCount} variant="title">
-              2 Purchases
+              {attentionSummary.countText}
             </AppText>
           </View>
 
           <View style={styles.attentionMiniCards}>
-            {attentionSummaries.map((summary) => (
+            {attentionSummary.summaries.map((summary) => (
               <View style={styles.attentionMiniCard} key={summary.label}>
                 <AppText style={styles.attentionMiniLabel} variant="caption">
                   {summary.label}
@@ -598,13 +778,21 @@ export function PurchasesHomeScreen({
             </View>
 
             <View style={styles.itemList}>
-              {visiblePurchaseItems.map((item) => (
-                <PurchaseCard
-                  item={item}
-                  key={item.id}
-                  onPress={() => onPurchasePress?.(item.id)}
+              {visiblePurchaseItems.length === 0 ? (
+                <PurchaseEmptyState
+                  onAddItem={onAddItem}
+                  selectedFilter={selectedFilter}
                 />
-              ))}
+              ) : (
+                visiblePurchaseItems.map((item) => (
+                  <PurchaseCard
+                    item={item}
+                    key={item.id}
+                    onResolveItem={resolvePurchase}
+                    onPress={() => onPurchasePress?.(item.id)}
+                  />
+                ))
+              )}
             </View>
           </Animated.View>
         </View>
@@ -667,7 +855,7 @@ const styles = StyleSheet.create({
   },
   content: {
     flexGrow: 1,
-    paddingBottom: 102,
+    paddingBottom: 112,
     paddingTop: theme.spacing.xs,
   },
   header: {
@@ -892,6 +1080,59 @@ const styles = StyleSheet.create({
     gap: 11,
     marginTop: 10,
   },
+  emptyStateCard: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.card,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.xl,
+    borderWidth: 1,
+    paddingHorizontal: 18,
+    paddingVertical: 22,
+    shadowColor: theme.colors.text,
+    shadowOffset: {
+      height: 8,
+      width: 0,
+    },
+    shadowOpacity: 0.035,
+    shadowRadius: 14,
+  },
+  emptyStateTitle: {
+    color: theme.colors.text,
+    fontSize: 16,
+    fontWeight: theme.fontWeight.semibold,
+    lineHeight: 22,
+    marginTop: 13,
+    textAlign: 'center',
+  },
+  emptyStateBody: {
+    color: theme.colors.muted,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.regular,
+    lineHeight: 19,
+    marginTop: 5,
+    maxWidth: 260,
+    textAlign: 'center',
+  },
+  emptyStateAction: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.sage,
+    borderColor: '#D8E3D0',
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    justifyContent: 'center',
+    marginTop: 14,
+    minHeight: 36,
+    paddingHorizontal: 17,
+  },
+  emptyStateActionPressed: {
+    opacity: 0.82,
+  },
+  emptyStateActionText: {
+    color: theme.colors.greenDark,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.semibold,
+    lineHeight: 18,
+  },
   itemCard: {
     backgroundColor: theme.colors.card,
     borderColor: theme.colors.border,
@@ -1104,7 +1345,7 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border,
     borderRadius: 22,
     borderWidth: 1,
-    bottom: 14,
+    bottom: 24,
     flexDirection: 'row',
     justifyContent: 'space-between',
     left: theme.spacing.md,

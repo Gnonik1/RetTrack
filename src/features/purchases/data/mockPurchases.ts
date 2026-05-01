@@ -3,13 +3,17 @@ export type PurchaseStatus = 'active' | 'returned' | 'kept' | 'pending';
 export type MockPurchase = {
   comment?: string;
   completedText?: string;
+  createdAt?: number;
   days: string;
   id: string;
   itemName: string;
   price?: string;
   productDomain?: string;
+  productLink?: string;
   purchased?: string;
   returnBy: string;
+  returnByDetail?: string;
+  resolvedAt?: number;
   status: PurchaseStatus;
   store: string;
 };
@@ -29,6 +33,7 @@ export const mockPurchases: MockPurchase[] = [
     price: 'USD 180',
     purchased: 'Apr 12',
     returnBy: 'Apr 27',
+    returnByDetail: 'Apr 27, 2026',
     status: 'active',
     store: 'Massimo Dutti',
   },
@@ -40,6 +45,7 @@ export const mockPurchases: MockPurchase[] = [
     price: 'USD 290',
     purchased: 'Apr 10',
     returnBy: 'Apr 30',
+    returnByDetail: 'Apr 30, 2026',
     status: 'active',
     store: 'COS',
   },
@@ -50,6 +56,7 @@ export const mockPurchases: MockPurchase[] = [
     price: 'USD 119',
     purchased: 'Apr 20',
     returnBy: 'May 6',
+    returnByDetail: 'May 6, 2026',
     status: 'active',
     store: 'Zara',
   },
@@ -61,6 +68,8 @@ export const mockPurchases: MockPurchase[] = [
     price: 'USD 79',
     purchased: 'Apr 4',
     returnBy: 'Apr 22',
+    returnByDetail: 'Apr 22, 2026',
+    resolvedAt: 20260418,
     status: 'returned',
     store: 'Arket',
   },
@@ -72,6 +81,8 @@ export const mockPurchases: MockPurchase[] = [
     price: 'USD 160',
     purchased: 'Apr 2',
     returnBy: 'Apr 19',
+    returnByDetail: 'Apr 19, 2026',
+    resolvedAt: 20260416,
     status: 'returned',
     store: 'Mango',
   },
@@ -83,6 +94,8 @@ export const mockPurchases: MockPurchase[] = [
     price: 'USD 69',
     purchased: 'Apr 8',
     returnBy: 'Apr 25',
+    returnByDetail: 'Apr 25, 2026',
+    resolvedAt: 20260421,
     status: 'kept',
     store: 'Massimo Dutti',
   },
@@ -94,6 +107,8 @@ export const mockPurchases: MockPurchase[] = [
     price: 'USD 98',
     purchased: 'Apr 9',
     returnBy: 'Apr 29',
+    returnByDetail: 'Apr 29, 2026',
+    resolvedAt: 20260424,
     status: 'kept',
     store: 'COS',
   },
@@ -105,6 +120,7 @@ export const mockPurchases: MockPurchase[] = [
     price: 'USD 49',
     purchased: 'Apr 6',
     returnBy: 'Apr 26',
+    returnByDetail: 'Apr 26, 2026',
     status: 'pending',
     store: 'Zara',
   },
@@ -115,6 +131,7 @@ export const mockPurchases: MockPurchase[] = [
     price: 'USD 168',
     purchased: 'Apr 5',
     returnBy: 'Apr 24',
+    returnByDetail: 'Apr 24, 2026',
     status: 'pending',
     store: 'Reformation',
   },

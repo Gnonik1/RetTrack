@@ -15,7 +15,7 @@
 ## Purchases / Add First Purchase
 
 - Add disabled/enabled Save item behavior.
-- Replace the frontend-only Purchases home/list mock with saved purchase data after the post-save UX is approved.
+- Persist added purchases beyond reload after storage/API approach is approved.
 
 ## Purchases / Photos
 
