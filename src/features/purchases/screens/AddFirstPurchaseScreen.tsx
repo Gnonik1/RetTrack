@@ -17,6 +17,10 @@ import { AppScreen } from '../../../components/AppScreen';
 import { AppText } from '../../../components/AppText';
 import { theme } from '../../../constants/theme';
 import type { AddPurchaseInput } from '../state/PurchasesState';
+import {
+  parsePurchaseDate,
+  toLocalDateISO,
+} from '../utils/purchaseDates';
 
 type AddFirstPurchaseScreenProps = {
   initialValues?: PurchaseFormInitialValues;
@@ -148,24 +152,6 @@ function formatDate(date: Date) {
   return `${monthLabels[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
 }
 
-function parseDisplayDate(value?: string) {
-  const dateMatch = value?.match(/^([A-Z][a-z]{2})\s+(\d{1,2})(?:,\s+(\d{4}))?$/);
-
-  if (!dateMatch) {
-    return null;
-  }
-
-  const monthIndex = monthLabels.findIndex((month) => month === dateMatch[1]);
-  const day = Number(dateMatch[2]);
-  const year = dateMatch[3] ? Number(dateMatch[3]) : new Date().getFullYear();
-
-  if (monthIndex < 0 || Number.isNaN(day) || Number.isNaN(year)) {
-    return null;
-  }
-
-  return new Date(year, monthIndex, day);
-}
-
 function getDefaultReturnDate() {
   return addDays(new Date(), 14);
 }
@@ -216,13 +202,19 @@ function isSameDate(firstDate: Date, secondDate: Date) {
 
 function getInitialReturnDate(initialValues?: PurchaseFormInitialValues) {
   return (
-    parseDisplayDate(initialValues?.returnByDetail ?? initialValues?.returnBy) ??
+    parsePurchaseDate({
+      dateISO: initialValues?.returnDateISO,
+      displayDate: initialValues?.returnByDetail ?? initialValues?.returnBy,
+    }) ??
     getDefaultReturnDate()
   );
 }
 
 function getInitialPurchaseDate(initialValues?: PurchaseFormInitialValues) {
-  return parseDisplayDate(initialValues?.purchased);
+  return parsePurchaseDate({
+    dateISO: initialValues?.purchaseDateISO,
+    displayDate: initialValues?.purchased,
+  });
 }
 
 function getInitialPriceParts(initialValues?: PurchaseFormInitialValues): {
@@ -453,8 +445,10 @@ export function AddFirstPurchaseScreen({
         ? `${selectedCurrency} ${trimmedPriceAmount}`
         : undefined,
       productLink: productLink.trim() || undefined,
+      purchaseDateISO: purchaseDate ? toLocalDateISO(purchaseDate) : undefined,
       purchased: purchaseDate ? formatDate(purchaseDate) : undefined,
       returnBy: returnDate ? formatDate(returnDate) : returnDateDisplay,
+      returnDateISO: returnDate ? toLocalDateISO(returnDate) : undefined,
       store: store.trim() || undefined,
     };
   };

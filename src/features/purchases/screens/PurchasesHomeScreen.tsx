@@ -20,6 +20,11 @@ import {
   usePurchases,
   type ResolvedPurchaseStatus,
 } from '../state/PurchasesState';
+import {
+  getCompactReturnDate,
+  getDateSortValue,
+  getReturnDateUrgency,
+} from '../utils/purchaseDates';
 
 type PurchasesHomeScreenProps = {
   onAddItem?: () => void;
@@ -132,6 +137,19 @@ function getPurchaseCountText(count: number) {
     : `${count} ${count === 1 ? 'Purchase' : 'Purchases'}`;
 }
 
+function getTimeAwareGreeting(firstName?: string, date = new Date()) {
+  const hour = date.getHours();
+  const greeting =
+    hour >= 5 && hour < 12
+      ? 'Good morning'
+      : hour >= 12 && hour < 18
+        ? 'Good afternoon'
+        : 'Good evening';
+  const trimmedFirstName = firstName?.trim();
+
+  return trimmedFirstName ? `${greeting}, ${trimmedFirstName}` : greeting;
+}
+
 function getActiveAttentionSummary(
   item: MockPurchase,
 ): ActiveAttentionSummary | null {
@@ -139,7 +157,9 @@ function getActiveAttentionSummary(
     return null;
   }
 
-  if (item.days === 'Today') {
+  const urgency = getReturnDateUrgency(item);
+
+  if (urgency.state === 'today') {
     return {
       item,
       label: 'Due today',
@@ -147,7 +167,7 @@ function getActiveAttentionSummary(
     };
   }
 
-  if (item.days === 'Tomorrow') {
+  if (urgency.state === 'tomorrow') {
     return {
       item,
       label: 'Due tomorrow',
@@ -155,13 +175,59 @@ function getActiveAttentionSummary(
     };
   }
 
-  const daysLeftMatch = item.days.match(/^([1-3]) days? left$/i);
-
-  if (daysLeftMatch) {
+  if (urgency.state === 'future') {
     return {
       item,
       label: 'Due soon',
-      rank: 2 + Number(daysLeftMatch[1]) / 10,
+      rank: 2 + (urgency.daysUntil ?? 0),
+    };
+  }
+
+  return null;
+}
+
+function getGroupedActiveSummary(
+  activeAttentionItems: ActiveAttentionSummary[],
+) {
+  const dueTodayItems = activeAttentionItems.filter(
+    (summary) => summary.label === 'Due today',
+  );
+
+  if (dueTodayItems.length > 0) {
+    return {
+      label: 'Due today',
+      value:
+        dueTodayItems.length === 1
+          ? dueTodayItems[0].item.itemName
+          : `${dueTodayItems.length} purchases`,
+    };
+  }
+
+  const dueTomorrowItems = activeAttentionItems.filter(
+    (summary) => summary.label === 'Due tomorrow',
+  );
+
+  if (dueTomorrowItems.length > 0) {
+    return {
+      label: 'Due tomorrow',
+      value:
+        dueTomorrowItems.length === 1
+          ? dueTomorrowItems[0].item.itemName
+          : `${dueTomorrowItems.length} purchases`,
+    };
+  }
+
+  const futureItems = activeAttentionItems.filter(
+    (summary) => summary.label === 'Due soon',
+  );
+
+  if (futureItems.length > 0) {
+    return {
+      label: 'Due soon',
+      value:
+        futureItems.length === 1
+          ? futureItems[0].item.itemName
+          : `${futureItems.length} purchases`,
     };
   }
 
@@ -180,23 +246,29 @@ function getAttentionSummary(purchases: MockPurchase[]): AttentionSummary {
     (purchase) => purchase.status === 'pending',
   ).length;
   const attentionCount = activeCount + pendingCount;
-  const mostUrgentActiveItem = activeAttentionItems[0];
+  const activeSummary = getGroupedActiveSummary(activeAttentionItems);
+  const pendingSummary = getItemCountText(pendingCount);
 
   return {
     countText: getPurchaseCountText(attentionCount),
     summaries: [
-      mostUrgentActiveItem
+      activeSummary
         ? {
-            label: mostUrgentActiveItem.label,
-            value: mostUrgentActiveItem.item.itemName,
+            label: activeSummary.label,
+            value: activeSummary.value,
           }
+        : pendingCount > 0
+          ? {
+              label: 'Needs decision',
+              value: pendingSummary,
+            }
         : {
             label: 'All clear',
             value: 'No urgent returns',
           },
       {
         label: 'Pending',
-        value: getItemCountText(pendingCount),
+        value: pendingSummary,
       },
     ],
   };
@@ -204,10 +276,6 @@ function getAttentionSummary(purchases: MockPurchase[]): AttentionSummary {
 
 function getResolvedSortValue(item: MockPurchase) {
   return item.resolvedAt ?? 0;
-}
-
-function getHomeReturnDate(returnBy: string) {
-  return returnBy.split(',')[0].trim();
 }
 
 function getVisiblePurchaseItems(
@@ -222,6 +290,13 @@ function getVisiblePurchaseItems(
     return [...filteredItems].sort(
       (firstItem, secondItem) =>
         getResolvedSortValue(secondItem) - getResolvedSortValue(firstItem),
+    );
+  }
+
+  if (selectedFilter === 'active') {
+    return [...filteredItems].sort(
+      (firstItem, secondItem) =>
+        getDateSortValue(firstItem) - getDateSortValue(secondItem),
     );
   }
 
@@ -337,7 +412,19 @@ function getItemCardStyle(status: PurchaseStatus) {
   return null;
 }
 
-function getUrgencyTextStyle(item: MockPurchase) {
+function getCardUrgencyText(item: MockPurchase) {
+  if (item.status === 'pending') {
+    return 'Needs decision';
+  }
+
+  if (item.status === 'active') {
+    return getReturnDateUrgency(item).label;
+  }
+
+  return item.days;
+}
+
+function getUrgencyTextStyle(item: MockPurchase, urgencyText: string) {
   if (item.status === 'pending') {
     return styles.pendingDaysText;
   }
@@ -346,11 +433,11 @@ function getUrgencyTextStyle(item: MockPurchase) {
     return styles.keptDaysText;
   }
 
-  if (item.days === 'Today') {
+  if (urgencyText === 'Today' || urgencyText === 'Return date passed') {
     return styles.alertDaysText;
   }
 
-  if (item.days === 'Tomorrow') {
+  if (urgencyText === 'Tomorrow') {
     return styles.soonDaysText;
   }
 
@@ -397,6 +484,7 @@ function PurchaseCard({
 }) {
   const canResolveItem = item.status === 'active' || item.status === 'pending';
   const showActions = canResolveItem && onResolveItem;
+  const urgencyText = getCardUrgencyText(item);
 
   return (
     <View style={[styles.itemCard, getItemCardStyle(item.status)]}>
@@ -439,13 +527,13 @@ function PurchaseCard({
 
         <View style={styles.returnInfoRow}>
           <AppText style={styles.returnByText} variant="caption">
-            Return by {getHomeReturnDate(item.returnBy)}
+            Return by {getCompactReturnDate(item)}
           </AppText>
           <AppText
-            style={[styles.daysText, getUrgencyTextStyle(item)]}
+            style={[styles.daysText, getUrgencyTextStyle(item, urgencyText)]}
             variant="caption"
           >
-            {item.days}
+            {urgencyText}
           </AppText>
         </View>
       </Pressable>
@@ -542,6 +630,7 @@ export function PurchasesHomeScreen({
     () => getAttentionSummary(purchases),
     [purchases],
   );
+  const greeting = getTimeAwareGreeting();
   const visiblePurchaseItems = useMemo(
     () => getVisiblePurchaseItems(purchases, selectedFilter),
     [purchases, selectedFilter],
@@ -698,7 +787,7 @@ export function PurchasesHomeScreen({
         <View style={styles.header}>
           <View style={styles.headerCopy}>
             <AppText style={styles.greeting} variant="caption">
-              Good afternoon, Giorgi
+              {greeting}
             </AppText>
             <AppText style={styles.title} variant="title">
               Your purchases

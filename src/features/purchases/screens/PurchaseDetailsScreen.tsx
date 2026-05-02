@@ -9,6 +9,7 @@ import {
   type PurchaseStatus,
 } from '../data/mockPurchases';
 import { usePurchases } from '../state/PurchasesState';
+import { getFullReturnDate } from '../utils/purchaseDates';
 
 type PurchaseDetailsScreenProps = {
   itemId?: string | string[];
@@ -92,7 +93,7 @@ export function PurchaseDetailsScreen({
     },
     {
       label: 'Return by',
-      value: purchaseDetails.returnByDetail ?? purchaseDetails.returnBy,
+      value: getFullReturnDate(purchaseDetails),
     },
     {
       label: 'Purchased',

@@ -1,18 +1,28 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   createContext,
   type ReactNode,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 
+import { rescheduleAllPurchaseReminders } from '../../notifications/notifications';
 import {
   getMockPurchaseById,
   mockPurchases,
   type MockPurchase,
   type PurchaseStatus,
 } from '../data/mockPurchases';
+import {
+  getCompactReturnDate,
+  getFullReturnDate,
+  getPurchaseReturnDateISO,
+  getReturnDateUrgency,
+} from '../utils/purchaseDates';
 
 export type ResolvedPurchaseStatus = Extract<
   PurchaseStatus,
@@ -23,9 +33,11 @@ export type AddPurchaseInput = {
   comment?: string;
   itemName: string;
   price?: string;
+  purchaseDateISO?: string;
   productLink?: string;
   purchased?: string;
   returnBy: string;
+  returnDateISO?: string;
   store?: string;
 };
 
@@ -41,8 +53,62 @@ const PurchasesStateContext = createContext<PurchasesStateValue | undefined>(
   undefined,
 );
 
+const PURCHASES_STORAGE_KEY = 'rettrack:purchases:v1';
+
 function getResolvedStatusText(status: ResolvedPurchaseStatus) {
   return status === 'returned' ? 'Returned today' : 'Kept today';
+}
+
+function isPurchaseStatus(value: unknown): value is PurchaseStatus {
+  return (
+    value === 'active' ||
+    value === 'returned' ||
+    value === 'kept' ||
+    value === 'pending'
+  );
+}
+
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isOptionalString(value: unknown) {
+  return value === undefined || typeof value === 'string';
+}
+
+function isOptionalNumber(value: unknown) {
+  return value === undefined || typeof value === 'number';
+}
+
+function isStoredPurchase(value: unknown): value is MockPurchase {
+  if (!isObjectRecord(value)) {
+    return false;
+  }
+
+  return (
+    typeof value.id === 'string' &&
+    typeof value.itemName === 'string' &&
+    typeof value.days === 'string' &&
+    typeof value.returnBy === 'string' &&
+    typeof value.store === 'string' &&
+    isPurchaseStatus(value.status) &&
+    isOptionalString(value.comment) &&
+    isOptionalString(value.completedText) &&
+    isOptionalString(value.price) &&
+    isOptionalString(value.productDomain) &&
+    isOptionalString(value.productLink) &&
+    isOptionalNumber(value.pendingAt) &&
+    isOptionalString(value.purchaseDateISO) &&
+    isOptionalString(value.purchased) &&
+    isOptionalString(value.returnByDetail) &&
+    isOptionalString(value.returnDateISO) &&
+    isOptionalNumber(value.createdAt) &&
+    isOptionalNumber(value.resolvedAt)
+  );
+}
+
+function isStoredPurchases(value: unknown): value is MockPurchase[] {
+  return Array.isArray(value) && value.every(isStoredPurchase);
 }
 
 function compactText(value?: string) {
@@ -63,18 +129,159 @@ function getLocalPurchaseId(itemName: string, createdAt: number) {
   return `local-${slug}-${createdAt}`;
 }
 
-function getCompactReturnDate(returnBy: string) {
-  return returnBy.split(',')[0].trim();
+function getPurchaseDateFields(input: AddPurchaseInput) {
+  const returnDateISO = input.returnDateISO ?? getPurchaseReturnDateISO(input);
+  const returnDateSource = {
+    returnBy: input.returnBy,
+    returnByDetail: input.returnBy,
+    returnDateISO,
+  };
+
+  return {
+    returnBy: getCompactReturnDate(returnDateSource),
+    returnByDetail: getFullReturnDate(returnDateSource),
+    returnDateISO,
+  };
+}
+
+function getPurchaseWithCurrentDateState(
+  purchase: MockPurchase,
+  today = new Date(),
+): MockPurchase {
+  if (purchase.status === 'pending' && !purchase.pendingAt) {
+    return {
+      ...purchase,
+      pendingAt: today.getTime(),
+    };
+  }
+
+  if (purchase.status !== 'active') {
+    return purchase;
+  }
+
+  const urgency = getReturnDateUrgency(purchase, today);
+
+  if (urgency.state === 'unknown') {
+    return purchase;
+  }
+
+  const status = urgency.state === 'expired' ? 'pending' : purchase.status;
+  const days = urgency.state === 'expired' ? 'Needs decision' : urgency.label;
+
+  if (status === purchase.status && days === purchase.days) {
+    return purchase;
+  }
+
+  return {
+    ...purchase,
+    days,
+    pendingAt:
+      status === 'pending' ? (purchase.pendingAt ?? today.getTime()) : undefined,
+    status,
+  };
+}
+
+function getPurchasesWithCurrentDateState(purchases: MockPurchase[]) {
+  let didChangePurchase = false;
+  const today = new Date();
+  const nextPurchases = purchases.map((purchase) => {
+    const nextPurchase = getPurchaseWithCurrentDateState(purchase, today);
+
+    if (nextPurchase !== purchase) {
+      didChangePurchase = true;
+    }
+
+    return nextPurchase;
+  });
+
+  return didChangePurchase ? nextPurchases : purchases;
+}
+
+function getActiveToPendingPurchaseIds(
+  previousPurchases: MockPurchase[],
+  nextPurchases: MockPurchase[],
+) {
+  const previousStatusById = new Map(
+    previousPurchases.map((purchase) => [purchase.id, purchase.status]),
+  );
+
+  return nextPurchases
+    .filter(
+      (purchase) =>
+        purchase.status === 'pending' &&
+        previousStatusById.get(purchase.id) === 'active',
+    )
+    .map((purchase) => purchase.id);
 }
 
 export function PurchasesProvider({ children }: { children: ReactNode }) {
-  const [purchases, setPurchases] = useState<MockPurchase[]>(mockPurchases);
+  const [purchases, setPurchases] = useState<MockPurchase[]>(() =>
+    getPurchasesWithCurrentDateState(mockPurchases),
+  );
+  const [hasHydratedPurchases, setHasHydratedPurchases] = useState(false);
+  const hasSkippedInitialPersistRef = useRef(false);
+  const lastReminderPurchasesRef = useRef<MockPurchase[] | null>(null);
+  const reminderSyncQueueRef = useRef(Promise.resolve());
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const hydratePurchases = async () => {
+      try {
+        const storedPurchases = await AsyncStorage.getItem(PURCHASES_STORAGE_KEY);
+
+        if (!isMounted) {
+          return;
+        }
+
+        if (!storedPurchases) {
+          return;
+        }
+
+        const parsedPurchases: unknown = JSON.parse(storedPurchases);
+
+        if (isStoredPurchases(parsedPurchases)) {
+          setPurchases(getPurchasesWithCurrentDateState(parsedPurchases));
+        }
+      } catch {
+        // Keep the mock fallback if persisted purchase data cannot be read.
+      } finally {
+        if (isMounted) {
+          setHasHydratedPurchases(true);
+        }
+      }
+    };
+
+    hydratePurchases();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!hasHydratedPurchases) {
+      return;
+    }
+
+    if (!hasSkippedInitialPersistRef.current) {
+      hasSkippedInitialPersistRef.current = true;
+      return;
+    }
+
+    AsyncStorage.setItem(PURCHASES_STORAGE_KEY, JSON.stringify(purchases)).catch(
+      () => {
+        // Local persistence is best-effort for the frontend-only mock state.
+      },
+    );
+  }, [hasHydratedPurchases, purchases]);
 
   const addPurchase = useCallback((input: AddPurchaseInput) => {
     const createdAt = Date.now();
     const itemName = input.itemName.trim();
     const store = compactText(input.store) ?? 'Online purchase';
     const productLink = compactText(input.productLink);
+    const returnDateFields = getPurchaseDateFields(input);
     const newPurchase: MockPurchase = {
       comment: compactText(input.comment),
       createdAt,
@@ -83,16 +290,21 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
       itemName,
       price: compactText(input.price),
       productLink,
+      purchaseDateISO: input.purchaseDateISO,
       purchased: compactText(input.purchased),
-      returnBy: getCompactReturnDate(input.returnBy),
-      returnByDetail: input.returnBy,
+      ...returnDateFields,
       status: 'active',
       store,
     };
 
-    setPurchases((currentPurchases) => [newPurchase, ...currentPurchases]);
+    const datedPurchase = getPurchaseWithCurrentDateState(
+      newPurchase,
+      new Date(createdAt),
+    );
 
-    return newPurchase;
+    setPurchases((currentPurchases) => [datedPurchase, ...currentPurchases]);
+
+    return datedPurchase;
   }, []);
 
   const getPurchaseById = useCallback(
@@ -138,6 +350,8 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
     const itemName = input.itemName.trim();
     const store = compactText(input.store) ?? 'Online purchase';
     const productLink = compactText(input.productLink);
+    const returnDateFields = getPurchaseDateFields(input);
+    const updatedAt = new Date();
 
     setPurchases((currentPurchases) =>
       currentPurchases.map((purchase) => {
@@ -145,20 +359,47 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
           return purchase;
         }
 
-        return {
-          ...purchase,
-          comment: compactText(input.comment),
-          itemName,
-          price: compactText(input.price),
-          productLink,
-          purchased: compactText(input.purchased),
-          returnBy: getCompactReturnDate(input.returnBy),
-          returnByDetail: input.returnBy,
-          store,
-        };
+        return getPurchaseWithCurrentDateState(
+          {
+            ...purchase,
+            comment: compactText(input.comment),
+            itemName,
+            price: compactText(input.price),
+            productLink,
+            purchaseDateISO: input.purchaseDateISO,
+            purchased: compactText(input.purchased),
+            ...returnDateFields,
+            store,
+          },
+          updatedAt,
+        );
       }),
     );
   }, []);
+
+  useEffect(() => {
+    if (!hasHydratedPurchases) {
+      return;
+    }
+
+    const previousPurchases = lastReminderPurchasesRef.current;
+    const purchasesSnapshot = purchases;
+    const immediatePendingPurchaseIds = previousPurchases
+      ? getActiveToPendingPurchaseIds(previousPurchases, purchasesSnapshot)
+      : [];
+
+    lastReminderPurchasesRef.current = purchasesSnapshot;
+
+    reminderSyncQueueRef.current = reminderSyncQueueRef.current
+      .catch(() => undefined)
+      .then(() =>
+        rescheduleAllPurchaseReminders(purchasesSnapshot, {
+          immediatePendingPurchaseIds,
+        }),
+      )
+      .then(() => undefined)
+      .catch(() => undefined);
+  }, [hasHydratedPurchases, purchases]);
 
   const value = useMemo(
     () => ({

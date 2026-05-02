@@ -23,6 +23,10 @@
 - Enforce max 3 photos per item.
 - Review photo permissions and iOS behavior before adding dependencies.
 
+## Notifications
+
+- Test local notification scheduling and delivery in a development build or TestFlight because Expo Go has notification limitations.
+
 ## Auth / Validation
 
 - Decide disabled/enabled button behavior for invalid forms before auth integration.
