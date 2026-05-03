@@ -16,6 +16,13 @@ import { AppButton } from '../../../components/AppButton';
 import { AppScreen } from '../../../components/AppScreen';
 import { AppText } from '../../../components/AppText';
 import { theme } from '../../../constants/theme';
+import {
+  DEFAULT_CURRENCY,
+  currencyOptions,
+  type CurrencyCode,
+  isCurrencyCode,
+  useAppSettings,
+} from '../../settings/state/AppSettingsState';
 import type { AddPurchaseInput } from '../state/PurchasesState';
 import {
   parsePurchaseDate,
@@ -100,29 +107,6 @@ const optionalDetailRows = [
     label: 'Add comment',
   },
 ] as const;
-
-const currencyOptions = [
-  {
-    code: 'USD',
-    name: 'US Dollar',
-  },
-  {
-    code: 'EUR',
-    name: 'Euro',
-  },
-  {
-    code: 'GBP',
-    name: 'British Pound',
-  },
-  {
-    code: 'GEL',
-    name: 'Georgian Lari',
-  },
-] as const;
-
-type CurrencyCode = (typeof currencyOptions)[number]['code'];
-
-const defaultCurrency: CurrencyCode = 'USD';
 
 const weekdayLabels = ['S', 'M', 'T', 'W', 'T', 'F', 'S'] as const;
 
@@ -217,7 +201,10 @@ function getInitialPurchaseDate(initialValues?: PurchaseFormInitialValues) {
   });
 }
 
-function getInitialPriceParts(initialValues?: PurchaseFormInitialValues): {
+function getInitialPriceParts(
+  initialValues?: PurchaseFormInitialValues,
+  fallbackCurrency: CurrencyCode = DEFAULT_CURRENCY,
+): {
   amount: string;
   currency: CurrencyCode;
 } {
@@ -226,22 +213,23 @@ function getInitialPriceParts(initialValues?: PurchaseFormInitialValues): {
   if (!price) {
     return {
       amount: '',
-      currency: defaultCurrency,
+      currency: fallbackCurrency,
     };
   }
 
-  const priceMatch = price.match(/^(USD|EUR|GBP|GEL)\s+(.+)$/);
+  const [priceCurrency, ...amountParts] = price.split(/\s+/);
+  const amount = amountParts.join(' ').trim();
 
-  if (!priceMatch) {
+  if (!isCurrencyCode(priceCurrency) || !amount) {
     return {
       amount: price,
-      currency: defaultCurrency,
+      currency: fallbackCurrency,
     };
   }
 
   return {
-    amount: priceMatch[2].trim(),
-    currency: priceMatch[1] as CurrencyCode,
+    amount,
+    currency: priceCurrency,
   };
 }
 
@@ -289,7 +277,9 @@ export function AddFirstPurchaseScreen({
   onSaveItem,
   onSkip,
 }: AddFirstPurchaseScreenProps) {
-  const initialPrice = getInitialPriceParts(initialValues);
+  const { defaultCurrency } = useAppSettings();
+  const hasInitialPrice = Boolean(initialValues?.price?.trim());
+  const initialPrice = getInitialPriceParts(initialValues, defaultCurrency);
   const initialReturnDate = getInitialReturnDate(initialValues);
   const initialPurchaseDate = getInitialPurchaseDate(initialValues);
   const [itemName, setItemName] = useState(initialValues?.itemName ?? '');
@@ -353,6 +343,15 @@ export function AddFirstPurchaseScreen({
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (hasInitialPrice || priceAmount.trim() || isPriceModalOpen) {
+      return;
+    }
+
+    setSelectedCurrency(defaultCurrency);
+    setDraftCurrency(defaultCurrency);
+  }, [defaultCurrency, hasInitialPrice, isPriceModalOpen, priceAmount]);
 
   const clearSaveSuccess = () => {
     if (saveSuccessTimerRef.current) {

@@ -16,12 +16,24 @@
 
 - Add disabled/enabled Save item behavior.
 - Persist added purchases beyond reload after storage/API approach is approved.
+- Enforce the displayed guest limit of 10 items before allowing more guest purchases.
 
 ## Purchases / Photos
 
 - Add real photo picker later for Add photos.
-- Enforce max 3 photos per item.
+- Enforce guest mode photo limit of 1 photo per item; decide signed-in photo limits later.
 - Review photo permissions and iOS behavior before adding dependencies.
+
+## Profile / Guest Mode
+
+- Build signed-in Profile screen/state after real auth exists.
+- Wire Rate RetTrack to the App Store rating/review flow later.
+
+## Settings
+
+- When auth/backend sync is implemented, update the Settings App info card from guest/local state to signed-in/sync state: Signed in, Purchases sync across devices, Version 1.0.
+- Consider storing currency as a separate structured field later instead of embedding it in the price string.
+- Post-MVP: Consider full app-wide dark mode after runtime theme support.
 
 ## Notifications
 
