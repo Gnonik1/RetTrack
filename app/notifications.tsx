@@ -15,16 +15,20 @@ export default function NotificationsRoute() {
     router.replace('/');
   };
 
+  const continueAfterDecision = () => {
+    router.push('/add-first-purchase');
+  };
+
   const handleEnableNotifications = async () => {
     await requestNotificationPermissions();
-    router.push('/add-first-purchase');
+    continueAfterDecision();
   };
 
   return (
     <NotificationPermissionScreen
       onBack={handleBack}
       onEnableNotifications={handleEnableNotifications}
-      onNotNow={() => router.push('/add-first-purchase')}
+      onNotNow={continueAfterDecision}
     />
   );
 }

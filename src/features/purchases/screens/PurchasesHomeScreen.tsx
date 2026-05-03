@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Alert,
   Animated,
   PanResponder,
   Pressable,
@@ -11,6 +12,10 @@ import {
 import { AppScreen } from '../../../components/AppScreen';
 import { AppText } from '../../../components/AppText';
 import { theme } from '../../../constants/theme';
+import {
+  getNotificationPermissionsStatus,
+  requestNotificationPermissions,
+} from '../../notifications/notifications';
 import {
   purchaseStatusLabels,
   type MockPurchase,
@@ -306,10 +311,12 @@ function getVisiblePurchaseItems(
 function NotificationBell() {
   return (
     <View style={styles.bellIcon} accessibilityElementsHidden>
-      <View style={styles.bellTop} />
-      <View style={styles.bellBody} />
-      <View style={styles.bellBase} />
-      <View style={styles.bellClapper} />
+      <View style={styles.bellGlyph}>
+        <View style={styles.bellStem} />
+        <View style={styles.bellDome} />
+        <View style={styles.bellRim} />
+        <View style={styles.bellClapper} />
+      </View>
       <View style={styles.bellDot} />
     </View>
   );
@@ -655,6 +662,40 @@ export function PurchasesHomeScreen({
     [selectedFilter, selectedFilterIndex, tabTransition],
   );
 
+  const showNotificationStatus = useCallback(async () => {
+    const status = await getNotificationPermissionsStatus();
+
+    if (status?.granted) {
+      Alert.alert(
+        'Reminders are on',
+        'We\u2019ll notify you before return dates and pending decisions.',
+        [
+          {
+            text: 'OK',
+          },
+        ],
+      );
+      return;
+    }
+
+    Alert.alert(
+      'Reminders are off',
+      'Turn on reminders so you don\u2019t miss return dates.',
+      [
+        {
+          onPress: () => {
+            requestNotificationPermissions().catch(() => undefined);
+          },
+          text: 'Enable notifications',
+        },
+        {
+          style: 'cancel',
+          text: 'Not now',
+        },
+      ],
+    );
+  }, []);
+
   useEffect(() => {
     const transitionAnimation = Animated.timing(tabTransition, {
       duration: TAB_TRANSITION_DURATION,
@@ -794,7 +835,12 @@ export function PurchasesHomeScreen({
             </AppText>
           </View>
 
-          <Pressable accessibilityRole="button" style={styles.notificationButton}>
+          <Pressable
+            accessibilityLabel="Notifications"
+            accessibilityRole="button"
+            onPress={showNotificationStatus}
+            style={styles.notificationButton}
+          >
             <NotificationBell />
           </Pressable>
         </View>
@@ -988,66 +1034,71 @@ const styles = StyleSheet.create({
   },
   bellIcon: {
     alignItems: 'center',
-    height: 22,
+    height: 24,
     justifyContent: 'center',
     position: 'relative',
-    width: 22,
+    width: 24,
   },
-  bellTop: {
+  bellGlyph: {
+    height: 21,
+    position: 'relative',
+    width: 19,
+  },
+  bellStem: {
     backgroundColor: theme.colors.greenDark,
     borderRadius: theme.radius.pill,
-    height: 2.5,
-    left: 8,
-    opacity: 0.74,
+    height: 3.5,
+    left: 8.5,
+    opacity: 0.86,
     position: 'absolute',
-    top: 3,
-    width: 6,
+    top: 1,
+    width: 2,
   },
-  bellBody: {
+  bellDome: {
     backgroundColor: 'transparent',
     borderColor: theme.colors.greenDark,
-    borderTopLeftRadius: 10,
-    borderTopRightRadius: 10,
+    borderTopLeftRadius: 9,
+    borderTopRightRadius: 9,
     borderWidth: 1.7,
     borderBottomWidth: 0,
-    height: 13,
-    left: 3.5,
-    opacity: 0.76,
+    height: 13.5,
+    left: 2,
+    opacity: 0.86,
     position: 'absolute',
-    top: 5,
+    top: 4.5,
     width: 15,
+  },
+  bellRim: {
+    backgroundColor: theme.colors.greenDark,
+    borderRadius: theme.radius.pill,
+    height: 1.8,
+    left: 1,
+    opacity: 0.86,
+    position: 'absolute',
+    top: 16.5,
+    width: 17,
   },
   bellClapper: {
     backgroundColor: theme.colors.greenDark,
     borderRadius: theme.radius.pill,
-    height: 3.5,
-    left: 9.25,
-    opacity: 0.7,
+    height: 3.4,
+    left: 7.8,
+    opacity: 0.82,
     position: 'absolute',
-    top: 17,
-    width: 3.5,
-  },
-  bellBase: {
-    backgroundColor: theme.colors.greenDark,
-    borderRadius: theme.radius.pill,
-    height: 1.7,
-    left: 3,
-    opacity: 0.76,
-    position: 'absolute',
-    top: 16,
-    width: 17,
+    top: 17.5,
+    width: 3.4,
   },
   bellDot: {
     backgroundColor: theme.colors.amber,
     borderColor: theme.colors.card,
     borderRadius: theme.radius.pill,
     borderWidth: 1,
-    height: 4.5,
-    opacity: 0.72,
+    height: 4,
+    opacity: 0.78,
     position: 'absolute',
-    right: 3,
+    right: 3.5,
     top: 3.5,
-    width: 4.5,
+    width: 4,
   },
   attentionCard: {
     backgroundColor: theme.colors.greenDark,

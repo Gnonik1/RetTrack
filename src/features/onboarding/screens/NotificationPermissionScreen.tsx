@@ -6,13 +6,17 @@ import { AppText } from '../../../components/AppText';
 import { theme } from '../../../constants/theme';
 
 type NotificationPermissionScreenProps = {
+  isNotificationsEnabled?: boolean;
   onBack?: () => void;
+  onDone?: () => void;
   onEnableNotifications?: () => void;
   onNotNow?: () => void;
 };
 
 export function NotificationPermissionScreen({
+  isNotificationsEnabled = false,
   onBack,
+  onDone,
   onEnableNotifications,
   onNotNow,
 }: NotificationPermissionScreenProps) {
@@ -41,30 +45,78 @@ export function NotificationPermissionScreen({
             <View style={styles.reminderDot} />
           </View>
 
-          <AppText style={styles.title} variant="title">
-            Want reminders{'\n'}before it{'\u2019'}s too late?
-          </AppText>
-          <AppText style={styles.subtitle} variant="subtitle">
-            Get reminded before return dates and stay updated on your purchases
-          </AppText>
+          {isNotificationsEnabled ? (
+            <>
+              <AppText style={styles.title} variant="title">
+                Notifications{'\n'}are on
+              </AppText>
+              <AppText style={styles.subtitle} variant="subtitle">
+                We{'\u2019'}ll remind you before return dates and pending decisions.
+              </AppText>
+
+              <View style={styles.enabledCard}>
+                <View style={styles.enabledItem}>
+                  <AppText style={styles.enabledItemTitle} variant="body">
+                    Return reminders
+                  </AppText>
+                  <AppText style={styles.enabledItemBody} variant="caption">
+                    7 days before, 3 days before, and last day
+                  </AppText>
+                </View>
+                <View style={styles.enabledDivider} />
+                <View style={styles.enabledItem}>
+                  <AppText style={styles.enabledItemTitle} variant="body">
+                    Pending reminders
+                  </AppText>
+                  <AppText style={styles.enabledItemBody} variant="caption">
+                    When a return date passes, then 3 and 7 days later
+                  </AppText>
+                </View>
+                <View style={styles.enabledDivider} />
+                <View style={styles.enabledItem}>
+                  <AppText style={styles.enabledItemTitle} variant="body">
+                    Quiet hours
+                  </AppText>
+                  <AppText style={styles.enabledItemBody} variant="caption">
+                    No reminders from 9 PM to 9 AM
+                  </AppText>
+                </View>
+              </View>
+            </>
+          ) : (
+            <>
+              <AppText style={styles.title} variant="title">
+                Want reminders{'\n'}before it{'\u2019'}s too late?
+              </AppText>
+              <AppText style={styles.subtitle} variant="subtitle">
+                Get reminded before return dates and stay updated on your purchases
+              </AppText>
+            </>
+          )}
         </View>
       </View>
 
       <View style={styles.actions}>
-        <AppButton
-          onPress={onEnableNotifications}
-          title="Enable notifications"
-          variant="primary"
-        />
-        <Pressable
-          accessibilityRole="button"
-          onPress={onNotNow}
-          style={styles.notNowButton}
-        >
-          <AppText style={styles.notNowText} variant="button">
-            Not now
-          </AppText>
-        </Pressable>
+        {isNotificationsEnabled ? (
+          <AppButton onPress={onDone} title="Done" variant="primary" />
+        ) : (
+          <>
+            <AppButton
+              onPress={onEnableNotifications}
+              title="Enable notifications"
+              variant="primary"
+            />
+            <Pressable
+              accessibilityRole="button"
+              onPress={onNotNow}
+              style={styles.notNowButton}
+            >
+              <AppText style={styles.notNowText} variant="button">
+                Not now
+              </AppText>
+            </Pressable>
+          </>
+        )}
       </View>
     </AppScreen>
   );
@@ -80,10 +132,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flex: 1,
     justifyContent: 'center',
-    paddingBottom: theme.spacing.xxl + 60,
+    paddingBottom: theme.spacing.xxl + 42,
   },
   content: {
     alignItems: 'center',
+    width: '100%',
   },
   backButton: {
     alignItems: 'center',
@@ -181,6 +234,43 @@ const styles = StyleSheet.create({
     marginTop: theme.spacing.md,
     maxWidth: 254,
     textAlign: 'center',
+  },
+  enabledCard: {
+    backgroundColor: theme.colors.card,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.xl,
+    borderWidth: 1,
+    marginTop: theme.spacing.lg,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    shadowColor: theme.colors.text,
+    shadowOffset: {
+      height: 10,
+      width: 0,
+    },
+    shadowOpacity: 0.045,
+    shadowRadius: 16,
+    width: '100%',
+  },
+  enabledDivider: {
+    backgroundColor: theme.colors.border,
+    height: 1,
+    marginVertical: 12,
+  },
+  enabledItem: {
+    gap: 4,
+  },
+  enabledItemBody: {
+    color: theme.colors.muted,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.regular,
+    lineHeight: 18,
+  },
+  enabledItemTitle: {
+    color: theme.colors.text,
+    fontSize: theme.fontSize.sm,
+    fontWeight: theme.fontWeight.semibold,
+    lineHeight: 20,
   },
   actions: {
     gap: 12,
