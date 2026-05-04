@@ -23,6 +23,7 @@ import {
   isCurrencyCode,
   useAppSettings,
 } from '../../settings/state/AppSettingsState';
+import { GUEST_ITEM_LIMIT } from '../constants';
 import type { AddPurchaseInput } from '../state/PurchasesState';
 import {
   parsePurchaseDate,
@@ -31,9 +32,11 @@ import {
 
 type AddFirstPurchaseScreenProps = {
   initialValues?: PurchaseFormInitialValues;
+  isGuestItemLimitReached?: boolean;
   mode?: AddPurchaseMode;
   onBack?: () => void;
-  onSaveItem?: (input: AddPurchaseInput) => void;
+  onLimitSignUp?: () => void;
+  onSaveItem?: (input: AddPurchaseInput) => boolean | void;
   onSkip?: () => void;
 };
 
@@ -272,8 +275,10 @@ function PurchaseTextField({
 
 export function AddFirstPurchaseScreen({
   initialValues,
+  isGuestItemLimitReached = false,
   mode = 'firstPurchase',
   onBack,
+  onLimitSignUp,
   onSaveItem,
   onSkip,
 }: AddFirstPurchaseScreenProps) {
@@ -298,6 +303,8 @@ export function AddFirstPurchaseScreen({
   );
   const [comment, setComment] = useState(initialValues?.comment ?? '');
   const [formErrors, setFormErrors] = useState<FormErrors>({});
+  const [isGuestLimitMessageDismissed, setIsGuestLimitMessageDismissed] =
+    useState(false);
   const [isSaveSuccessful, setIsSaveSuccessful] = useState(false);
   const [isPriceModalOpen, setIsPriceModalOpen] = useState(false);
   const [draftPriceAmount, setDraftPriceAmount] = useState('');
@@ -327,6 +334,10 @@ export function AddFirstPurchaseScreen({
   const headerCopy = screenCopy[mode];
   const saveButtonTitle =
     mode === 'editPurchase' ? 'Save changes' : 'Save item';
+  const isGuestLimitBlockingAdd =
+    mode !== 'editPurchase' && isGuestItemLimitReached;
+  const shouldShowGuestLimitMessage =
+    isGuestLimitBlockingAdd && !isGuestLimitMessageDismissed;
   const saveSuccessText =
     mode === 'editPurchase' ? 'Purchase updated' : 'Purchase added';
   const datePickerTitle =
@@ -343,6 +354,12 @@ export function AddFirstPurchaseScreen({
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (isGuestLimitBlockingAdd) {
+      setIsGuestLimitMessageDismissed(false);
+    }
+  }, [isGuestLimitBlockingAdd]);
 
   useEffect(() => {
     if (hasInitialPrice || priceAmount.trim() || isPriceModalOpen) {
@@ -465,6 +482,7 @@ export function AddFirstPurchaseScreen({
     setPurchaseDate(null);
     setComment('');
     setFormErrors({});
+    setIsGuestLimitMessageDismissed(false);
     setIsPriceModalOpen(false);
     setDraftPriceAmount('');
     setPriceModalError('');
@@ -482,6 +500,12 @@ export function AddFirstPurchaseScreen({
   const handleSaveItem = () => {
     Keyboard.dismiss();
 
+    if (isGuestLimitBlockingAdd) {
+      clearSaveSuccess();
+      setIsGuestLimitMessageDismissed(false);
+      return;
+    }
+
     if (!validateForm()) {
       clearSaveSuccess();
       return;
@@ -489,12 +513,17 @@ export function AddFirstPurchaseScreen({
 
     if (onSaveItem) {
       const purchaseInput = getPurchaseInput();
+      const didSave = onSaveItem(purchaseInput);
+
+      if (didSave === false) {
+        clearSaveSuccess();
+        setIsGuestLimitMessageDismissed(false);
+        return;
+      }
 
       if (mode !== 'editPurchase') {
         resetForm();
       }
-
-      onSaveItem(purchaseInput);
       return;
     }
 
@@ -648,6 +677,11 @@ export function AddFirstPurchaseScreen({
     }
 
     openCommentModal();
+  };
+
+  const handleGuestLimitSignUp = () => {
+    clearSaveSuccess();
+    onLimitSignUp?.();
   };
 
   return (
@@ -841,12 +875,54 @@ export function AddFirstPurchaseScreen({
       </ScrollView>
 
       <View style={styles.actions}>
+        {shouldShowGuestLimitMessage ? (
+          <View style={styles.guestLimitCard}>
+            <View style={styles.guestLimitCopy}>
+              <AppText style={styles.guestLimitTitle} variant="body">
+                Guest limit reached
+              </AppText>
+              <AppText style={styles.guestLimitBody} variant="caption">
+                {`Guest mode supports up to ${GUEST_ITEM_LIMIT} purchases. Create an account to add more.`}
+              </AppText>
+            </View>
+
+            <View style={styles.guestLimitActions}>
+              <Pressable
+                accessibilityRole="button"
+                onPress={handleGuestLimitSignUp}
+                style={({ pressed }) => [
+                  styles.guestLimitPrimaryAction,
+                  pressed && styles.guestLimitActionPressed,
+                ]}
+              >
+                <AppText style={styles.guestLimitPrimaryText} variant="button">
+                  Sign up
+                </AppText>
+              </Pressable>
+
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => setIsGuestLimitMessageDismissed(true)}
+                style={({ pressed }) => [
+                  styles.guestLimitSecondaryAction,
+                  pressed && styles.guestLimitActionPressed,
+                ]}
+              >
+                <AppText style={styles.guestLimitSecondaryText} variant="button">
+                  Maybe later
+                </AppText>
+              </Pressable>
+            </View>
+          </View>
+        ) : null}
+
         {isSaveSuccessful ? (
           <AppText style={styles.successText} variant="caption">
             {saveSuccessText}
           </AppText>
         ) : null}
         <AppButton
+          disabled={shouldShowGuestLimitMessage}
           onPress={handleSaveItem}
           title={saveButtonTitle}
           variant="primary"
@@ -1840,6 +1916,64 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     padding: 0,
     paddingVertical: 0,
+  },
+  guestLimitActionPressed: {
+    opacity: 0.78,
+  },
+  guestLimitActions: {
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+    marginTop: 12,
+  },
+  guestLimitBody: {
+    color: theme.colors.muted,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  guestLimitCard: {
+    backgroundColor: theme.colors.sage,
+    borderColor: '#D8E3D0',
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: 12,
+  },
+  guestLimitCopy: {
+    gap: 4,
+  },
+  guestLimitPrimaryAction: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.green,
+    borderRadius: theme.radius.pill,
+    justifyContent: 'center',
+    minHeight: 36,
+    paddingHorizontal: theme.spacing.md,
+  },
+  guestLimitPrimaryText: {
+    color: theme.colors.card,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.semibold,
+  },
+  guestLimitSecondaryAction: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.card,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    justifyContent: 'center',
+    minHeight: 36,
+    paddingHorizontal: theme.spacing.md,
+  },
+  guestLimitSecondaryText: {
+    color: theme.colors.greenDark,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.semibold,
+  },
+  guestLimitTitle: {
+    color: theme.colors.text,
+    fontSize: 14,
+    fontWeight: theme.fontWeight.semibold,
+    lineHeight: 20,
   },
   actions: {
     gap: theme.spacing.sm,

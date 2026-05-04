@@ -16,7 +16,6 @@
 
 - Add disabled/enabled Save item behavior.
 - Persist added purchases beyond reload after storage/API approach is approved.
-- Enforce the displayed guest limit of 10 items before allowing more guest purchases.
 
 ## Purchases / Photos
 
@@ -27,6 +26,8 @@
 ## Profile / Guest Mode
 
 - Build signed-in Profile screen/state after real auth exists.
+- Raise the signed-in account item limit to 20 items when account state exists.
+- Preserve local guest purchases during future guest-to-account migration/sync.
 - Wire Rate RetTrack to the App Store rating/review flow later.
 
 ## Settings

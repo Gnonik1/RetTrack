@@ -5,14 +5,13 @@ import { AppButton } from '../../../components/AppButton';
 import { AppScreen } from '../../../components/AppScreen';
 import { AppText } from '../../../components/AppText';
 import { theme } from '../../../constants/theme';
+import { GUEST_ITEM_LIMIT } from '../../purchases/constants';
 import { usePurchases } from '../../purchases/state/PurchasesState';
 
 type ProfileScreenProps = {
   onSignIn?: () => void;
   onSignUp?: () => void;
 };
-
-const GUEST_ITEM_LIMIT = 10;
 
 export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
   const { purchases } = usePurchases();
@@ -80,7 +79,7 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
               <View style={styles.limitLine}>
                 <View style={styles.limitDot} />
                 <AppText style={styles.limitText} variant="caption">
-                  Up to 10 items
+                  Up to {GUEST_ITEM_LIMIT} items
                 </AppText>
               </View>
               <View style={styles.limitLine}>
