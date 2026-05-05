@@ -21,7 +21,7 @@
 
 - Enforce guest mode photo limit of 1 photo per item; backend account users can support up to 3 photos per item later.
 - Upload/sync local purchase photos to backend storage later.
-- Clean up orphaned local photo files later.
+- Clean up orphaned local photo files after Delete Purchase.
 - Review photo permissions and iOS behavior before production release.
 
 ## Profile / Guest Mode

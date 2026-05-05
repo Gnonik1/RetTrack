@@ -1070,7 +1070,7 @@ export function AddFirstPurchaseScreen({
                 Guest limit reached
               </AppText>
               <AppText style={styles.guestLimitBody} variant="caption">
-                {`Guest mode supports up to ${GUEST_ITEM_LIMIT} purchases. Create an account to add more.`}
+                {`Guest mode includes ${GUEST_ITEM_LIMIT} purchase entries. Create an account to add more.`}
               </AppText>
             </View>
 

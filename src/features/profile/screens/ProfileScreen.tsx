@@ -14,10 +14,10 @@ type ProfileScreenProps = {
 };
 
 export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
-  const { purchases } = usePurchases();
+  const { guestPurchaseEntriesUsed } = usePurchases();
   const usagePercent = Math.min(
     100,
-    Math.round((purchases.length / GUEST_ITEM_LIMIT) * 100),
+    Math.round((guestPurchaseEntriesUsed / GUEST_ITEM_LIMIT) * 100),
   );
   const usageProgressStyle = {
     width: `${usagePercent}%` as `${number}%`,
@@ -61,7 +61,7 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
             </View>
 
             <AppText style={styles.usageTitle} variant="body">
-              {purchases.length} / {GUEST_ITEM_LIMIT} items used
+              {guestPurchaseEntriesUsed} / {GUEST_ITEM_LIMIT} guest entries used
             </AppText>
             <View style={styles.progressTrack}>
               <View style={[styles.progressFill, usageProgressStyle]} />
@@ -79,7 +79,7 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
               <View style={styles.limitLine}>
                 <View style={styles.limitDot} />
                 <AppText style={styles.limitText} variant="caption">
-                  Up to {GUEST_ITEM_LIMIT} items
+                  Up to {GUEST_ITEM_LIMIT} entries
                 </AppText>
               </View>
               <View style={styles.limitLine}>

@@ -46,7 +46,10 @@ export type AddPurchaseInput = {
 
 type PurchasesStateValue = {
   addPurchase: (input: AddPurchaseInput) => MockPurchase;
+  deletePurchase: (itemId: string) => boolean;
+  findPurchaseById: (itemId?: string | string[]) => MockPurchase | null;
   getPurchaseById: (itemId?: string | string[]) => MockPurchase;
+  guestPurchaseEntriesUsed: number;
   purchases: MockPurchase[];
   resolvePurchase: (itemId: string, status: ResolvedPurchaseStatus) => void;
   updatePurchase: (itemId: string, input: AddPurchaseInput) => void;
@@ -57,6 +60,8 @@ const PurchasesStateContext = createContext<PurchasesStateValue | undefined>(
 );
 
 const PURCHASES_STORAGE_KEY = 'rettrack:purchases:v1';
+const GUEST_PURCHASE_ENTRIES_USED_STORAGE_KEY =
+  'rettrack:guestPurchaseEntriesUsed:v1';
 
 function getResolvedStatusText(status: ResolvedPurchaseStatus, date: Date) {
   const statusLabel = status === 'returned' ? 'Returned' : 'Kept';
@@ -122,6 +127,18 @@ function isStoredPurchase(value: unknown): value is MockPurchase {
 
 function isStoredPurchases(value: unknown): value is MockPurchase[] {
   return Array.isArray(value) && value.every(isStoredPurchase);
+}
+
+function parseStoredGuestPurchaseEntriesUsed(value: string | null) {
+  if (value === null) {
+    return null;
+  }
+
+  const parsedValue = Number(value);
+
+  return Number.isFinite(parsedValue) && parsedValue >= 0
+    ? Math.floor(parsedValue)
+    : null;
 }
 
 function compactText(value?: string) {
@@ -240,6 +257,9 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
   const [purchases, setPurchases] = useState<MockPurchase[]>(() =>
     getPurchasesWithCurrentDateState(mockPurchases),
   );
+  const [guestPurchaseEntriesUsed, setGuestPurchaseEntriesUsed] = useState(
+    () => getPurchasesWithCurrentDateState(mockPurchases).length,
+  );
   const [hasHydratedPurchases, setHasHydratedPurchases] = useState(false);
   const hasSkippedInitialPersistRef = useRef(false);
   const lastReminderPurchasesRef = useRef<MockPurchase[] | null>(null);
@@ -250,21 +270,36 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
 
     const hydratePurchases = async () => {
       try {
-        const storedPurchases = await AsyncStorage.getItem(PURCHASES_STORAGE_KEY);
+        const [storedPurchases, storedGuestPurchaseEntriesUsed] =
+          await Promise.all([
+            AsyncStorage.getItem(PURCHASES_STORAGE_KEY),
+            AsyncStorage.getItem(GUEST_PURCHASE_ENTRIES_USED_STORAGE_KEY),
+          ]);
 
         if (!isMounted) {
           return;
         }
 
-        if (!storedPurchases) {
-          return;
+        let nextPurchases = getPurchasesWithCurrentDateState(mockPurchases);
+
+        if (storedPurchases) {
+          const parsedPurchases: unknown = JSON.parse(storedPurchases);
+
+          if (isStoredPurchases(parsedPurchases)) {
+            nextPurchases = getPurchasesWithCurrentDateState(parsedPurchases);
+          }
         }
 
-        const parsedPurchases: unknown = JSON.parse(storedPurchases);
+        const storedEntriesUsed = parseStoredGuestPurchaseEntriesUsed(
+          storedGuestPurchaseEntriesUsed,
+        );
+        const nextGuestPurchaseEntriesUsed = Math.max(
+          storedEntriesUsed ?? nextPurchases.length,
+          nextPurchases.length,
+        );
 
-        if (isStoredPurchases(parsedPurchases)) {
-          setPurchases(getPurchasesWithCurrentDateState(parsedPurchases));
-        }
+        setPurchases(nextPurchases);
+        setGuestPurchaseEntriesUsed(nextGuestPurchaseEntriesUsed);
       } catch {
         // Keep the mock fallback if persisted purchase data cannot be read.
       } finally {
@@ -298,6 +333,19 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
     );
   }, [hasHydratedPurchases, purchases]);
 
+  useEffect(() => {
+    if (!hasHydratedPurchases) {
+      return;
+    }
+
+    AsyncStorage.setItem(
+      GUEST_PURCHASE_ENTRIES_USED_STORAGE_KEY,
+      String(guestPurchaseEntriesUsed),
+    ).catch(() => {
+      // Local quota persistence is best-effort for the frontend-only guest state.
+    });
+  }, [guestPurchaseEntriesUsed, hasHydratedPurchases]);
+
   const addPurchase = useCallback((input: AddPurchaseInput) => {
     const createdAt = Date.now();
     const itemName = input.itemName.trim();
@@ -326,9 +374,25 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
     );
 
     setPurchases((currentPurchases) => [datedPurchase, ...currentPurchases]);
+    setGuestPurchaseEntriesUsed((currentEntriesUsed) => currentEntriesUsed + 1);
 
     return datedPurchase;
   }, []);
+
+  const findPurchaseById = useCallback(
+    (itemId?: string | string[]) => {
+      const resolvedItemId = Array.isArray(itemId) ? itemId[0] : itemId;
+
+      if (!resolvedItemId) {
+        return null;
+      }
+
+      return (
+        purchases.find((purchase) => purchase.id === resolvedItemId) ?? null
+      );
+    },
+    [purchases],
+  );
 
   const getPurchaseById = useCallback(
     (itemId?: string | string[]) => {
@@ -345,6 +409,24 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
     },
     [purchases],
   );
+
+  const deletePurchase = useCallback((itemId: string) => {
+    const hasPurchase = purchases.some((purchase) => purchase.id === itemId);
+
+    if (!hasPurchase) {
+      return false;
+    }
+
+    setPurchases((currentPurchases) => {
+      if (!currentPurchases.some((purchase) => purchase.id === itemId)) {
+        return currentPurchases;
+      }
+
+      return currentPurchases.filter((purchase) => purchase.id !== itemId);
+    });
+
+    return true;
+  }, [purchases]);
 
   const resolvePurchase = useCallback(
     (itemId: string, status: ResolvedPurchaseStatus) => {
@@ -429,12 +511,24 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
   const value = useMemo(
     () => ({
       addPurchase,
+      deletePurchase,
+      findPurchaseById,
       getPurchaseById,
+      guestPurchaseEntriesUsed,
       purchases,
       resolvePurchase,
       updatePurchase,
     }),
-    [addPurchase, getPurchaseById, purchases, resolvePurchase, updatePurchase],
+    [
+      addPurchase,
+      deletePurchase,
+      findPurchaseById,
+      getPurchaseById,
+      guestPurchaseEntriesUsed,
+      purchases,
+      resolvePurchase,
+      updatePurchase,
+    ],
   );
 
   return (

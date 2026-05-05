@@ -1,4 +1,11 @@
-import { Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import {
+  Alert,
+  Image,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+} from 'react-native';
 
 import { AppButton } from '../../../components/AppButton';
 import { AppScreen } from '../../../components/AppScreen';
@@ -122,8 +129,55 @@ export function PurchaseDetailsScreen({
   onBack,
   onEdit,
 }: PurchaseDetailsScreenProps) {
-  const { getPurchaseById, resolvePurchase } = usePurchases();
-  const purchaseDetails = getPurchaseById(itemId);
+  const { deletePurchase, findPurchaseById, resolvePurchase } = usePurchases();
+  const purchaseDetails = findPurchaseById(itemId);
+
+  if (!purchaseDetails) {
+    return (
+      <AppScreen style={styles.screen}>
+        <View style={styles.header}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={onBack}
+            style={({ pressed }) => [
+              styles.backButton,
+              pressed && styles.controlPressed,
+            ]}
+          >
+            <BackChevron />
+          </Pressable>
+
+          <AppText style={styles.headerTitle} variant="body">
+            Purchase details
+          </AppText>
+
+          <View style={styles.headerSpacer} />
+        </View>
+
+        <View style={styles.notFoundCard}>
+          <AppText style={styles.notFoundTitle} variant="body">
+            Purchase not found
+          </AppText>
+          <AppText style={styles.notFoundBody} variant="caption">
+            This item may have already been removed from RetTrack.
+          </AppText>
+          <Pressable
+            accessibilityRole="button"
+            onPress={onBack}
+            style={({ pressed }) => [
+              styles.notFoundAction,
+              pressed && styles.controlPressed,
+            ]}
+          >
+            <AppText style={styles.notFoundActionText} variant="button">
+              Back to purchases
+            </AppText>
+          </Pressable>
+        </View>
+      </AppScreen>
+    );
+  }
+
   const storeMetaLine = purchaseDetails.productDomain
     ? `${purchaseDetails.store} · ${purchaseDetails.productDomain}`
     : purchaseDetails.store;
@@ -156,6 +210,25 @@ export function PurchaseDetailsScreen({
     purchaseDetails.status === 'active' || purchaseDetails.status === 'pending';
   const showCompletionStatus = Boolean(resolvedStatusText);
   const hasComment = Boolean(purchaseDetails.comment?.trim().length);
+  const handleDeletePurchase = () => {
+    Alert.alert('Delete purchase?', 'This will remove this item from RetTrack.', [
+      {
+        style: 'cancel',
+        text: 'Cancel',
+      },
+      {
+        onPress: () => {
+          const didDeletePurchase = deletePurchase(purchaseDetails.id);
+
+          if (didDeletePurchase) {
+            onBack?.();
+          }
+        },
+        style: 'destructive',
+        text: 'Delete',
+      },
+    ]);
+  };
 
   return (
     <AppScreen style={styles.screen}>
@@ -291,22 +364,37 @@ export function PurchaseDetailsScreen({
         ) : null}
       </ScrollView>
 
-      {canResolveItem ? (
-        <View style={styles.bottomActions}>
-          <AppButton
-            onPress={() => resolvePurchase(purchaseDetails.id, 'kept')}
-            style={styles.actionButton}
-            title="Keep"
-            variant="secondary"
-          />
-          <AppButton
-            onPress={() => resolvePurchase(purchaseDetails.id, 'returned')}
-            style={styles.actionButton}
-            title="Returned"
-            variant="primary"
-          />
-        </View>
-      ) : null}
+      <View style={styles.bottomActions}>
+        {canResolveItem ? (
+          <View style={styles.resolveActions}>
+            <AppButton
+              onPress={() => resolvePurchase(purchaseDetails.id, 'kept')}
+              style={styles.actionButton}
+              title="Keep"
+              variant="secondary"
+            />
+            <AppButton
+              onPress={() => resolvePurchase(purchaseDetails.id, 'returned')}
+              style={styles.actionButton}
+              title="Returned"
+              variant="primary"
+            />
+          </View>
+        ) : null}
+
+        <Pressable
+          accessibilityRole="button"
+          onPress={handleDeletePurchase}
+          style={({ pressed }) => [
+            styles.deleteAction,
+            pressed && styles.deleteActionPressed,
+          ]}
+        >
+          <AppText style={styles.deleteActionText} variant="button">
+            Delete purchase
+          </AppText>
+        </Pressable>
+      </View>
     </AppScreen>
   );
 }
@@ -328,6 +416,9 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeight.semibold,
     lineHeight: 22,
     textAlign: 'center',
+  },
+  headerSpacer: {
+    width: 44,
   },
   backButton: {
     alignItems: 'center',
@@ -356,10 +447,13 @@ const styles = StyleSheet.create({
     width: 11,
   },
   bottomActions: {
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
+    gap: 14,
     paddingBottom: theme.spacing.md,
     paddingTop: 8,
+  },
+  resolveActions: {
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
   },
   actionButton: {
     borderRadius: theme.radius.pill,
@@ -372,6 +466,23 @@ const styles = StyleSheet.create({
   },
   controlPressed: {
     opacity: 0.78,
+  },
+  deleteAction: {
+    alignItems: 'center',
+    alignSelf: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
+    minHeight: 40,
+    paddingHorizontal: theme.spacing.lg,
+  },
+  deleteActionPressed: {
+    opacity: 0.72,
+  },
+  deleteActionText: {
+    color: theme.colors.pending,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.semibold,
+    lineHeight: 18,
   },
   detailsCard: {
     backgroundColor: theme.colors.card,
@@ -486,6 +597,45 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeight.medium,
     lineHeight: 18,
     marginTop: 4,
+  },
+  notFoundAction: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.green,
+    borderRadius: theme.radius.pill,
+    justifyContent: 'center',
+    marginTop: theme.spacing.lg,
+    minHeight: 44,
+    paddingHorizontal: theme.spacing.lg,
+  },
+  notFoundActionText: {
+    color: theme.colors.card,
+    fontSize: 14,
+    fontWeight: theme.fontWeight.semibold,
+    lineHeight: 18,
+  },
+  notFoundBody: {
+    color: theme.colors.muted,
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 6,
+    textAlign: 'center',
+  },
+  notFoundCard: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.card,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.xl,
+    borderWidth: 1,
+    marginTop: theme.spacing.xl,
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.xl,
+  },
+  notFoundTitle: {
+    color: theme.colors.text,
+    fontSize: 17,
+    fontWeight: theme.fontWeight.semibold,
+    lineHeight: 23,
+    textAlign: 'center',
   },
   infoGrid: {
     flexDirection: 'row',

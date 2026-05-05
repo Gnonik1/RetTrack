@@ -6,8 +6,9 @@ import { usePurchases } from '../src/features/purchases/state/PurchasesState';
 
 export default function AddFirstPurchaseRoute() {
   const router = useRouter();
-  const { addPurchase, purchases } = usePurchases();
-  const isGuestItemLimitReached = purchases.length >= GUEST_ITEM_LIMIT;
+  const { addPurchase, guestPurchaseEntriesUsed } = usePurchases();
+  const isGuestItemLimitReached =
+    guestPurchaseEntriesUsed >= GUEST_ITEM_LIMIT;
 
   const handleBack = () => {
     if (router.canGoBack()) {
@@ -25,7 +26,7 @@ export default function AddFirstPurchaseRoute() {
       onBack={handleBack}
       onLimitSignUp={() => router.push('/sign-up')}
       onSaveItem={(input) => {
-        if (purchases.length >= GUEST_ITEM_LIMIT) {
+        if (guestPurchaseEntriesUsed >= GUEST_ITEM_LIMIT) {
           return false;
         }
 
