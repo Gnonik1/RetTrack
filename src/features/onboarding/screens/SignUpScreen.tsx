@@ -36,7 +36,7 @@ function isValidEmailForMvp(email: string) {
   );
 }
 
-export function SignUpScreen({ onBack }: SignUpScreenProps) {
+export function SignUpScreen({ onBack, onCreateAccount }: SignUpScreenProps) {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -108,6 +108,8 @@ export function SignUpScreen({ onBack }: SignUpScreenProps) {
     if (!validateForm()) {
       return;
     }
+
+    onCreateAccount?.();
   };
 
   return (

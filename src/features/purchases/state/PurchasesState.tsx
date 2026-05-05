@@ -62,6 +62,7 @@ const PurchasesStateContext = createContext<PurchasesStateValue | undefined>(
 const PURCHASES_STORAGE_KEY = 'rettrack:purchases:v1';
 const GUEST_PURCHASE_ENTRIES_USED_STORAGE_KEY =
   'rettrack:guestPurchaseEntriesUsed:v1';
+const USE_MOCK_PURCHASES_ON_EMPTY_STORAGE = false;
 
 function getResolvedStatusText(status: ResolvedPurchaseStatus, date: Date) {
   const statusLabel = status === 'returned' ? 'Returned' : 'Kept';
@@ -236,6 +237,12 @@ function getPurchasesWithCurrentDateState(purchases: MockPurchase[]) {
   return didChangePurchase ? nextPurchases : purchases;
 }
 
+function getPurchasesForEmptyStorage() {
+  return USE_MOCK_PURCHASES_ON_EMPTY_STORAGE
+    ? getPurchasesWithCurrentDateState(mockPurchases)
+    : [];
+}
+
 function getActiveToPendingPurchaseIds(
   previousPurchases: MockPurchase[],
   nextPurchases: MockPurchase[],
@@ -255,10 +262,10 @@ function getActiveToPendingPurchaseIds(
 
 export function PurchasesProvider({ children }: { children: ReactNode }) {
   const [purchases, setPurchases] = useState<MockPurchase[]>(() =>
-    getPurchasesWithCurrentDateState(mockPurchases),
+    getPurchasesForEmptyStorage(),
   );
   const [guestPurchaseEntriesUsed, setGuestPurchaseEntriesUsed] = useState(
-    () => getPurchasesWithCurrentDateState(mockPurchases).length,
+    () => getPurchasesForEmptyStorage().length,
   );
   const [hasHydratedPurchases, setHasHydratedPurchases] = useState(false);
   const hasSkippedInitialPersistRef = useRef(false);
@@ -280,9 +287,9 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
           return;
         }
 
-        let nextPurchases = getPurchasesWithCurrentDateState(mockPurchases);
+        let nextPurchases = getPurchasesForEmptyStorage();
 
-        if (storedPurchases) {
+        if (storedPurchases !== null) {
           const parsedPurchases: unknown = JSON.parse(storedPurchases);
 
           if (isStoredPurchases(parsedPurchases)) {
@@ -301,7 +308,7 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
         setPurchases(nextPurchases);
         setGuestPurchaseEntriesUsed(nextGuestPurchaseEntriesUsed);
       } catch {
-        // Keep the mock fallback if persisted purchase data cannot be read.
+        // Keep the empty/dev-seeded fallback if persisted purchase data cannot be read.
       } finally {
         if (isMounted) {
           setHasHydratedPurchases(true);
@@ -328,7 +335,7 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
 
     AsyncStorage.setItem(PURCHASES_STORAGE_KEY, JSON.stringify(purchases)).catch(
       () => {
-        // Local persistence is best-effort for the frontend-only mock state.
+        // Local persistence is best-effort for the frontend-only purchase state.
       },
     );
   }, [hasHydratedPurchases, purchases]);
