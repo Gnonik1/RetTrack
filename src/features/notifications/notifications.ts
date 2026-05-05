@@ -15,6 +15,9 @@ const QUIET_HOUR_START = 21;
 
 type ReminderKind =
   | 'due-today-group'
+  | 'pending-digest-initial'
+  | 'pending-digest-three-days'
+  | 'pending-digest-seven-days'
   | 'pending-now'
   | 'pending-three-days'
   | 'pending-seven-days'
@@ -28,10 +31,6 @@ type ReminderPlan = {
   identifier: string;
   kind: ReminderKind;
   title: string;
-};
-
-type PendingReminderPlanOptions = {
-  includeImmediateReminder?: boolean;
 };
 
 type ReturnReminderPlanOptions = {
@@ -126,39 +125,13 @@ export async function schedulePurchaseReminders(purchase: MockPurchase) {
   return scheduleReminderPlans(getReturnReminderPlans(purchase, new Date()));
 }
 
-export async function schedulePendingReminders(
-  purchase: MockPurchase,
-  options: PendingReminderPlanOptions = { includeImmediateReminder: true },
-) {
-  await cancelPurchaseReminders(purchase.id);
-
-  if (purchase.status !== 'pending') {
-    return [];
-  }
-
-  const canSchedule = await canScheduleNotifications();
-
-  if (!canSchedule) {
-    return [];
-  }
-
-  return scheduleReminderPlans(
-    getPendingReminderPlans(purchase, new Date(), options),
-  );
-}
-
 export async function rescheduleAllPurchaseReminders(
   purchases: MockPurchase[],
-  options: RescheduleAllPurchaseRemindersOptions = {},
+  _options: RescheduleAllPurchaseRemindersOptions = {},
 ) {
   const now = new Date();
 
-  await Promise.all(
-    [
-      ...purchases.map((purchase) => cancelPurchaseReminders(purchase.id)),
-      cancelScheduledReminder(getDueTodayReminderIdentifier(now)),
-    ],
-  );
+  await cancelAllScheduledAppReminders();
 
   const canSchedule = await canScheduleNotifications();
 
@@ -166,15 +139,15 @@ export async function rescheduleAllPurchaseReminders(
     return [];
   }
 
-  const immediatePendingPurchaseIds = new Set(
-    options.immediatePendingPurchaseIds ?? [],
-  );
   const dueTodayPurchases = purchases.filter(
     (purchase) =>
       purchase.status === 'active' && isPurchaseDueToday(purchase, now),
   );
   const dueTodayPurchaseIds = new Set(
     dueTodayPurchases.map((purchase) => purchase.id),
+  );
+  const pendingPurchases = purchases.filter(
+    (purchase) => purchase.status === 'pending',
   );
   const reminderPlans = purchases.flatMap((purchase) => {
     if (purchase.status === 'active') {
@@ -183,19 +156,19 @@ export async function rescheduleAllPurchaseReminders(
       });
     }
 
-    if (purchase.status === 'pending') {
-      return getPendingReminderPlans(purchase, now, {
-        includeImmediateReminder: immediatePendingPurchaseIds.has(purchase.id),
-      });
-    }
-
     return [];
   });
   const dueTodayReminderPlan = getDueTodayReminderPlan(dueTodayPurchases, now);
+  const pendingDigestReminderPlans = getPendingDigestReminderPlans(
+    pendingPurchases,
+    now,
+  );
 
   if (dueTodayReminderPlan) {
     reminderPlans.push(dueTodayReminderPlan);
   }
+
+  reminderPlans.push(...pendingDigestReminderPlans);
 
   return scheduleReminderPlans(reminderPlans);
 }
@@ -203,6 +176,12 @@ export async function rescheduleAllPurchaseReminders(
 function cancelScheduledReminder(identifier: string) {
   return Notifications.cancelScheduledNotificationAsync(identifier).catch(() => {
     // A missing or unavailable scheduled notification should not block UI flow.
+  });
+}
+
+function cancelAllScheduledAppReminders() {
+  return Notifications.cancelAllScheduledNotificationsAsync().catch(() => {
+    // Reconcile should keep working even if the native scheduler is unavailable.
   });
 }
 
@@ -282,53 +261,54 @@ function getReturnReminderPlans(
   return reminderPlans.filter((plan) => isFutureDate(plan.date, now));
 }
 
-function getPendingReminderPlans(
-  purchase: MockPurchase,
+function getPendingDigestReminderPlans(
+  pendingPurchases: MockPurchase[],
   now: Date,
-  options: PendingReminderPlanOptions = {},
 ) {
-  const itemName = getItemName(purchase);
-  const pendingStartDate = getPendingStartDate(purchase, now);
-  const pendingSoonDate = getImmediatePendingReminderDate(now);
-  const immediateReminderPlan: ReminderPlan = {
-    body: `Mark ${itemName} as Returned or Kept.`,
-    date: pendingSoonDate,
-    identifier: getReminderIdentifier(purchase.id, 'pending-now'),
-    kind: 'pending-now',
-    title: 'Return date passed',
-  };
-  const followUpReminderPlans: ReminderPlan[] = [
+  if (pendingPurchases.length === 0) {
+    return [];
+  }
+
+  const pendingDigestBody = getPendingDigestReminderBody(
+    pendingPurchases.length,
+  );
+  const reminderPlans: ReminderPlan[] = [
     {
-      body: `Mark ${itemName} as Returned or Kept when you're done.`,
-      date: getPendingFollowUpDate(pendingStartDate, 3),
-      identifier: getReminderIdentifier(purchase.id, 'pending-three-days'),
-      kind: 'pending-three-days',
+      body: pendingDigestBody,
+      date: getImmediatePendingReminderDate(now),
+      identifier: getPendingDigestReminderIdentifier('initial'),
+      kind: 'pending-digest-initial',
       title: 'Still pending',
     },
     {
-      body: `Review ${itemName} and clear it from your list.`,
-      date: getPendingFollowUpDate(pendingStartDate, 7),
-      identifier: getReminderIdentifier(purchase.id, 'pending-seven-days'),
-      kind: 'pending-seven-days',
+      body: pendingDigestBody,
+      date: getPendingFollowUpDate(now, 3),
+      identifier: getPendingDigestReminderIdentifier('3d'),
+      kind: 'pending-digest-three-days',
       title: 'Still pending',
     },
-  ];
-  const reminderPlans = [
-    ...(options.includeImmediateReminder ? [immediateReminderPlan] : []),
-    ...followUpReminderPlans,
+    {
+      body: pendingDigestBody,
+      date: getPendingFollowUpDate(now, 7),
+      identifier: getPendingDigestReminderIdentifier('7d'),
+      kind: 'pending-digest-seven-days',
+      title: 'Still pending',
+    },
   ];
 
   return reminderPlans.filter((plan) => isFutureDate(plan.date, now));
 }
 
-function getPendingStartDate(purchase: MockPurchase, now: Date) {
-  if (typeof purchase.pendingAt !== 'number') {
-    return now;
+function getPendingDigestReminderBody(pendingCount: number) {
+  if (pendingCount === 1) {
+    return '1 purchase needs a decision.';
   }
 
-  const pendingStartDate = new Date(purchase.pendingAt);
+  return `${pendingCount} purchases need a decision.`;
+}
 
-  return isValidDate(pendingStartDate) ? pendingStartDate : now;
+function getPendingDigestReminderIdentifier(timing: 'initial' | '3d' | '7d') {
+  return `rettrack:pending-digest:${timing}`;
 }
 
 function getReturnReminderDate(
@@ -451,10 +431,6 @@ function getMinutesSinceMidnight(date: Date) {
   return date.getHours() * 60 + date.getMinutes();
 }
 
-function isValidDate(date: Date) {
-  return !Number.isNaN(date.getTime());
-}
-
 function getDueTodayReminderPlan(
   dueTodayPurchases: MockPurchase[],
   now: Date,
@@ -523,12 +499,16 @@ async function scheduleReminderPlans(reminderPlans: ReminderPlan[]) {
 }
 
 async function scheduleReminder(reminderPlan: ReminderPlan) {
+  const purchaseId = getPurchaseIdFromReminderIdentifier(
+    reminderPlan.identifier,
+  );
+
   try {
     return await Notifications.scheduleNotificationAsync({
       content: {
         body: reminderPlan.body,
         data: {
-          purchaseId: getPurchaseIdFromReminderIdentifier(reminderPlan.identifier),
+          ...(purchaseId ? { purchaseId } : {}),
           reminderKind: reminderPlan.kind,
           source: 'rettrack-local-reminder',
         },
@@ -556,6 +536,13 @@ function getDateTrigger(date: Date): Notifications.DateTriggerInput {
 }
 
 function getPurchaseIdFromReminderIdentifier(identifier: string) {
+  if (
+    identifier.startsWith('rettrack:due-today:') ||
+    identifier.startsWith('rettrack:pending-digest:')
+  ) {
+    return null;
+  }
+
   const [, purchaseId] = identifier.match(/^rettrack:(.*):[^:]+$/) ?? [];
 
   return purchaseId ?? identifier;

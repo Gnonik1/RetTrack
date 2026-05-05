@@ -40,6 +40,7 @@
 ## Notifications
 
 - Test local notification scheduling and delivery in a development build or TestFlight because Expo Go has notification limitations.
+- Verify grouped Pending digest delivery in a development build or TestFlight.
 - Later, move notification timing and toggle controls into Settings -> Notifications.
 - Later, let the Home bell become an insights or updates entry point after real monthly reports or savings analytics exist.
 - Do not build a placeholder Updates screen until there is real content to show.
