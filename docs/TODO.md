@@ -19,9 +19,10 @@
 
 ## Purchases / Photos
 
-- Add real photo picker later for Add photos.
-- Enforce guest mode photo limit of 1 photo per item; decide signed-in photo limits later.
-- Review photo permissions and iOS behavior before adding dependencies.
+- Enforce guest mode photo limit of 1 photo per item; backend account users can support up to 3 photos per item later.
+- Upload/sync local purchase photos to backend storage later.
+- Clean up orphaned local photo files later.
+- Review photo permissions and iOS behavior before production release.
 
 ## Profile / Guest Mode
 

@@ -1,15 +1,16 @@
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { AppButton } from '../../../components/AppButton';
 import { AppScreen } from '../../../components/AppScreen';
 import { AppText } from '../../../components/AppText';
 import { theme } from '../../../constants/theme';
 import {
+  type MockPurchase,
   purchaseStatusLabels,
   type PurchaseStatus,
 } from '../data/mockPurchases';
 import { usePurchases } from '../state/PurchasesState';
-import { getFullReturnDate } from '../utils/purchaseDates';
+import { formatCompactDate, getFullReturnDate } from '../utils/purchaseDates';
 
 type PurchaseDetailsScreenProps = {
   itemId?: string | string[];
@@ -76,6 +77,46 @@ function getConfirmationTextStyle(status: PurchaseStatus) {
   return styles.returnedConfirmationText;
 }
 
+function getResolvedDateFromValue(value?: number) {
+  if (!value) {
+    return null;
+  }
+
+  if (value > 100000000000) {
+    const date = new Date(value);
+
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  const valueText = String(value);
+
+  if (!/^\d{8}$/.test(valueText)) {
+    return null;
+  }
+
+  const year = Number(valueText.slice(0, 4));
+  const month = Number(valueText.slice(4, 6)) - 1;
+  const day = Number(valueText.slice(6, 8));
+  const date = new Date(year, month, day);
+
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function getResolvedStatusText(purchase: MockPurchase) {
+  if (purchase.status !== 'returned' && purchase.status !== 'kept') {
+    return null;
+  }
+
+  const statusLabel = purchase.status === 'returned' ? 'Returned' : 'Kept';
+  const resolvedDate = getResolvedDateFromValue(purchase.resolvedAt);
+
+  if (resolvedDate) {
+    return `${statusLabel} on ${formatCompactDate(resolvedDate)}`;
+  }
+
+  return purchase.completedText ?? statusLabel;
+}
+
 export function PurchaseDetailsScreen({
   itemId,
   onBack,
@@ -86,15 +127,22 @@ export function PurchaseDetailsScreen({
   const storeMetaLine = purchaseDetails.productDomain
     ? `${purchaseDetails.store} · ${purchaseDetails.productDomain}`
     : purchaseDetails.store;
+  const photoUri = purchaseDetails.photoUris?.[0];
+  const resolvedStatusText = getResolvedStatusText(purchaseDetails);
   const infoItems = [
     {
       label: 'Price',
       value: purchaseDetails.price ?? 'Not added',
     },
-    {
-      label: 'Return by',
-      value: getFullReturnDate(purchaseDetails),
-    },
+    resolvedStatusText
+      ? {
+          label: 'Decision',
+          value: resolvedStatusText,
+        }
+      : {
+          label: 'Return by',
+          value: getFullReturnDate(purchaseDetails),
+        },
     {
       label: 'Purchased',
       value: purchaseDetails.purchased ?? 'Not added',
@@ -106,10 +154,7 @@ export function PurchaseDetailsScreen({
   ] as const;
   const canResolveItem =
     purchaseDetails.status === 'active' || purchaseDetails.status === 'pending';
-  const showCompletionStatus = Boolean(
-    (purchaseDetails.status === 'returned' || purchaseDetails.status === 'kept') &&
-      purchaseDetails.completedText,
-  );
+  const showCompletionStatus = Boolean(resolvedStatusText);
   const hasComment = Boolean(purchaseDetails.comment?.trim().length);
 
   return (
@@ -151,10 +196,20 @@ export function PurchaseDetailsScreen({
       >
         <View style={styles.detailsCard}>
           <View style={styles.photoPlaceholder}>
-            <DetailsProductIcon />
-            <AppText style={styles.photoPlaceholderText} variant="caption">
-              No photo yet
-            </AppText>
+            {photoUri ? (
+              <Image
+                resizeMode="cover"
+                source={{ uri: photoUri }}
+                style={styles.photoImage}
+              />
+            ) : (
+              <>
+                <DetailsProductIcon />
+                <AppText style={styles.photoPlaceholderText} variant="caption">
+                  No photo yet
+                </AppText>
+              </>
+            )}
           </View>
 
           <View style={styles.titleBlock}>
@@ -229,7 +284,7 @@ export function PurchaseDetailsScreen({
                 ]}
                 variant="body"
               >
-                {purchaseDetails.completedText}
+                {resolvedStatusText}
               </AppText>
             </View>
           </View>
@@ -241,13 +296,13 @@ export function PurchaseDetailsScreen({
           <AppButton
             onPress={() => resolvePurchase(purchaseDetails.id, 'kept')}
             style={styles.actionButton}
-            title="Keep Item"
+            title="Keep"
             variant="secondary"
           />
           <AppButton
             onPress={() => resolvePurchase(purchaseDetails.id, 'returned')}
             style={styles.actionButton}
-            title="Mark Returned"
+            title="Returned"
             variant="primary"
           />
         </View>
@@ -354,6 +409,11 @@ const styles = StyleSheet.create({
     gap: 10,
     height: 216,
     justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  photoImage: {
+    height: '100%',
+    width: '100%',
   },
   photoPlaceholderText: {
     color: '#7A846F',

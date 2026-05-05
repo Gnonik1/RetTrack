@@ -11,6 +11,7 @@ import {
   type MockPurchase,
 } from '../../purchases/data/mockPurchases';
 import { usePurchases } from '../../purchases/state/PurchasesState';
+import { formatCompactDate } from '../../purchases/utils/purchaseDates';
 
 type HistoryGroup = {
   items: MockPurchase[];
@@ -82,6 +83,18 @@ function getHistoryGroups(purchases: MockPurchase[]): HistoryGroup[] {
     });
 
   return Array.from(groupsByMonth, ([month, items]) => ({ items, month }));
+}
+
+function getResolvedStatusText(purchase: MockPurchase) {
+  const resolvedDate = getResolvedDateFromValue(purchase.resolvedAt);
+
+  if (resolvedDate) {
+    return `${purchaseStatusLabels[purchase.status]} on ${formatCompactDate(
+      resolvedDate,
+    )}`;
+  }
+
+  return purchase.completedText;
 }
 
 function HistoryMarker({ status }: { status: MockPurchase['status'] }) {
@@ -160,6 +173,8 @@ export function HistoryScreen() {
 
                 <View style={styles.monthItems}>
                   {group.items.map((purchase, index) => {
+                    const resolvedStatusText = getResolvedStatusText(purchase);
+
                     return (
                       <Pressable
                         accessibilityRole="button"
@@ -197,12 +212,12 @@ export function HistoryScreen() {
                             {purchase.store}
                           </AppText>
 
-                          {purchase.completedText ? (
+                          {resolvedStatusText ? (
                             <AppText
                               style={styles.completedText}
                               variant="caption"
                             >
-                              {purchase.completedText}
+                              {resolvedStatusText}
                             </AppText>
                           ) : null}
                         </View>

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Animated,
+  Image,
   PanResponder,
   Pressable,
   ScrollView,
@@ -323,7 +324,19 @@ function NotificationBell() {
   );
 }
 
-function ProductIcon() {
+function ProductIcon({ photoUri }: { photoUri?: string }) {
+  if (photoUri) {
+    return (
+      <View style={styles.productThumbnail} accessibilityElementsHidden>
+        <Image
+          resizeMode="cover"
+          source={{ uri: photoUri }}
+          style={styles.productThumbnailImage}
+        />
+      </View>
+    );
+  }
+
   return (
     <View style={styles.productIcon} accessibilityElementsHidden>
       <View style={styles.bagHandle} />
@@ -506,7 +519,7 @@ function PurchaseCard({
         ]}
       >
         <View style={styles.itemTopRow}>
-          <ProductIcon />
+          <ProductIcon photoUri={item.photoUris?.[0]} />
 
           <View style={styles.itemCopy}>
             <View style={styles.itemNameRow}>
@@ -1229,6 +1242,19 @@ const styles = StyleSheet.create({
     height: 48,
     justifyContent: 'center',
     width: 48,
+  },
+  productThumbnail: {
+    backgroundColor: theme.colors.sage,
+    borderColor: '#D8E3D0',
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    height: 48,
+    overflow: 'hidden',
+    width: 48,
+  },
+  productThumbnailImage: {
+    height: '100%',
+    width: '100%',
   },
   bagHandle: {
     borderColor: theme.colors.greenDark,

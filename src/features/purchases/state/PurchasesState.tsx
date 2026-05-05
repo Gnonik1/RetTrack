@@ -11,6 +11,7 @@ import {
 } from 'react';
 
 import { rescheduleAllPurchaseReminders } from '../../notifications/notifications';
+import { GUEST_PHOTO_LIMIT } from '../constants';
 import {
   getMockPurchaseById,
   mockPurchases,
@@ -18,6 +19,7 @@ import {
   type PurchaseStatus,
 } from '../data/mockPurchases';
 import {
+  formatCompactDate,
   getCompactReturnDate,
   getFullReturnDate,
   getPurchaseReturnDateISO,
@@ -32,6 +34,7 @@ export type ResolvedPurchaseStatus = Extract<
 export type AddPurchaseInput = {
   comment?: string;
   itemName: string;
+  photoUris?: string[];
   price?: string;
   purchaseDateISO?: string;
   productLink?: string;
@@ -55,8 +58,10 @@ const PurchasesStateContext = createContext<PurchasesStateValue | undefined>(
 
 const PURCHASES_STORAGE_KEY = 'rettrack:purchases:v1';
 
-function getResolvedStatusText(status: ResolvedPurchaseStatus) {
-  return status === 'returned' ? 'Returned today' : 'Kept today';
+function getResolvedStatusText(status: ResolvedPurchaseStatus, date: Date) {
+  const statusLabel = status === 'returned' ? 'Returned' : 'Kept';
+
+  return `${statusLabel} on ${formatCompactDate(date)}`;
 }
 
 function isPurchaseStatus(value: unknown): value is PurchaseStatus {
@@ -80,6 +85,13 @@ function isOptionalNumber(value: unknown) {
   return value === undefined || typeof value === 'number';
 }
 
+function isOptionalStringArray(value: unknown) {
+  return (
+    value === undefined ||
+    (Array.isArray(value) && value.every((item) => typeof item === 'string'))
+  );
+}
+
 function isStoredPurchase(value: unknown): value is MockPurchase {
   if (!isObjectRecord(value)) {
     return false;
@@ -94,6 +106,7 @@ function isStoredPurchase(value: unknown): value is MockPurchase {
     isPurchaseStatus(value.status) &&
     isOptionalString(value.comment) &&
     isOptionalString(value.completedText) &&
+    isOptionalStringArray(value.photoUris) &&
     isOptionalString(value.price) &&
     isOptionalString(value.productDomain) &&
     isOptionalString(value.productLink) &&
@@ -115,6 +128,15 @@ function compactText(value?: string) {
   const trimmedValue = value?.trim();
 
   return trimmedValue ? trimmedValue : undefined;
+}
+
+function compactPhotoUris(photoUris?: string[]) {
+  const compactUris = photoUris
+    ?.map((photoUri) => photoUri.trim())
+    .filter(Boolean)
+    .slice(0, GUEST_PHOTO_LIMIT);
+
+  return compactUris?.length ? compactUris : undefined;
 }
 
 function getLocalPurchaseId(itemName: string, createdAt: number) {
@@ -288,6 +310,7 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
       days: 'Due later',
       id: getLocalPurchaseId(itemName, createdAt),
       itemName,
+      photoUris: compactPhotoUris(input.photoUris),
       price: compactText(input.price),
       productLink,
       purchaseDateISO: input.purchaseDateISO,
@@ -325,7 +348,8 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
 
   const resolvePurchase = useCallback(
     (itemId: string, status: ResolvedPurchaseStatus) => {
-      const completedText = getResolvedStatusText(status);
+      const resolvedDate = new Date();
+      const completedText = getResolvedStatusText(status, resolvedDate);
 
       setPurchases((currentPurchases) =>
         currentPurchases.map((purchase) => {
@@ -337,7 +361,7 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
             ...purchase,
             completedText,
             days: completedText,
-            resolvedAt: Date.now(),
+            resolvedAt: resolvedDate.getTime(),
             status,
           };
         }),
@@ -364,6 +388,7 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
             ...purchase,
             comment: compactText(input.comment),
             itemName,
+            photoUris: compactPhotoUris(input.photoUris),
             price: compactText(input.price),
             productLink,
             purchaseDateISO: input.purchaseDateISO,

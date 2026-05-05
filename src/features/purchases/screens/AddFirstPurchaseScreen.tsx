@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type Ref } from 'react';
 import {
+  Image,
   Keyboard,
   Modal,
   Pressable,
@@ -23,12 +24,17 @@ import {
   isCurrencyCode,
   useAppSettings,
 } from '../../settings/state/AppSettingsState';
-import { GUEST_ITEM_LIMIT } from '../constants';
+import { GUEST_ITEM_LIMIT, GUEST_PHOTO_LIMIT } from '../constants';
 import type { AddPurchaseInput } from '../state/PurchasesState';
 import {
   parsePurchaseDate,
   toLocalDateISO,
 } from '../utils/purchaseDates';
+import {
+  pickPurchasePhotoDraft,
+  storePurchasePhoto,
+  type PurchasePhotoDraft,
+} from '../utils/purchasePhotos';
 
 type AddFirstPurchaseScreenProps = {
   initialValues?: PurchaseFormInitialValues;
@@ -103,7 +109,7 @@ const optionalDetailRows = [
   },
   {
     key: 'photos',
-    label: 'Add photos',
+    label: 'Add photo',
   },
   {
     key: 'comment',
@@ -302,6 +308,13 @@ export function AddFirstPurchaseScreen({
     initialPurchaseDate,
   );
   const [comment, setComment] = useState(initialValues?.comment ?? '');
+  const [photoUris, setPhotoUris] = useState<string[]>(() =>
+    (initialValues?.photoUris ?? []).slice(0, GUEST_PHOTO_LIMIT),
+  );
+  const [draftPhoto, setDraftPhoto] = useState<PurchasePhotoDraft | null>(null);
+  const [photoMessage, setPhotoMessage] = useState('');
+  const [isPickingPhoto, setIsPickingPhoto] = useState(false);
+  const [isSavingPhoto, setIsSavingPhoto] = useState(false);
   const [formErrors, setFormErrors] = useState<FormErrors>({});
   const [isGuestLimitMessageDismissed, setIsGuestLimitMessageDismissed] =
     useState(false);
@@ -324,6 +337,7 @@ export function AddFirstPurchaseScreen({
   const [commentModalError, setCommentModalError] = useState('');
   const storeInputRef = useRef<TextInput>(null);
   const productLinkInputRef = useRef<TextInput>(null);
+  const photoPickRequestIdRef = useRef(0);
   const saveSuccessTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
@@ -346,6 +360,8 @@ export function AddFirstPurchaseScreen({
       : 'Select return date';
   const calendarRows = getCalendarRows(visibleMonth);
   const pricePreview = priceAmount ? `${selectedCurrency} ${priceAmount}` : '';
+  const selectedPhotoUri = photoUris[0];
+  const draftPhotoUri = draftPhoto?.uri;
 
   useEffect(() => {
     return () => {
@@ -457,6 +473,7 @@ export function AddFirstPurchaseScreen({
     return {
       comment: comment.trim() || undefined,
       itemName: itemName.trim(),
+      photoUris: photoUris.length ? photoUris : undefined,
       price: trimmedPriceAmount
         ? `${selectedCurrency} ${trimmedPriceAmount}`
         : undefined,
@@ -481,6 +498,11 @@ export function AddFirstPurchaseScreen({
     setSelectedCurrency(defaultCurrency);
     setPurchaseDate(null);
     setComment('');
+    setPhotoUris([]);
+    setDraftPhoto(null);
+    setPhotoMessage('');
+    setIsPickingPhoto(false);
+    setIsSavingPhoto(false);
     setFormErrors({});
     setIsGuestLimitMessageDismissed(false);
     setIsPriceModalOpen(false);
@@ -672,11 +694,115 @@ export function AddFirstPurchaseScreen({
     }
 
     if (section === 'photos') {
-      setIsPhotosModalOpen(true);
+      openPhotosModal();
       return;
     }
 
     openCommentModal();
+  };
+
+  const openPhotosModal = () => {
+    Keyboard.dismiss();
+    clearSaveSuccess();
+    photoPickRequestIdRef.current += 1;
+    setDraftPhoto(null);
+    setPhotoMessage('');
+    setIsPickingPhoto(false);
+    setIsSavingPhoto(false);
+    setIsPhotosModalOpen(true);
+  };
+
+  const closePhotosModal = () => {
+    photoPickRequestIdRef.current += 1;
+    setDraftPhoto(null);
+    setPhotoMessage('');
+    setIsPickingPhoto(false);
+    setIsSavingPhoto(false);
+    setIsPhotosModalOpen(false);
+  };
+
+  const handlePickPhoto = async () => {
+    if (isPickingPhoto) {
+      return;
+    }
+
+    Keyboard.dismiss();
+    clearSaveSuccess();
+    setPhotoMessage('');
+    const requestId = photoPickRequestIdRef.current + 1;
+    photoPickRequestIdRef.current = requestId;
+    setIsPickingPhoto(true);
+
+    try {
+      const result = await pickPurchasePhotoDraft();
+
+      if (photoPickRequestIdRef.current !== requestId) {
+        return;
+      }
+
+      if (result.status === 'selected') {
+        setDraftPhoto({
+          fileName: result.fileName,
+          mimeType: result.mimeType,
+          uri: result.uri,
+        });
+        return;
+      }
+
+      if (result.status === 'denied') {
+        setPhotoMessage('Photo access is needed to attach purchase images.');
+        return;
+      }
+
+      if (result.status === 'error') {
+        setPhotoMessage("We couldn't attach that photo. Please try another image.");
+      }
+    } finally {
+      if (photoPickRequestIdRef.current === requestId) {
+        setIsPickingPhoto(false);
+      }
+    }
+  };
+
+  const handleConfirmPhoto = async () => {
+    if (!draftPhoto || isSavingPhoto) {
+      return;
+    }
+
+    const requestId = photoPickRequestIdRef.current;
+    setIsSavingPhoto(true);
+    setPhotoMessage('');
+
+    try {
+      const storedPhotoUri = await storePurchasePhoto(draftPhoto);
+
+      if (photoPickRequestIdRef.current !== requestId) {
+        return;
+      }
+
+      if (!storedPhotoUri) {
+        setPhotoMessage("We couldn't attach that photo. Please try another image.");
+        return;
+      }
+
+      setPhotoUris([storedPhotoUri].slice(0, GUEST_PHOTO_LIMIT));
+      closePhotosModal();
+    } catch {
+      if (photoPickRequestIdRef.current === requestId) {
+        setPhotoMessage("We couldn't attach that photo. Please try another image.");
+      }
+    } finally {
+      if (photoPickRequestIdRef.current === requestId) {
+        setIsSavingPhoto(false);
+      }
+    }
+  };
+
+  const handleRemovePhoto = () => {
+    clearSaveSuccess();
+    setPhotoUris([]);
+    setDraftPhoto(null);
+    setPhotoMessage('');
   };
 
   const handleGuestLimitSignUp = () => {
@@ -833,6 +959,8 @@ export function AddFirstPurchaseScreen({
                   ? pricePreview
                   : key === 'purchaseDate' && purchaseDate
                     ? formatDate(purchaseDate)
+                    : key === 'photos' && selectedPhotoUri
+                      ? 'Photo added'
                     : key === 'comment' && comment.trim()
                       ? 'Added'
                       : '';
@@ -867,6 +995,66 @@ export function AddFirstPurchaseScreen({
                       </AppText>
                     )}
                   </Pressable>
+
+                  {key === 'photos' && selectedPhotoUri ? (
+                    <View style={styles.photoInlinePanel}>
+                      <View style={styles.photoInlinePreviewRow}>
+                        <Image
+                          resizeMode="cover"
+                          source={{ uri: selectedPhotoUri }}
+                          style={styles.photoInlineImage}
+                        />
+
+                        <View style={styles.photoInlineCopy}>
+                          <AppText style={styles.photoInlineTitle} variant="body">
+                            Photo attached
+                          </AppText>
+                          <AppText
+                            style={styles.photoInlineHelper}
+                            variant="caption"
+                          >
+                            Guest mode supports 1 photo per item.
+                          </AppText>
+                        </View>
+                      </View>
+
+                      <View style={styles.photoInlineActions}>
+                        <Pressable
+                          accessibilityRole="button"
+                          onPress={openPhotosModal}
+                          style={({ pressed }) => [
+                            styles.photoInlineAction,
+                            styles.photoInlinePrimaryAction,
+                            pressed && styles.photoInlineActionPressed,
+                          ]}
+                        >
+                          <AppText
+                            style={styles.photoInlinePrimaryText}
+                            variant="button"
+                          >
+                            Replace photo
+                          </AppText>
+                        </Pressable>
+
+                        <Pressable
+                          accessibilityRole="button"
+                          onPress={handleRemovePhoto}
+                          style={({ pressed }) => [
+                            styles.photoInlineAction,
+                            styles.photoInlineSecondaryAction,
+                            pressed && styles.photoInlineActionPressed,
+                          ]}
+                        >
+                          <AppText
+                            style={styles.photoInlineSecondaryText}
+                            variant="button"
+                          >
+                            Remove photo
+                          </AppText>
+                        </Pressable>
+                      </View>
+                    </View>
+                  ) : null}
                 </View>
               );
             })}
@@ -1221,7 +1409,7 @@ export function AddFirstPurchaseScreen({
 
       <Modal
         animationType="fade"
-        onRequestClose={() => setIsPhotosModalOpen(false)}
+        onRequestClose={closePhotosModal}
         transparent
         visible={isPhotosModalOpen}
       >
@@ -1229,35 +1417,41 @@ export function AddFirstPurchaseScreen({
           <Pressable
             accessibilityLabel="Close photos modal"
             accessibilityRole="button"
-            onPress={() => setIsPhotosModalOpen(false)}
+            onPress={closePhotosModal}
             style={styles.centeredModalBackdrop}
           />
 
           <View style={styles.standardModalCard}>
             <AppText style={styles.centeredModalTitle} variant="title">
-              Add photos
+              Add photo
             </AppText>
             <AppText style={styles.centeredModalBody} variant="body">
-              Add receipt or product photos
+              Add a receipt or product photo
             </AppText>
             <AppText style={styles.centeredModalCaption} variant="caption">
-              Up to 3 photos per item
+              Guest mode supports 1 photo per item.
             </AppText>
 
-            <View style={styles.photoSlots}>
-              {[0, 1, 2].map((slot) => (
-                <View key={slot} style={styles.photoSlot}>
-                  <AppText style={styles.photoSlotPlus} variant="button">
-                    +
-                  </AppText>
-                </View>
-              ))}
-            </View>
+            {draftPhotoUri ? (
+              <View style={styles.photoModalPreview}>
+                <Image
+                  resizeMode="cover"
+                  source={{ uri: draftPhotoUri }}
+                  style={styles.photoModalImage}
+                />
+              </View>
+            ) : null}
+
+            {photoMessage ? (
+              <AppText style={styles.photoModalMessage} variant="caption">
+                {photoMessage}
+              </AppText>
+            ) : null}
 
             <View style={styles.modalActions}>
               <Pressable
                 accessibilityRole="button"
-                onPress={() => setIsPhotosModalOpen(false)}
+                onPress={closePhotosModal}
                 style={({ pressed }) => [
                   styles.modalActionButton,
                   pressed && styles.modalActionButtonPressed,
@@ -1268,19 +1462,43 @@ export function AddFirstPurchaseScreen({
                 </AppText>
               </Pressable>
 
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => setIsPhotosModalOpen(false)}
-                style={({ pressed }) => [
-                  styles.modalActionButton,
-                  styles.modalDoneButton,
-                  pressed && styles.modalActionButtonPressed,
-                ]}
-              >
-                <AppText style={styles.modalDoneText} variant="button">
-                  Done
-                </AppText>
-              </Pressable>
+              {draftPhotoUri ? (
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={isSavingPhoto}
+                  onPress={handleConfirmPhoto}
+                  style={({ pressed }) => [
+                    styles.modalActionButton,
+                    styles.modalDoneButton,
+                    pressed &&
+                      !isSavingPhoto &&
+                      styles.modalActionButtonPressed,
+                    isSavingPhoto && styles.modalActionButtonDisabled,
+                  ]}
+                >
+                  <AppText style={styles.modalDoneText} variant="button">
+                    Done
+                  </AppText>
+                </Pressable>
+              ) : (
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={isPickingPhoto}
+                  onPress={handlePickPhoto}
+                  style={({ pressed }) => [
+                    styles.modalActionButton,
+                    styles.modalDoneButton,
+                    pressed &&
+                      !isPickingPhoto &&
+                      styles.modalActionButtonPressed,
+                    isPickingPhoto && styles.modalActionButtonDisabled,
+                  ]}
+                >
+                  <AppText style={styles.modalDoneText} variant="button">
+                    {isPickingPhoto ? 'Opening...' : 'Choose photo'}
+                  </AppText>
+                </Pressable>
+              )}
             </View>
           </View>
         </View>
@@ -1867,6 +2085,9 @@ const styles = StyleSheet.create({
   modalActionButtonPressed: {
     opacity: 0.78,
   },
+  modalActionButtonDisabled: {
+    opacity: 0.55,
+  },
   modalCancelText: {
     color: theme.colors.muted,
     fontSize: theme.fontSize.sm,
@@ -1877,26 +2098,93 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSize.sm,
     fontWeight: theme.fontWeight.semibold,
   },
-  photoSlots: {
+  photoInlineAction: {
+    alignItems: 'center',
+    borderRadius: theme.radius.pill,
+    justifyContent: 'center',
+    minHeight: 34,
+    paddingHorizontal: 13,
+  },
+  photoInlineActionPressed: {
+    opacity: 0.78,
+  },
+  photoInlineActions: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: theme.spacing.sm,
     marginTop: 10,
   },
-  photoSlot: {
+  photoInlineCopy: {
+    flex: 1,
+    gap: 3,
+    minWidth: 0,
+  },
+  photoInlineHelper: {
+    color: theme.colors.muted,
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  photoInlineImage: {
+    borderRadius: theme.radius.md,
+    height: 54,
+    width: 54,
+  },
+  photoInlinePanel: {
+    backgroundColor: theme.colors.paper,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: 11,
+  },
+  photoInlinePreviewRow: {
     alignItems: 'center',
-    aspectRatio: 1,
+    flexDirection: 'row',
+    gap: 11,
+  },
+  photoInlinePrimaryAction: {
+    backgroundColor: theme.colors.green,
+  },
+  photoInlinePrimaryText: {
+    color: theme.colors.card,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.semibold,
+  },
+  photoInlineSecondaryAction: {
+    backgroundColor: theme.colors.card,
+    borderColor: theme.colors.border,
+    borderWidth: 1,
+  },
+  photoInlineSecondaryText: {
+    color: theme.colors.greenDark,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.semibold,
+  },
+  photoInlineTitle: {
+    color: theme.colors.text,
+    fontSize: 14,
+    fontWeight: theme.fontWeight.semibold,
+    lineHeight: 19,
+  },
+  photoModalImage: {
+    height: '100%',
+    width: '100%',
+  },
+  photoModalMessage: {
+    color: theme.colors.pending,
+    fontSize: 12,
+    fontWeight: theme.fontWeight.medium,
+    lineHeight: 17,
+    marginTop: 8,
+  },
+  photoModalPreview: {
     backgroundColor: theme.colors.sage,
     borderColor: theme.colors.border,
-    borderRadius: theme.radius.md,
+    borderRadius: theme.radius.lg,
     borderWidth: 1,
-    flex: 1,
-    justifyContent: 'center',
-  },
-  photoSlotPlus: {
-    color: theme.colors.greenDark,
-    fontSize: 22,
-    fontWeight: theme.fontWeight.medium,
-    lineHeight: 24,
+    height: 148,
+    marginTop: 12,
+    overflow: 'hidden',
   },
   modalCommentInputCard: {
     backgroundColor: theme.colors.card,

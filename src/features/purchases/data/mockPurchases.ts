@@ -8,6 +8,7 @@ export type MockPurchase = {
   id: string;
   itemName: string;
   pendingAt?: number;
+  photoUris?: string[];
   price?: string;
   productDomain?: string;
   productLink?: string;
@@ -70,8 +71,8 @@ export const mockPurchases: MockPurchase[] = [
     store: 'Zara',
   },
   {
-    completedText: 'Returned Apr 18',
-    days: 'Returned Apr 18',
+    completedText: 'Returned on Apr 18',
+    days: 'Returned on Apr 18',
     id: 'silk-scarf',
     itemName: 'Silk Scarf',
     price: 'USD 79',
@@ -85,8 +86,8 @@ export const mockPurchases: MockPurchase[] = [
     store: 'Arket',
   },
   {
-    completedText: 'Returned Apr 16',
-    days: 'Returned Apr 16',
+    completedText: 'Returned on Apr 16',
+    days: 'Returned on Apr 16',
     id: 'suede-boots',
     itemName: 'Suede Boots',
     price: 'USD 160',
@@ -100,8 +101,8 @@ export const mockPurchases: MockPurchase[] = [
     store: 'Mango',
   },
   {
-    completedText: 'Kept Apr 21',
-    days: 'Kept Apr 21',
+    completedText: 'Kept on Apr 21',
+    days: 'Kept on Apr 21',
     id: 'linen-shirt',
     itemName: 'Linen Shirt',
     price: 'USD 69',
@@ -115,8 +116,8 @@ export const mockPurchases: MockPurchase[] = [
     store: 'Massimo Dutti',
   },
   {
-    completedText: 'Kept Apr 24',
-    days: 'Kept Apr 24',
+    completedText: 'Kept on Apr 24',
+    days: 'Kept on Apr 24',
     id: 'denim-trousers',
     itemName: 'Denim Trousers',
     price: 'USD 98',
