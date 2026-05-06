@@ -2,7 +2,6 @@
 
 ## UI / Components
 
-- Consider extracting repeated input field styles into a shared AppTextField component after Sign In and Sign Up screens are implemented.
 - Keep button surface contrast consistent across screens: outline buttons should use white/card background with soft border; secondary buttons should use sage background with subtle border.
 - Use the same bottom action spacing pattern from Welcome screen across onboarding screens where appropriate.
 - Keep screen title typography consistent across similar auth/onboarding screens.
@@ -15,11 +14,10 @@
 ## Purchases / Add First Purchase
 
 - Add disabled/enabled Save item behavior.
-- Persist added purchases beyond reload after storage/API approach is approved.
 
 ## Purchases / Photos
 
-- Enforce guest mode photo limit of 1 photo per item; backend account users can support up to 3 photos per item later.
+- Support up to 3 photos per item for backend account users later.
 - Upload/sync local purchase photos to backend storage later.
 - Clean up orphaned local photo files after Delete Purchase.
 - Review photo permissions and iOS behavior before production release.

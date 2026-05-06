@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
@@ -9,6 +10,8 @@ const REMINDER_MINUTE = 0;
 const FUTURE_RETURN_REMINDER_HOUR = 10;
 const LAST_DAY_REMINDER_HOUR = 9;
 const NEAR_FUTURE_REMINDER_DELAY_MS = 60 * 1000;
+const PENDING_DIGEST_ANCHOR_STORAGE_KEY =
+  'rettrack:pendingDigestAnchorAt:v1';
 const PENDING_SOON_DELAY_MS = 60 * 1000;
 const QUIET_HOUR_END = 9;
 const QUIET_HOUR_START = 21;
@@ -130,6 +133,13 @@ export async function rescheduleAllPurchaseReminders(
   _options: RescheduleAllPurchaseRemindersOptions = {},
 ) {
   const now = new Date();
+  const pendingPurchases = purchases.filter(
+    (purchase) => purchase.status === 'pending',
+  );
+
+  if (pendingPurchases.length === 0) {
+    await clearPendingDigestAnchor();
+  }
 
   await cancelAllScheduledAppReminders();
 
@@ -146,9 +156,6 @@ export async function rescheduleAllPurchaseReminders(
   const dueTodayPurchaseIds = new Set(
     dueTodayPurchases.map((purchase) => purchase.id),
   );
-  const pendingPurchases = purchases.filter(
-    (purchase) => purchase.status === 'pending',
-  );
   const reminderPlans = purchases.flatMap((purchase) => {
     if (purchase.status === 'active') {
       return getReturnReminderPlans(purchase, now, {
@@ -159,10 +166,17 @@ export async function rescheduleAllPurchaseReminders(
     return [];
   });
   const dueTodayReminderPlan = getDueTodayReminderPlan(dueTodayPurchases, now);
-  const pendingDigestReminderPlans = getPendingDigestReminderPlans(
-    pendingPurchases,
-    now,
-  );
+  const pendingDigestAnchorDate =
+    pendingPurchases.length > 0
+      ? await getOrCreatePendingDigestAnchorDate(now)
+      : null;
+  const pendingDigestReminderPlans = pendingDigestAnchorDate
+    ? getPendingDigestReminderPlans(
+        pendingPurchases,
+        now,
+        pendingDigestAnchorDate,
+      )
+    : [];
 
   if (dueTodayReminderPlan) {
     reminderPlans.push(dueTodayReminderPlan);
@@ -189,6 +203,50 @@ async function canScheduleNotifications() {
   const status = await getNotificationPermissionsStatus();
 
   return Boolean(status?.granted);
+}
+
+async function clearPendingDigestAnchor() {
+  await AsyncStorage.removeItem(PENDING_DIGEST_ANCHOR_STORAGE_KEY).catch(() => {
+    // Pending digest tracking is best-effort; scheduling should still reconcile.
+  });
+}
+
+async function getOrCreatePendingDigestAnchorDate(now: Date) {
+  const storedAnchorDate = await getStoredPendingDigestAnchorDate();
+
+  if (storedAnchorDate) {
+    return storedAnchorDate;
+  }
+
+  const nextAnchorDate = getImmediatePendingReminderDate(now);
+
+  await AsyncStorage.setItem(
+    PENDING_DIGEST_ANCHOR_STORAGE_KEY,
+    String(nextAnchorDate.getTime()),
+  ).catch(() => {
+    // If local tracking cannot be written, keep this reconcile best-effort.
+  });
+
+  return nextAnchorDate;
+}
+
+async function getStoredPendingDigestAnchorDate() {
+  try {
+    const storedAnchor = await AsyncStorage.getItem(
+      PENDING_DIGEST_ANCHOR_STORAGE_KEY,
+    );
+    const parsedAnchor = Number(storedAnchor);
+
+    if (!Number.isFinite(parsedAnchor) || parsedAnchor <= 0) {
+      return null;
+    }
+
+    const anchorDate = new Date(parsedAnchor);
+
+    return Number.isNaN(anchorDate.getTime()) ? null : anchorDate;
+  } catch {
+    return null;
+  }
 }
 
 function getPurchaseReminderIdentifiers(purchaseId: string) {
@@ -264,6 +322,7 @@ function getReturnReminderPlans(
 function getPendingDigestReminderPlans(
   pendingPurchases: MockPurchase[],
   now: Date,
+  anchorDate: Date,
 ) {
   if (pendingPurchases.length === 0) {
     return [];
@@ -275,21 +334,21 @@ function getPendingDigestReminderPlans(
   const reminderPlans: ReminderPlan[] = [
     {
       body: pendingDigestBody,
-      date: getImmediatePendingReminderDate(now),
+      date: anchorDate,
       identifier: getPendingDigestReminderIdentifier('initial'),
       kind: 'pending-digest-initial',
       title: 'Still pending',
     },
     {
       body: pendingDigestBody,
-      date: getPendingFollowUpDate(now, 3),
+      date: getPendingFollowUpDate(anchorDate, 3),
       identifier: getPendingDigestReminderIdentifier('3d'),
       kind: 'pending-digest-three-days',
       title: 'Still pending',
     },
     {
       body: pendingDigestBody,
-      date: getPendingFollowUpDate(now, 7),
+      date: getPendingFollowUpDate(anchorDate, 7),
       identifier: getPendingDigestReminderIdentifier('7d'),
       kind: 'pending-digest-seven-days',
       title: 'Still pending',
