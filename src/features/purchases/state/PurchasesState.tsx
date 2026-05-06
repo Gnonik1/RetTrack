@@ -50,6 +50,7 @@ type PurchasesStateValue = {
   findPurchaseById: (itemId?: string | string[]) => MockPurchase | null;
   getPurchaseById: (itemId?: string | string[]) => MockPurchase;
   guestPurchaseEntriesUsed: number;
+  hasHydratedPurchases: boolean;
   purchases: MockPurchase[];
   resolvePurchase: (itemId: string, status: ResolvedPurchaseStatus) => void;
   updatePurchase: (itemId: string, input: AddPurchaseInput) => void;
@@ -522,6 +523,7 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
       findPurchaseById,
       getPurchaseById,
       guestPurchaseEntriesUsed,
+      hasHydratedPurchases,
       purchases,
       resolvePurchase,
       updatePurchase,
@@ -532,6 +534,7 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
       findPurchaseById,
       getPurchaseById,
       guestPurchaseEntriesUsed,
+      hasHydratedPurchases,
       purchases,
       resolvePurchase,
       updatePurchase,

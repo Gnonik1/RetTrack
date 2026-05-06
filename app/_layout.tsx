@@ -11,6 +11,7 @@ export default function RootLayout() {
     <AppSettingsProvider>
       <PurchasesProvider>
         <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="welcome" options={{ animation: 'none' }} />
           <Stack.Screen name="purchases" options={{ animation: 'none' }} />
           <Stack.Screen name="history" options={{ animation: 'none' }} />
           <Stack.Screen name="profile" options={{ animation: 'none' }} />

@@ -33,7 +33,10 @@ export type CurrencyCode = (typeof currencyOptions)[number]['code'];
 export const DEFAULT_CURRENCY: CurrencyCode = 'USD';
 
 type AppSettingsStateValue = {
+  completeOnboarding: () => void;
   defaultCurrency: CurrencyCode;
+  hasCompletedOnboarding: boolean;
+  hasHydratedSettings: boolean;
   setDefaultCurrency: (currency: CurrencyCode) => void;
 };
 
@@ -54,6 +57,8 @@ export function isCurrencyCode(value: unknown): value is CurrencyCode {
 export function AppSettingsProvider({ children }: { children: ReactNode }) {
   const [defaultCurrency, setDefaultCurrencyState] =
     useState<CurrencyCode>(DEFAULT_CURRENCY);
+  const [hasCompletedOnboarding, setHasCompletedOnboardingState] =
+    useState(false);
   const [hasHydratedSettings, setHasHydratedSettings] = useState(false);
 
   useEffect(() => {
@@ -69,11 +74,18 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
 
         const parsedSettings: unknown = JSON.parse(storedSettings);
 
-        if (
-          isObjectRecord(parsedSettings) &&
-          isCurrencyCode(parsedSettings.defaultCurrency)
-        ) {
+        if (!isObjectRecord(parsedSettings)) {
+          return;
+        }
+
+        if (isCurrencyCode(parsedSettings.defaultCurrency)) {
           setDefaultCurrencyState(parsedSettings.defaultCurrency);
+        }
+
+        if (typeof parsedSettings.hasCompletedOnboarding === 'boolean') {
+          setHasCompletedOnboardingState(
+            parsedSettings.hasCompletedOnboarding,
+          );
         }
       } catch {
         // Keep defaults if persisted app settings cannot be read.
@@ -98,11 +110,15 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
 
     AsyncStorage.setItem(
       APP_SETTINGS_STORAGE_KEY,
-      JSON.stringify({ defaultCurrency }),
+      JSON.stringify({ defaultCurrency, hasCompletedOnboarding }),
     ).catch(() => {
       // App settings persistence is best-effort for the frontend-only app.
     });
-  }, [defaultCurrency, hasHydratedSettings]);
+  }, [defaultCurrency, hasCompletedOnboarding, hasHydratedSettings]);
+
+  const completeOnboarding = useCallback(() => {
+    setHasCompletedOnboardingState(true);
+  }, []);
 
   const setDefaultCurrency = useCallback((currency: CurrencyCode) => {
     setDefaultCurrencyState(currency);
@@ -110,10 +126,19 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo(
     () => ({
+      completeOnboarding,
       defaultCurrency,
+      hasCompletedOnboarding,
+      hasHydratedSettings,
       setDefaultCurrency,
     }),
-    [defaultCurrency, setDefaultCurrency],
+    [
+      completeOnboarding,
+      defaultCurrency,
+      hasCompletedOnboarding,
+      hasHydratedSettings,
+      setDefaultCurrency,
+    ],
   );
 
   return (
