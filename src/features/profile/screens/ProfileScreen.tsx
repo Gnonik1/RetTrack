@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { AppBottomNav } from '../../../components/AppBottomNav';
@@ -5,6 +6,8 @@ import { AppButton } from '../../../components/AppButton';
 import { AppScreen } from '../../../components/AppScreen';
 import { AppText } from '../../../components/AppText';
 import { theme } from '../../../constants/theme';
+import { signOut } from '../../../services/authService';
+import { useAuth } from '../../../state/AuthState';
 import { GUEST_ITEM_LIMIT } from '../../purchases/constants';
 import { usePurchases } from '../../purchases/state/PurchasesState';
 
@@ -13,14 +16,70 @@ type ProfileScreenProps = {
   onSignUp?: () => void;
 };
 
+function getAccountInitial(email?: string) {
+  const trimmedEmail = email?.trim();
+
+  return trimmedEmail ? trimmedEmail.charAt(0).toUpperCase() : 'A';
+}
+
+function RateRetTrackCard() {
+  return (
+    <View style={styles.ratingCard}>
+      <View style={styles.ratingStars}>
+        <View style={styles.ratingDot} />
+        <View style={styles.ratingDot} />
+        <View style={styles.ratingDot} />
+        <View style={styles.ratingDot} />
+        <View style={styles.ratingDotMuted} />
+      </View>
+      <AppText style={styles.ratingTitle} variant="body">
+        Rate RetTrack
+      </AppText>
+      <AppText style={styles.ratingBody} variant="caption">
+        Enjoying RetTrack? A quick App Store rating helps us grow.
+      </AppText>
+      <View style={styles.ratingCta}>
+        <AppText style={styles.ratingCtaText} variant="caption">
+          Rate on App Store
+        </AppText>
+      </View>
+    </View>
+  );
+}
+
 export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
+  const { isAuthenticated, isAuthLoading, user } = useAuth();
   const { guestPurchaseEntriesUsed } = usePurchases();
+  const [isSigningOut, setIsSigningOut] = useState(false);
+  const [signOutError, setSignOutError] = useState('');
+  const userEmail = user?.email;
   const usagePercent = Math.min(
     100,
     Math.round((guestPurchaseEntriesUsed / GUEST_ITEM_LIMIT) * 100),
   );
   const usageProgressStyle = {
     width: `${usagePercent}%` as `${number}%`,
+  };
+
+  const handleSignOutPress = async () => {
+    if (isSigningOut) {
+      return;
+    }
+
+    setSignOutError('');
+    setIsSigningOut(true);
+
+    try {
+      const { error } = await signOut();
+
+      if (error) {
+        setSignOutError("We couldn't sign you out. Please try again.");
+      }
+    } catch {
+      setSignOutError("We couldn't sign you out. Please try again.");
+    } finally {
+      setIsSigningOut(false);
+    }
   };
 
   return (
@@ -42,100 +101,154 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
         <View style={styles.profileCard}>
           <View style={styles.avatar}>
             <AppText style={styles.avatarText} variant="button">
-              G
+              {isAuthenticated ? getAccountInitial(userEmail) : 'G'}
             </AppText>
           </View>
 
-          <AppText style={styles.guestTitle} variant="body">
-            Guest User
-          </AppText>
-          <AppText style={styles.guestBody} variant="caption">
-            Create an account anytime to sync your purchases.
-          </AppText>
-
-          <View style={styles.usagePanel}>
-            <View style={styles.usageTopRow}>
-              <AppText style={styles.usageLabel} variant="caption">
-                Free plan
+          {isAuthLoading ? (
+            <View style={styles.loadingAccountPanel}>
+              <AppText style={styles.guestTitle} variant="body">
+                Checking account
+              </AppText>
+              <AppText style={styles.guestBody} variant="caption">
+                Loading your RetTrack account.
               </AppText>
             </View>
-
-            <AppText style={styles.usageTitle} variant="body">
-              {guestPurchaseEntriesUsed} / {GUEST_ITEM_LIMIT} guest entries used
-            </AppText>
-            <View style={styles.progressTrack}>
-              <View style={[styles.progressFill, usageProgressStyle]} />
-            </View>
-            <AppText style={styles.usageNote} variant="caption">
-              Create an account for more room and more photos.
-            </AppText>
-          </View>
-
-          <View style={styles.limitsCard}>
-            <View style={styles.limitColumn}>
-              <AppText style={styles.limitEyebrow} variant="caption">
-                Guest
+          ) : isAuthenticated ? (
+            <>
+              <AppText style={styles.guestTitle} variant="body">
+                Signed in
               </AppText>
-              <View style={styles.limitLine}>
-                <View style={styles.limitDot} />
-                <AppText style={styles.limitText} variant="caption">
-                  Up to {GUEST_ITEM_LIMIT} entries
-                </AppText>
-              </View>
-              <View style={styles.limitLine}>
-                <View style={styles.limitDot} />
-                <AppText style={styles.limitText} variant="caption">
-                  1 photo per item
-                </AppText>
-              </View>
-            </View>
-
-            <View style={styles.limitDivider} />
-
-            <View style={[styles.limitColumn, styles.accountLimitColumn]}>
-              <AppText style={styles.accountLimitEyebrow} variant="caption">
-                Account
+              <AppText style={styles.guestBody} variant="caption">
+                Purchases sync across devices
               </AppText>
-              <View style={styles.limitLine}>
-                <View style={[styles.limitDot, styles.accountLimitDot]} />
-                <AppText style={styles.accountLimitText} variant="caption">
-                  Up to 20 items
-                </AppText>
-              </View>
-              <View style={styles.limitLine}>
-                <View style={[styles.limitDot, styles.accountLimitDot]} />
-                <AppText style={styles.accountLimitText} variant="caption">
-                  Up to 3 photos per item
-                </AppText>
-              </View>
-            </View>
-          </View>
+              {userEmail ? (
+                <View style={styles.emailPill}>
+                  <AppText style={styles.emailText} variant="caption">
+                    {userEmail}
+                  </AppText>
+                </View>
+              ) : null}
 
-          <View style={styles.ratingCard}>
-            <View style={styles.ratingStars}>
-              <View style={styles.ratingDot} />
-              <View style={styles.ratingDot} />
-              <View style={styles.ratingDot} />
-              <View style={styles.ratingDot} />
-              <View style={styles.ratingDotMuted} />
-            </View>
-            <AppText style={styles.ratingTitle} variant="body">
-              Rate RetTrack
-            </AppText>
-            <AppText style={styles.ratingBody} variant="caption">
-              Enjoying RetTrack? A quick App Store rating helps us grow.
-            </AppText>
-            <View style={styles.ratingCta}>
-              <AppText style={styles.ratingCtaText} variant="caption">
-                Rate on App Store
+              <View style={[styles.limitsCard, styles.signedInLimitsCard]}>
+                <View
+                  style={[
+                    styles.limitColumn,
+                    styles.accountLimitColumn,
+                    styles.signedInLimitColumn,
+                  ]}
+                >
+                  <AppText style={styles.accountLimitEyebrow} variant="caption">
+                    Account
+                  </AppText>
+                  <View style={styles.limitLine}>
+                    <View style={[styles.limitDot, styles.accountLimitDot]} />
+                    <AppText style={styles.accountLimitText} variant="caption">
+                      20 items
+                    </AppText>
+                  </View>
+                  <View style={styles.limitLine}>
+                    <View style={[styles.limitDot, styles.accountLimitDot]} />
+                    <AppText style={styles.accountLimitText} variant="caption">
+                      3 photos per item
+                    </AppText>
+                  </View>
+                </View>
+              </View>
+
+              <RateRetTrackCard />
+
+              <View style={styles.actions}>
+                <AppButton
+                  disabled={isSigningOut}
+                  onPress={handleSignOutPress}
+                  title={isSigningOut ? 'Signing out...' : 'Sign out'}
+                  variant="outline"
+                />
+              </View>
+              {signOutError ? (
+                <View style={styles.signOutErrorCard}>
+                  <AppText style={styles.signOutErrorText} variant="caption">
+                    {signOutError}
+                  </AppText>
+                </View>
+              ) : null}
+            </>
+          ) : (
+            <>
+              <AppText style={styles.guestTitle} variant="body">
+                Guest User
               </AppText>
-            </View>
-          </View>
+              <AppText style={styles.guestBody} variant="caption">
+                Create an account anytime to sync your purchases.
+              </AppText>
 
-          <View style={styles.actions}>
-            <AppButton onPress={onSignUp} title="Sign up" />
-            <AppButton onPress={onSignIn} title="Sign in" variant="outline" />
-          </View>
+              <View style={styles.usagePanel}>
+                <View style={styles.usageTopRow}>
+                  <AppText style={styles.usageLabel} variant="caption">
+                    Free plan
+                  </AppText>
+                </View>
+
+                <AppText style={styles.usageTitle} variant="body">
+                  {guestPurchaseEntriesUsed} / {GUEST_ITEM_LIMIT} guest entries used
+                </AppText>
+                <View style={styles.progressTrack}>
+                  <View style={[styles.progressFill, usageProgressStyle]} />
+                </View>
+                <AppText style={styles.usageNote} variant="caption">
+                  Create an account for more room and more photos.
+                </AppText>
+              </View>
+
+              <View style={styles.limitsCard}>
+                <View style={styles.limitColumn}>
+                  <AppText style={styles.limitEyebrow} variant="caption">
+                    Guest
+                  </AppText>
+                  <View style={styles.limitLine}>
+                    <View style={styles.limitDot} />
+                    <AppText style={styles.limitText} variant="caption">
+                      Up to {GUEST_ITEM_LIMIT} entries
+                    </AppText>
+                  </View>
+                  <View style={styles.limitLine}>
+                    <View style={styles.limitDot} />
+                    <AppText style={styles.limitText} variant="caption">
+                      1 photo per item
+                    </AppText>
+                  </View>
+                </View>
+
+                <View style={styles.limitDivider} />
+
+                <View style={[styles.limitColumn, styles.accountLimitColumn]}>
+                  <AppText style={styles.accountLimitEyebrow} variant="caption">
+                    Account
+                  </AppText>
+                  <View style={styles.limitLine}>
+                    <View style={[styles.limitDot, styles.accountLimitDot]} />
+                    <AppText style={styles.accountLimitText} variant="caption">
+                      Up to 20 items
+                    </AppText>
+                  </View>
+                  <View style={styles.limitLine}>
+                    <View style={[styles.limitDot, styles.accountLimitDot]} />
+                    <AppText style={styles.accountLimitText} variant="caption">
+                      Up to 3 photos per item
+                    </AppText>
+                  </View>
+                </View>
+              </View>
+
+              <RateRetTrackCard />
+
+              <View style={styles.actions}>
+                <AppButton onPress={onSignUp} title="Sign up" />
+                <AppButton onPress={onSignIn} title="Sign in" variant="outline" />
+              </View>
+            </>
+          )}
         </View>
       </ScrollView>
 
@@ -189,6 +302,27 @@ const styles = StyleSheet.create({
   },
   header: {
     gap: 6,
+  },
+  emailPill: {
+    backgroundColor: theme.colors.paper,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    marginTop: 11,
+    maxWidth: '100%',
+    paddingHorizontal: 13,
+    paddingVertical: 6,
+  },
+  emailText: {
+    color: theme.colors.greenDark,
+    fontSize: 12,
+    fontWeight: theme.fontWeight.medium,
+    lineHeight: 16,
+    textAlign: 'center',
+  },
+  loadingAccountPanel: {
+    alignItems: 'center',
+    alignSelf: 'stretch',
   },
   accountLimitColumn: {
     backgroundColor: '#F3F6EF',
@@ -261,6 +395,13 @@ const styles = StyleSheet.create({
     gap: 12,
     marginTop: 12,
     padding: 12,
+  },
+  signedInLimitColumn: {
+    flex: 1,
+    paddingHorizontal: 12,
+  },
+  signedInLimitsCard: {
+    backgroundColor: theme.colors.sage,
   },
   profileCard: {
     alignItems: 'center',
@@ -340,6 +481,23 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: theme.fontWeight.semibold,
     lineHeight: 20,
+    textAlign: 'center',
+  },
+  signOutErrorCard: {
+    alignSelf: 'stretch',
+    backgroundColor: theme.colors.softPending,
+    borderColor: '#E4C8C1',
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    marginTop: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: 10,
+  },
+  signOutErrorText: {
+    color: theme.colors.pending,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.medium,
+    lineHeight: 18,
     textAlign: 'center',
   },
   screen: {

@@ -1,14 +1,21 @@
 import { useRouter } from 'expo-router';
 
-import { GUEST_ITEM_LIMIT } from '../src/features/purchases/constants';
+import {
+  ACCOUNT_ITEM_LIMIT,
+  GUEST_ITEM_LIMIT,
+} from '../src/features/purchases/constants';
 import { AddFirstPurchaseScreen } from '../src/features/purchases/screens/AddFirstPurchaseScreen';
 import { usePurchases } from '../src/features/purchases/state/PurchasesState';
+import { useAuth } from '../src/state/AuthState';
 
 export default function AddPurchaseRoute() {
   const router = useRouter();
-  const { addPurchase, guestPurchaseEntriesUsed } = usePurchases();
+  const { isAuthenticated } = useAuth();
+  const { addPurchase, guestPurchaseEntriesUsed, purchases } = usePurchases();
   const isGuestItemLimitReached =
-    guestPurchaseEntriesUsed >= GUEST_ITEM_LIMIT;
+    !isAuthenticated && guestPurchaseEntriesUsed >= GUEST_ITEM_LIMIT;
+  const isAccountItemLimitReached =
+    isAuthenticated && purchases.length >= ACCOUNT_ITEM_LIMIT;
 
   const handleBack = () => {
     if (router.canGoBack()) {
@@ -22,11 +29,16 @@ export default function AddPurchaseRoute() {
   return (
     <AddFirstPurchaseScreen
       mode="addPurchase"
+      isAccountItemLimitReached={isAccountItemLimitReached}
       isGuestItemLimitReached={isGuestItemLimitReached}
       onBack={handleBack}
       onLimitSignUp={() => router.push('/sign-up')}
       onSaveItem={(input) => {
-        if (guestPurchaseEntriesUsed >= GUEST_ITEM_LIMIT) {
+        if (!isAuthenticated && guestPurchaseEntriesUsed >= GUEST_ITEM_LIMIT) {
+          return false;
+        }
+
+        if (isAuthenticated && purchases.length >= ACCOUNT_ITEM_LIMIT) {
           return false;
         }
 

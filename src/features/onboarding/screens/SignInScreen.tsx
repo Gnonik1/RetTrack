@@ -1,3 +1,4 @@
+import { useRouter } from 'expo-router';
 import { useRef, useState } from 'react';
 import {
   Keyboard,
@@ -13,6 +14,7 @@ import { AppScreen } from '../../../components/AppScreen';
 import { AppText } from '../../../components/AppText';
 import { AppTextField } from '../../../components/AppTextField';
 import { theme } from '../../../constants/theme';
+import { signInWithEmail } from '../../../services/authService';
 
 type SignInScreenProps = {
   onBack?: () => void;
@@ -39,9 +41,12 @@ export function SignInScreen({
   onBack,
   onForgotPassword,
 }: SignInScreenProps) {
+  const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [errors, setErrors] = useState<SignInErrors>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
   const passwordInputRef = useRef<TextInput>(null);
 
   const clearFieldError = (field: keyof SignInErrors) => {
@@ -59,11 +64,13 @@ export function SignInScreen({
 
   const handleEmailChange = (text: string) => {
     setEmail(text);
+    setSubmitError('');
     clearFieldError('email');
   };
 
   const handlePasswordChange = (text: string) => {
     setPassword(text);
+    setSubmitError('');
     clearFieldError('password');
   };
 
@@ -91,11 +98,33 @@ export function SignInScreen({
     onBack?.();
   };
 
-  const handleSignInPress = () => {
+  const handleSignInPress = async () => {
     Keyboard.dismiss();
+    setSubmitError('');
 
     if (!validateForm()) {
       return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      const { error } = await signInWithEmail(email.trim(), password);
+
+      if (error) {
+        setSubmitError(
+          "We couldn't sign you in. Check your email and password, then try again.",
+        );
+        return;
+      }
+
+      router.replace('/profile');
+    } catch {
+      setSubmitError(
+        "We couldn't sign you in. Check your connection and try again.",
+      );
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -172,20 +201,31 @@ export function SignInScreen({
               Forgot password?
             </AppText>
           </Pressable>
+
+          {submitError ? (
+            <View style={styles.submitErrorCard}>
+              <AppText style={styles.submitErrorText} variant="caption">
+                {submitError}
+              </AppText>
+            </View>
+          ) : null}
         </View>
 
         <View style={styles.actions}>
           <AppButton
+            disabled={isSubmitting}
             onPress={handleSignInPress}
-            title="Sign in"
+            title={isSubmitting ? 'Signing in...' : 'Sign in'}
             variant="primary"
           />
           <AppButton
+            disabled={isSubmitting}
             onPress={Keyboard.dismiss}
             title="Continue with Google"
             variant="outline"
           />
           <AppButton
+            disabled={isSubmitting}
             onPress={Keyboard.dismiss}
             title="Continue with Apple"
             variant="outline"
@@ -251,6 +291,21 @@ const styles = StyleSheet.create({
     ...theme.typography.textLink,
     color: theme.colors.green,
     fontWeight: theme.fontWeight.medium,
+  },
+  submitErrorCard: {
+    backgroundColor: theme.colors.softPending,
+    borderColor: '#E4C8C1',
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    marginTop: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: 10,
+  },
+  submitErrorText: {
+    color: theme.colors.pending,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.medium,
+    lineHeight: 18,
   },
   actions: {
     gap: 12,

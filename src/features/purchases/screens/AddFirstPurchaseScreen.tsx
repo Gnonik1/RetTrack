@@ -24,7 +24,11 @@ import {
   isCurrencyCode,
   useAppSettings,
 } from '../../settings/state/AppSettingsState';
-import { GUEST_ITEM_LIMIT, GUEST_PHOTO_LIMIT } from '../constants';
+import {
+  ACCOUNT_ITEM_LIMIT,
+  GUEST_ITEM_LIMIT,
+  GUEST_PHOTO_LIMIT,
+} from '../constants';
 import type { AddPurchaseInput } from '../state/PurchasesState';
 import {
   parsePurchaseDate,
@@ -38,6 +42,7 @@ import {
 
 type AddFirstPurchaseScreenProps = {
   initialValues?: PurchaseFormInitialValues;
+  isAccountItemLimitReached?: boolean;
   isGuestItemLimitReached?: boolean;
   mode?: AddPurchaseMode;
   onBack?: () => void;
@@ -281,6 +286,7 @@ function PurchaseTextField({
 
 export function AddFirstPurchaseScreen({
   initialValues,
+  isAccountItemLimitReached = false,
   isGuestItemLimitReached = false,
   mode = 'firstPurchase',
   onBack,
@@ -316,7 +322,7 @@ export function AddFirstPurchaseScreen({
   const [isPickingPhoto, setIsPickingPhoto] = useState(false);
   const [isSavingPhoto, setIsSavingPhoto] = useState(false);
   const [formErrors, setFormErrors] = useState<FormErrors>({});
-  const [isGuestLimitMessageDismissed, setIsGuestLimitMessageDismissed] =
+  const [isLimitMessageDismissed, setIsLimitMessageDismissed] =
     useState(false);
   const [isSaveSuccessful, setIsSaveSuccessful] = useState(false);
   const [isPriceModalOpen, setIsPriceModalOpen] = useState(false);
@@ -348,10 +354,23 @@ export function AddFirstPurchaseScreen({
   const headerCopy = screenCopy[mode];
   const saveButtonTitle =
     mode === 'editPurchase' ? 'Save changes' : 'Save item';
-  const isGuestLimitBlockingAdd =
-    mode !== 'editPurchase' && isGuestItemLimitReached;
-  const shouldShowGuestLimitMessage =
-    isGuestLimitBlockingAdd && !isGuestLimitMessageDismissed;
+  const activeLimitKind = isAccountItemLimitReached
+    ? 'account'
+    : isGuestItemLimitReached
+      ? 'guest'
+      : null;
+  const isItemLimitBlockingAdd =
+    mode !== 'editPurchase' && activeLimitKind !== null;
+  const shouldShowLimitMessage =
+    isItemLimitBlockingAdd && !isLimitMessageDismissed;
+  const limitTitle =
+    activeLimitKind === 'account'
+      ? 'Account limit reached'
+      : 'Guest limit reached';
+  const limitBody =
+    activeLimitKind === 'account'
+      ? `Your account includes ${ACCOUNT_ITEM_LIMIT} tracked items.`
+      : `Guest mode includes ${GUEST_ITEM_LIMIT} purchase entries. Create an account to add more.`;
   const saveSuccessText =
     mode === 'editPurchase' ? 'Purchase updated' : 'Purchase added';
   const datePickerTitle =
@@ -372,10 +391,10 @@ export function AddFirstPurchaseScreen({
   }, []);
 
   useEffect(() => {
-    if (isGuestLimitBlockingAdd) {
-      setIsGuestLimitMessageDismissed(false);
+    if (isItemLimitBlockingAdd) {
+      setIsLimitMessageDismissed(false);
     }
-  }, [isGuestLimitBlockingAdd]);
+  }, [isItemLimitBlockingAdd]);
 
   useEffect(() => {
     if (hasInitialPrice || priceAmount.trim() || isPriceModalOpen) {
@@ -504,7 +523,7 @@ export function AddFirstPurchaseScreen({
     setIsPickingPhoto(false);
     setIsSavingPhoto(false);
     setFormErrors({});
-    setIsGuestLimitMessageDismissed(false);
+    setIsLimitMessageDismissed(false);
     setIsPriceModalOpen(false);
     setDraftPriceAmount('');
     setPriceModalError('');
@@ -522,9 +541,9 @@ export function AddFirstPurchaseScreen({
   const handleSaveItem = () => {
     Keyboard.dismiss();
 
-    if (isGuestLimitBlockingAdd) {
+    if (isItemLimitBlockingAdd) {
       clearSaveSuccess();
-      setIsGuestLimitMessageDismissed(false);
+      setIsLimitMessageDismissed(false);
       return;
     }
 
@@ -539,7 +558,7 @@ export function AddFirstPurchaseScreen({
 
       if (didSave === false) {
         clearSaveSuccess();
-        setIsGuestLimitMessageDismissed(false);
+        setIsLimitMessageDismissed(false);
         return;
       }
 
@@ -1063,41 +1082,43 @@ export function AddFirstPurchaseScreen({
       </ScrollView>
 
       <View style={styles.actions}>
-        {shouldShowGuestLimitMessage ? (
+        {shouldShowLimitMessage ? (
           <View style={styles.guestLimitCard}>
             <View style={styles.guestLimitCopy}>
               <AppText style={styles.guestLimitTitle} variant="body">
-                Guest limit reached
+                {limitTitle}
               </AppText>
               <AppText style={styles.guestLimitBody} variant="caption">
-                {`Guest mode includes ${GUEST_ITEM_LIMIT} purchase entries. Create an account to add more.`}
+                {limitBody}
               </AppText>
             </View>
 
             <View style={styles.guestLimitActions}>
-              <Pressable
-                accessibilityRole="button"
-                onPress={handleGuestLimitSignUp}
-                style={({ pressed }) => [
-                  styles.guestLimitPrimaryAction,
-                  pressed && styles.guestLimitActionPressed,
-                ]}
-              >
-                <AppText style={styles.guestLimitPrimaryText} variant="button">
-                  Sign up
-                </AppText>
-              </Pressable>
+              {activeLimitKind === 'guest' ? (
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={handleGuestLimitSignUp}
+                  style={({ pressed }) => [
+                    styles.guestLimitPrimaryAction,
+                    pressed && styles.guestLimitActionPressed,
+                  ]}
+                >
+                  <AppText style={styles.guestLimitPrimaryText} variant="button">
+                    Sign up
+                  </AppText>
+                </Pressable>
+              ) : null}
 
               <Pressable
                 accessibilityRole="button"
-                onPress={() => setIsGuestLimitMessageDismissed(true)}
+                onPress={() => setIsLimitMessageDismissed(true)}
                 style={({ pressed }) => [
                   styles.guestLimitSecondaryAction,
                   pressed && styles.guestLimitActionPressed,
                 ]}
               >
                 <AppText style={styles.guestLimitSecondaryText} variant="button">
-                  Maybe later
+                  {activeLimitKind === 'account' ? 'Got it' : 'Maybe later'}
                 </AppText>
               </Pressable>
             </View>
@@ -1110,7 +1131,7 @@ export function AddFirstPurchaseScreen({
           </AppText>
         ) : null}
         <AppButton
-          disabled={shouldShowGuestLimitMessage}
+          disabled={shouldShowLimitMessage}
           onPress={handleSaveItem}
           title={saveButtonTitle}
           variant="primary"
