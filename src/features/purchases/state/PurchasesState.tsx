@@ -11,6 +11,7 @@ import {
 } from 'react';
 
 import { rescheduleAllPurchaseReminders } from '../../notifications/notifications';
+import { useAuth } from '../../../state/AuthState';
 import { GUEST_PHOTO_LIMIT } from '../constants';
 import {
   getMockPurchaseById,
@@ -63,6 +64,10 @@ const PurchasesStateContext = createContext<PurchasesStateValue | undefined>(
 const PURCHASES_STORAGE_KEY = 'rettrack:purchases:v1';
 const GUEST_PURCHASE_ENTRIES_USED_STORAGE_KEY =
   'rettrack:guestPurchaseEntriesUsed:v1';
+const GUEST_PURCHASE_SCOPE_KEY = 'guest';
+const PURCHASES_STORAGE_KEY_PREFIX = PURCHASES_STORAGE_KEY;
+const GUEST_PURCHASE_ENTRIES_USED_STORAGE_KEY_PREFIX =
+  GUEST_PURCHASE_ENTRIES_USED_STORAGE_KEY;
 const USE_MOCK_PURCHASES_ON_EMPTY_STORAGE = false;
 
 function getResolvedStatusText(status: ResolvedPurchaseStatus, date: Date) {
@@ -141,6 +146,71 @@ function parseStoredGuestPurchaseEntriesUsed(value: string | null) {
   return Number.isFinite(parsedValue) && parsedValue >= 0
     ? Math.floor(parsedValue)
     : null;
+}
+
+function parseStoredPurchases(value: string | null) {
+  if (value === null) {
+    return null;
+  }
+
+  try {
+    const parsedPurchases: unknown = JSON.parse(value);
+
+    return isStoredPurchases(parsedPurchases)
+      ? getPurchasesWithCurrentDateState(parsedPurchases)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function getPurchaseScopeKey(userId?: string | null) {
+  return userId ? `user:${encodeURIComponent(userId)}` : GUEST_PURCHASE_SCOPE_KEY;
+}
+
+function getScopedPurchaseStorageKeys(scopeKey: string) {
+  return {
+    guestPurchaseEntriesUsedKey: `${GUEST_PURCHASE_ENTRIES_USED_STORAGE_KEY_PREFIX}:${scopeKey}`,
+    purchasesKey: `${PURCHASES_STORAGE_KEY_PREFIX}:${scopeKey}`,
+  };
+}
+
+function getPurchaseStorageSnapshot(
+  storedPurchases: string | null,
+  storedGuestPurchaseEntriesUsed: string | null,
+) {
+  const nextPurchases =
+    parseStoredPurchases(storedPurchases) ?? getPurchasesForEmptyStorage();
+  const storedEntriesUsed = parseStoredGuestPurchaseEntriesUsed(
+    storedGuestPurchaseEntriesUsed,
+  );
+  const nextGuestPurchaseEntriesUsed = Math.max(
+    storedEntriesUsed ?? nextPurchases.length,
+    nextPurchases.length,
+  );
+
+  return {
+    guestPurchaseEntriesUsed: nextGuestPurchaseEntriesUsed,
+    purchases: nextPurchases,
+  };
+}
+
+async function persistPurchaseStorageSnapshot(
+  scopeKey: string,
+  snapshot: ReturnType<typeof getPurchaseStorageSnapshot>,
+) {
+  const storageKeys = getScopedPurchaseStorageKeys(scopeKey);
+
+  await Promise.all([
+    AsyncStorage.setItem(
+      storageKeys.purchasesKey,
+      JSON.stringify(snapshot.purchases),
+    ).catch(() => undefined),
+    AsyncStorage.setItem(
+      storageKeys.guestPurchaseEntriesUsedKey,
+      String(snapshot.guestPurchaseEntriesUsed),
+    ).catch(() => undefined),
+  ]);
 }
 
 function compactText(value?: string) {
@@ -244,6 +314,54 @@ function getPurchasesForEmptyStorage() {
     : [];
 }
 
+async function hydratePurchaseStorageScope(scopeKey: string) {
+  const scopedStorageKeys = getScopedPurchaseStorageKeys(scopeKey);
+  const [storedScopedPurchases, storedScopedGuestPurchaseEntriesUsed] =
+    await Promise.all([
+      AsyncStorage.getItem(scopedStorageKeys.purchasesKey),
+      AsyncStorage.getItem(scopedStorageKeys.guestPurchaseEntriesUsedKey),
+    ]);
+
+  if (
+    storedScopedPurchases !== null ||
+    storedScopedGuestPurchaseEntriesUsed !== null
+  ) {
+    return getPurchaseStorageSnapshot(
+      storedScopedPurchases,
+      storedScopedGuestPurchaseEntriesUsed,
+    );
+  }
+
+  if (scopeKey === GUEST_PURCHASE_SCOPE_KEY) {
+    const [storedLegacyPurchases, storedLegacyGuestPurchaseEntriesUsed] =
+      await Promise.all([
+        AsyncStorage.getItem(PURCHASES_STORAGE_KEY),
+        AsyncStorage.getItem(GUEST_PURCHASE_ENTRIES_USED_STORAGE_KEY),
+      ]);
+
+    if (
+      storedLegacyPurchases !== null ||
+      storedLegacyGuestPurchaseEntriesUsed !== null
+    ) {
+      const migratedSnapshot = getPurchaseStorageSnapshot(
+        storedLegacyPurchases,
+        storedLegacyGuestPurchaseEntriesUsed,
+      );
+
+      await persistPurchaseStorageSnapshot(scopeKey, migratedSnapshot);
+
+      return migratedSnapshot;
+    }
+  }
+
+  const emptyPurchases = getPurchasesForEmptyStorage();
+
+  return {
+    guestPurchaseEntriesUsed: emptyPurchases.length,
+    purchases: emptyPurchases,
+  };
+}
+
 function getActiveToPendingPurchaseIds(
   previousPurchases: MockPurchase[],
   nextPurchases: MockPurchase[],
@@ -262,6 +380,11 @@ function getActiveToPendingPurchaseIds(
 }
 
 export function PurchasesProvider({ children }: { children: ReactNode }) {
+  const { isAuthLoading, user } = useAuth();
+  const purchaseScopeKey = useMemo(
+    () => (isAuthLoading ? null : getPurchaseScopeKey(user?.id)),
+    [isAuthLoading, user?.id],
+  );
   const [purchases, setPurchases] = useState<MockPurchase[]>(() =>
     getPurchasesForEmptyStorage(),
   );
@@ -269,49 +392,53 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
     () => getPurchasesForEmptyStorage().length,
   );
   const [hasHydratedPurchases, setHasHydratedPurchases] = useState(false);
+  const [hydratedPurchaseScopeKey, setHydratedPurchaseScopeKey] = useState<
+    string | null
+  >(null);
   const hasSkippedInitialPersistRef = useRef(false);
   const lastReminderPurchasesRef = useRef<MockPurchase[] | null>(null);
   const reminderSyncQueueRef = useRef(Promise.resolve());
 
   useEffect(() => {
+    if (purchaseScopeKey === null) {
+      setHasHydratedPurchases(false);
+      setHydratedPurchaseScopeKey(null);
+      return;
+    }
+
     let isMounted = true;
+    const fallbackPurchases = getPurchasesForEmptyStorage();
+
+    setHasHydratedPurchases(false);
+    setHydratedPurchaseScopeKey(null);
+    setPurchases(fallbackPurchases);
+    setGuestPurchaseEntriesUsed(fallbackPurchases.length);
+    hasSkippedInitialPersistRef.current = false;
+    lastReminderPurchasesRef.current = null;
 
     const hydratePurchases = async () => {
       try {
-        const [storedPurchases, storedGuestPurchaseEntriesUsed] =
-          await Promise.all([
-            AsyncStorage.getItem(PURCHASES_STORAGE_KEY),
-            AsyncStorage.getItem(GUEST_PURCHASE_ENTRIES_USED_STORAGE_KEY),
-          ]);
+        const scopedPurchaseSnapshot =
+          await hydratePurchaseStorageScope(purchaseScopeKey);
 
         if (!isMounted) {
           return;
         }
 
-        let nextPurchases = getPurchasesForEmptyStorage();
-
-        if (storedPurchases !== null) {
-          const parsedPurchases: unknown = JSON.parse(storedPurchases);
-
-          if (isStoredPurchases(parsedPurchases)) {
-            nextPurchases = getPurchasesWithCurrentDateState(parsedPurchases);
-          }
-        }
-
-        const storedEntriesUsed = parseStoredGuestPurchaseEntriesUsed(
-          storedGuestPurchaseEntriesUsed,
+        setPurchases(scopedPurchaseSnapshot.purchases);
+        setGuestPurchaseEntriesUsed(
+          scopedPurchaseSnapshot.guestPurchaseEntriesUsed,
         );
-        const nextGuestPurchaseEntriesUsed = Math.max(
-          storedEntriesUsed ?? nextPurchases.length,
-          nextPurchases.length,
-        );
-
-        setPurchases(nextPurchases);
-        setGuestPurchaseEntriesUsed(nextGuestPurchaseEntriesUsed);
       } catch {
-        // Keep the empty/dev-seeded fallback if persisted purchase data cannot be read.
+        if (isMounted) {
+          const emptyPurchases = getPurchasesForEmptyStorage();
+
+          setPurchases(emptyPurchases);
+          setGuestPurchaseEntriesUsed(emptyPurchases.length);
+        }
       } finally {
         if (isMounted) {
+          setHydratedPurchaseScopeKey(purchaseScopeKey);
           setHasHydratedPurchases(true);
         }
       }
@@ -322,10 +449,14 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [purchaseScopeKey]);
 
   useEffect(() => {
-    if (!hasHydratedPurchases) {
+    if (
+      !hasHydratedPurchases ||
+      purchaseScopeKey === null ||
+      hydratedPurchaseScopeKey !== purchaseScopeKey
+    ) {
       return;
     }
 
@@ -334,25 +465,44 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    AsyncStorage.setItem(PURCHASES_STORAGE_KEY, JSON.stringify(purchases)).catch(
-      () => {
-        // Local persistence is best-effort for the frontend-only purchase state.
-      },
-    );
-  }, [hasHydratedPurchases, purchases]);
+    const storageKeys = getScopedPurchaseStorageKeys(purchaseScopeKey);
+
+    AsyncStorage.setItem(
+      storageKeys.purchasesKey,
+      JSON.stringify(purchases),
+    ).catch(() => {
+      // Local persistence is best-effort for the frontend-only purchase state.
+    });
+  }, [
+    hasHydratedPurchases,
+    hydratedPurchaseScopeKey,
+    purchaseScopeKey,
+    purchases,
+  ]);
 
   useEffect(() => {
-    if (!hasHydratedPurchases) {
+    if (
+      !hasHydratedPurchases ||
+      purchaseScopeKey === null ||
+      hydratedPurchaseScopeKey !== purchaseScopeKey
+    ) {
       return;
     }
 
+    const storageKeys = getScopedPurchaseStorageKeys(purchaseScopeKey);
+
     AsyncStorage.setItem(
-      GUEST_PURCHASE_ENTRIES_USED_STORAGE_KEY,
+      storageKeys.guestPurchaseEntriesUsedKey,
       String(guestPurchaseEntriesUsed),
     ).catch(() => {
       // Local quota persistence is best-effort for the frontend-only guest state.
     });
-  }, [guestPurchaseEntriesUsed, hasHydratedPurchases]);
+  }, [
+    guestPurchaseEntriesUsed,
+    hasHydratedPurchases,
+    hydratedPurchaseScopeKey,
+    purchaseScopeKey,
+  ]);
 
   const addPurchase = useCallback((input: AddPurchaseInput) => {
     const createdAt = Date.now();
@@ -493,7 +643,11 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (!hasHydratedPurchases) {
+    if (
+      !hasHydratedPurchases ||
+      purchaseScopeKey === null ||
+      hydratedPurchaseScopeKey !== purchaseScopeKey
+    ) {
       return;
     }
 
@@ -514,7 +668,12 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
       )
       .then(() => undefined)
       .catch(() => undefined);
-  }, [hasHydratedPurchases, purchases]);
+  }, [
+    hasHydratedPurchases,
+    hydratedPurchaseScopeKey,
+    purchaseScopeKey,
+    purchases,
+  ]);
 
   const value = useMemo(
     () => ({

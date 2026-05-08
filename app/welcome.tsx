@@ -8,8 +8,8 @@ export default function WelcomeRoute() {
   return (
     <WelcomeScreen
       onContinueAsGuest={() => router.push('/notifications')}
-      onContinueWithEmail={() => router.push('/sign-up')}
-      onSignIn={() => router.push('/sign-in')}
+      onContinueWithEmail={() => router.push('/sign-up?source=onboarding')}
+      onSignIn={() => router.push('/sign-in?source=onboarding')}
     />
   );
 }

@@ -2,8 +2,13 @@ import { Redirect } from 'expo-router';
 
 import { usePurchases } from '../src/features/purchases/state/PurchasesState';
 import { useAppSettings } from '../src/features/settings/state/AppSettingsState';
+import { useAuth } from '../src/state/AuthState';
 
 export default function Index() {
+  const {
+    isAuthenticated,
+    isAuthLoading,
+  } = useAuth();
   const {
     hasCompletedOnboarding,
     hasHydratedSettings,
@@ -14,7 +19,7 @@ export default function Index() {
     purchases,
   } = usePurchases();
 
-  if (!hasHydratedSettings || !hasHydratedPurchases) {
+  if (isAuthLoading || !hasHydratedSettings || !hasHydratedPurchases) {
     return null;
   }
 
@@ -24,6 +29,10 @@ export default function Index() {
     guestPurchaseEntriesUsed > 0
   ) {
     return <Redirect href="/purchases" />;
+  }
+
+  if (isAuthenticated) {
+    return <Redirect href="/notifications" />;
   }
 
   return <Redirect href="/welcome" />;

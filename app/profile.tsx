@@ -7,8 +7,8 @@ export default function ProfileRoute() {
 
   return (
     <ProfileScreen
-      onSignIn={() => router.push('/sign-in')}
-      onSignUp={() => router.push('/sign-up')}
+      onSignIn={() => router.push('/sign-in?source=profile')}
+      onSignUp={() => router.push('/sign-up?source=profile')}
     />
   );
 }

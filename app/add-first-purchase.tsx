@@ -34,7 +34,7 @@ export default function AddFirstPurchaseRoute() {
       isAccountItemLimitReached={isAccountItemLimitReached}
       isGuestItemLimitReached={isGuestItemLimitReached}
       onBack={handleBack}
-      onLimitSignUp={() => router.push('/sign-up')}
+      onLimitSignUp={() => router.push('/sign-up?source=limit')}
       onSaveItem={(input) => {
         if (!isAuthenticated && guestPurchaseEntriesUsed >= GUEST_ITEM_LIMIT) {
           return false;

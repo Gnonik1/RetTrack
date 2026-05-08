@@ -14,10 +14,5 @@ export default function SignUpRoute() {
     router.replace('/');
   };
 
-  return (
-    <SignUpScreen
-      onBack={handleBack}
-      onCreateAccount={() => router.push('/notifications')}
-    />
-  );
+  return <SignUpScreen onBack={handleBack} />;
 }

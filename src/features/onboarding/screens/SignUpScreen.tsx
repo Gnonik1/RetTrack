@@ -1,3 +1,4 @@
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useRef, useState } from 'react';
 import {
   Keyboard,
@@ -13,10 +14,10 @@ import { AppScreen } from '../../../components/AppScreen';
 import { AppText } from '../../../components/AppText';
 import { AppTextField } from '../../../components/AppTextField';
 import { theme } from '../../../constants/theme';
+import { signUpWithEmail } from '../../../services/authService';
 
 type SignUpScreenProps = {
   onBack?: () => void;
-  onCreateAccount?: () => void;
 };
 
 type SignUpErrors = {
@@ -24,6 +25,8 @@ type SignUpErrors = {
   email?: string;
   password?: string;
 };
+
+type SignUpSource = 'limit' | 'onboarding' | 'profile';
 
 function isValidEmailForMvp(email: string) {
   const atIndex = email.indexOf('@');
@@ -36,11 +39,43 @@ function isValidEmailForMvp(email: string) {
   );
 }
 
-export function SignUpScreen({ onBack, onCreateAccount }: SignUpScreenProps) {
+function getSignUpSource(source?: string | string[]): SignUpSource | null {
+  const resolvedSource = Array.isArray(source) ? source[0] : source;
+
+  if (
+    resolvedSource === 'limit' ||
+    resolvedSource === 'onboarding' ||
+    resolvedSource === 'profile'
+  ) {
+    return resolvedSource;
+  }
+
+  return null;
+}
+
+function getSignUpSuccessRoute(source: SignUpSource | null) {
+  if (source === 'onboarding') {
+    return '/notifications';
+  }
+
+  if (source === 'limit') {
+    // TODO: After backend sync is implemented, migrate local guest purchases before routing.
+    return '/profile';
+  }
+
+  return '/profile';
+}
+
+export function SignUpScreen({ onBack }: SignUpScreenProps) {
+  const router = useRouter();
+  const { source } = useLocalSearchParams<{ source?: string | string[] }>();
+  const signUpSource = getSignUpSource(source);
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [errors, setErrors] = useState<SignUpErrors>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
   const emailInputRef = useRef<TextInput>(null);
   const passwordInputRef = useRef<TextInput>(null);
 
@@ -59,16 +94,19 @@ export function SignUpScreen({ onBack, onCreateAccount }: SignUpScreenProps) {
 
   const handleFullNameChange = (text: string) => {
     setFullName(text);
+    setSubmitError('');
     clearFieldError('fullName');
   };
 
   const handleEmailChange = (text: string) => {
     setEmail(text);
+    setSubmitError('');
     clearFieldError('email');
   };
 
   const handlePasswordChange = (text: string) => {
     setPassword(text);
+    setSubmitError('');
     clearFieldError('password');
   };
 
@@ -102,14 +140,34 @@ export function SignUpScreen({ onBack, onCreateAccount }: SignUpScreenProps) {
     onBack?.();
   };
 
-  const handleCreateAccountPress = () => {
+  const handleCreateAccountPress = async () => {
     Keyboard.dismiss();
+    setSubmitError('');
 
     if (!validateForm()) {
       return;
     }
 
-    onCreateAccount?.();
+    setIsSubmitting(true);
+
+    try {
+      const { error } = await signUpWithEmail(email.trim(), password);
+
+      if (error) {
+        setSubmitError(
+          "We couldn't create your account. Check your details and try again.",
+        );
+        return;
+      }
+
+      router.replace(getSignUpSuccessRoute(signUpSource));
+    } catch {
+      setSubmitError(
+        "We couldn't create your account. Check your connection and try again.",
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -182,20 +240,31 @@ export function SignUpScreen({ onBack, onCreateAccount }: SignUpScreenProps) {
               value={password}
             />
           </View>
+
+          {submitError ? (
+            <View style={styles.submitErrorCard}>
+              <AppText style={styles.submitErrorText} variant="caption">
+                {submitError}
+              </AppText>
+            </View>
+          ) : null}
         </View>
 
         <View style={styles.actions}>
           <AppButton
+            disabled={isSubmitting}
             onPress={handleCreateAccountPress}
-            title="Create account"
+            title={isSubmitting ? 'Creating account...' : 'Create account'}
             variant="primary"
           />
           <AppButton
+            disabled={isSubmitting}
             onPress={Keyboard.dismiss}
             title="Continue with Google"
             variant="outline"
           />
           <AppButton
+            disabled={isSubmitting}
             onPress={Keyboard.dismiss}
             title="Continue with Apple"
             variant="outline"
@@ -253,6 +322,21 @@ const styles = StyleSheet.create({
   fields: {
     gap: 14,
     marginTop: theme.spacing.xl + theme.spacing.sm,
+  },
+  submitErrorCard: {
+    backgroundColor: theme.colors.softPending,
+    borderColor: '#E4C8C1',
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    marginTop: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: 10,
+  },
+  submitErrorText: {
+    color: theme.colors.pending,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.medium,
+    lineHeight: 18,
   },
   actions: {
     gap: 12,

@@ -1,4 +1,4 @@
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useRef, useState } from 'react';
 import {
   Keyboard,
@@ -14,6 +14,7 @@ import { AppScreen } from '../../../components/AppScreen';
 import { AppText } from '../../../components/AppText';
 import { AppTextField } from '../../../components/AppTextField';
 import { theme } from '../../../constants/theme';
+import { getStoredHasCompletedOnboardingForUser } from '../../settings/state/AppSettingsState';
 import { signInWithEmail } from '../../../services/authService';
 
 type SignInScreenProps = {
@@ -26,6 +27,8 @@ type SignInErrors = {
   password?: string;
 };
 
+type SignInSource = 'limit' | 'onboarding' | 'profile';
+
 function isValidEmailForMvp(email: string) {
   const atIndex = email.indexOf('@');
   const dotAfterAtIndex = email.indexOf('.', atIndex + 1);
@@ -37,11 +40,45 @@ function isValidEmailForMvp(email: string) {
   );
 }
 
+function getSignInSource(source?: string | string[]): SignInSource | null {
+  const resolvedSource = Array.isArray(source) ? source[0] : source;
+
+  if (
+    resolvedSource === 'limit' ||
+    resolvedSource === 'onboarding' ||
+    resolvedSource === 'profile'
+  ) {
+    return resolvedSource;
+  }
+
+  return null;
+}
+
+async function getSignInSuccessRoute(
+  source: SignInSource | null,
+  userId?: string,
+) {
+  if (source === 'onboarding') {
+    if (!userId) {
+      return '/notifications';
+    }
+
+    const hasCompletedOnboarding =
+      await getStoredHasCompletedOnboardingForUser(userId);
+
+    return hasCompletedOnboarding ? '/purchases' : '/notifications';
+  }
+
+  return '/profile';
+}
+
 export function SignInScreen({
   onBack,
   onForgotPassword,
 }: SignInScreenProps) {
   const router = useRouter();
+  const { source } = useLocalSearchParams<{ source?: string | string[] }>();
+  const signInSource = getSignInSource(source);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [errors, setErrors] = useState<SignInErrors>({});
@@ -109,7 +146,7 @@ export function SignInScreen({
     setIsSubmitting(true);
 
     try {
-      const { error } = await signInWithEmail(email.trim(), password);
+      const { data, error } = await signInWithEmail(email.trim(), password);
 
       if (error) {
         setSubmitError(
@@ -118,7 +155,7 @@ export function SignInScreen({
         return;
       }
 
-      router.replace('/profile');
+      router.replace(await getSignInSuccessRoute(signInSource, data.user?.id));
     } catch {
       setSubmitError(
         "We couldn't sign you in. Check your connection and try again.",
