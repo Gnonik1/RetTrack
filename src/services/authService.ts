@@ -14,8 +14,13 @@ type CurrentUserResult = Awaited<ReturnType<typeof supabase.auth.getUser>>;
 export function signUpWithEmail(
   email: string,
   password: string,
+  fullName?: string,
 ): Promise<SignUpWithEmailResult> {
-  return supabase.auth.signUp({ email, password });
+  return supabase.auth.signUp({
+    email,
+    options: fullName ? { data: { full_name: fullName } } : undefined,
+    password,
+  });
 }
 
 export function signInWithEmail(
@@ -39,4 +44,12 @@ export function getCurrentSession(): Promise<CurrentSessionResult> {
 
 export function getCurrentUser(): Promise<CurrentUserResult> {
   return supabase.auth.getUser();
+}
+
+export function getProfileFullName(userId: string) {
+  return supabase
+    .from("profiles")
+    .select("full_name")
+    .eq("id", userId)
+    .maybeSingle();
 }

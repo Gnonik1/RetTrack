@@ -15,6 +15,7 @@ import { AppText } from '../../../components/AppText';
 import { AppTextField } from '../../../components/AppTextField';
 import { theme } from '../../../constants/theme';
 import { signUpWithEmail } from '../../../services/authService';
+import { useAuth } from '../../../state/AuthState';
 
 type SignUpScreenProps = {
   onBack?: () => void;
@@ -68,6 +69,7 @@ function getSignUpSuccessRoute(source: SignUpSource | null) {
 
 export function SignUpScreen({ onBack }: SignUpScreenProps) {
   const router = useRouter();
+  const { refreshProfile } = useAuth();
   const { source } = useLocalSearchParams<{ source?: string | string[] }>();
   const signUpSource = getSignUpSource(source);
   const [fullName, setFullName] = useState('');
@@ -151,7 +153,12 @@ export function SignUpScreen({ onBack }: SignUpScreenProps) {
     setIsSubmitting(true);
 
     try {
-      const { error } = await signUpWithEmail(email.trim(), password);
+      const trimmedFullName = fullName.trim();
+      const { error } = await signUpWithEmail(
+        email.trim(),
+        password,
+        trimmedFullName,
+      );
 
       if (error) {
         setSubmitError(
@@ -160,6 +167,7 @@ export function SignUpScreen({ onBack }: SignUpScreenProps) {
         return;
       }
 
+      await refreshProfile();
       router.replace(getSignUpSuccessRoute(signUpSource));
     } catch {
       setSubmitError(

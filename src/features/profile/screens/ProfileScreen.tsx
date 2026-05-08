@@ -16,8 +16,13 @@ type ProfileScreenProps = {
   onSignUp?: () => void;
 };
 
-function getAccountInitial(email?: string) {
+function getAccountInitial(fullName?: string | null, email?: string) {
+  const trimmedFullName = fullName?.trim();
   const trimmedEmail = email?.trim();
+
+  if (trimmedFullName) {
+    return trimmedFullName.charAt(0).toUpperCase();
+  }
 
   return trimmedEmail ? trimmedEmail.charAt(0).toUpperCase() : 'A';
 }
@@ -48,11 +53,19 @@ function RateRetTrackCard() {
 }
 
 export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
-  const { isAuthenticated, isAuthLoading, user } = useAuth();
+  const {
+    isAuthenticated,
+    isAuthLoading,
+    isProfileLoading,
+    profileFullName,
+    user,
+  } = useAuth();
   const { guestPurchaseEntriesUsed } = usePurchases();
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [signOutError, setSignOutError] = useState('');
   const userEmail = user?.email;
+  const accountDisplayName = profileFullName ?? userEmail ?? 'Signed in';
+  const shouldShowEmailUnderName = Boolean(profileFullName && userEmail);
   const usagePercent = Math.min(
     100,
     Math.round((guestPurchaseEntriesUsed / GUEST_ITEM_LIMIT) * 100),
@@ -101,11 +114,11 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
         <View style={styles.profileCard}>
           <View style={styles.avatar}>
             <AppText style={styles.avatarText} variant="button">
-              {isAuthenticated ? getAccountInitial(userEmail) : 'G'}
+              {isAuthenticated ? getAccountInitial(profileFullName, userEmail) : 'G'}
             </AppText>
           </View>
 
-          {isAuthLoading ? (
+          {isAuthLoading || (isAuthenticated && isProfileLoading) ? (
             <View style={styles.loadingAccountPanel}>
               <AppText style={styles.guestTitle} variant="body">
                 Checking account
@@ -117,18 +130,18 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
           ) : isAuthenticated ? (
             <>
               <AppText style={styles.guestTitle} variant="body">
-                Signed in
+                {accountDisplayName}
               </AppText>
-              <AppText style={styles.guestBody} variant="caption">
-                Purchases sync across devices
-              </AppText>
-              {userEmail ? (
+              {shouldShowEmailUnderName ? (
                 <View style={styles.emailPill}>
                   <AppText style={styles.emailText} variant="caption">
                     {userEmail}
                   </AppText>
                 </View>
               ) : null}
+              <AppText style={styles.guestBody} variant="caption">
+                Purchases sync across devices
+              </AppText>
 
               <View style={[styles.limitsCard, styles.signedInLimitsCard]}>
                 <View
