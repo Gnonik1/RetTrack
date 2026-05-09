@@ -8,7 +8,7 @@ import { AppText } from '../../../components/AppText';
 import { theme } from '../../../constants/theme';
 import { signOut } from '../../../services/authService';
 import { useAuth } from '../../../state/AuthState';
-import { GUEST_ITEM_LIMIT } from '../../purchases/constants';
+import { ACCOUNT_ITEM_LIMIT, GUEST_ITEM_LIMIT } from '../../purchases/constants';
 import { usePurchases } from '../../purchases/state/PurchasesState';
 
 type ProfileScreenProps = {
@@ -60,7 +60,11 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
     profileFullName,
     user,
   } = useAuth();
-  const { guestPurchaseEntriesUsed } = usePurchases();
+  const {
+    accountPurchaseEntriesUsed,
+    guestPurchaseEntriesUsed,
+    hasHydratedPurchases,
+  } = usePurchases();
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [signOutError, setSignOutError] = useState('');
   const userEmail = user?.email;
@@ -72,6 +76,20 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
   );
   const usageProgressStyle = {
     width: `${usagePercent}%` as `${number}%`,
+  };
+  const isAccountLoading =
+    isAuthLoading ||
+    (isAuthenticated && (isProfileLoading || !hasHydratedPurchases));
+  const accountRemainingItems = Math.max(
+    ACCOUNT_ITEM_LIMIT - accountPurchaseEntriesUsed,
+    0,
+  );
+  const accountUsagePercent = Math.min(
+    100,
+    Math.round((accountPurchaseEntriesUsed / ACCOUNT_ITEM_LIMIT) * 100),
+  );
+  const accountUsageProgressStyle = {
+    width: `${accountUsagePercent}%` as `${number}%`,
   };
 
   const handleSignOutPress = async () => {
@@ -118,7 +136,7 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
             </AppText>
           </View>
 
-          {isAuthLoading || (isAuthenticated && isProfileLoading) ? (
+          {isAccountLoading ? (
             <View style={styles.loadingAccountPanel}>
               <AppText style={styles.guestTitle} variant="body">
                 Checking account
@@ -152,18 +170,23 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
                   ]}
                 >
                   <AppText style={styles.accountLimitEyebrow} variant="caption">
-                    Account
+                    Account limit
+                  </AppText>
+                  <AppText style={styles.accountUsageTitle} variant="body">
+                    {accountPurchaseEntriesUsed} / {ACCOUNT_ITEM_LIMIT} purchase entries used
+                  </AppText>
+                  <View style={styles.progressTrack}>
+                    <View
+                      style={[styles.progressFill, accountUsageProgressStyle]}
+                    />
+                  </View>
+                  <AppText style={styles.accountUsageNote} variant="caption">
+                    {accountRemainingItems} remaining
                   </AppText>
                   <View style={styles.limitLine}>
                     <View style={[styles.limitDot, styles.accountLimitDot]} />
                     <AppText style={styles.accountLimitText} variant="caption">
-                      20 items
-                    </AppText>
-                  </View>
-                  <View style={styles.limitLine}>
-                    <View style={[styles.limitDot, styles.accountLimitDot]} />
-                    <AppText style={styles.accountLimitText} variant="caption">
-                      3 photos per item
+                      Up to 3 photos per item
                     </AppText>
                   </View>
                 </View>
@@ -361,6 +384,19 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 12,
     lineHeight: 17,
+  },
+  accountUsageNote: {
+    color: theme.colors.greenDark,
+    fontSize: 12,
+    fontWeight: theme.fontWeight.medium,
+    lineHeight: 17,
+    marginTop: 8,
+  },
+  accountUsageTitle: {
+    color: theme.colors.text,
+    fontSize: 15,
+    fontWeight: theme.fontWeight.semibold,
+    lineHeight: 21,
   },
   limitColumn: {
     flex: 1,

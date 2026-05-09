@@ -13,11 +13,12 @@ export default function AddFirstPurchaseRoute() {
   const router = useRouter();
   const { isAuthenticated } = useAuth();
   const { completeOnboarding } = useAppSettings();
-  const { addPurchase, guestPurchaseEntriesUsed, purchases } = usePurchases();
+  const { accountPurchaseEntriesUsed, addPurchase, guestPurchaseEntriesUsed } =
+    usePurchases();
   const isGuestItemLimitReached =
     !isAuthenticated && guestPurchaseEntriesUsed >= GUEST_ITEM_LIMIT;
   const isAccountItemLimitReached =
-    isAuthenticated && purchases.length >= ACCOUNT_ITEM_LIMIT;
+    isAuthenticated && accountPurchaseEntriesUsed >= ACCOUNT_ITEM_LIMIT;
 
   const handleBack = () => {
     if (router.canGoBack()) {
@@ -40,7 +41,10 @@ export default function AddFirstPurchaseRoute() {
           return false;
         }
 
-        if (isAuthenticated && purchases.length >= ACCOUNT_ITEM_LIMIT) {
+        if (
+          isAuthenticated &&
+          accountPurchaseEntriesUsed >= ACCOUNT_ITEM_LIMIT
+        ) {
           return false;
         }
 

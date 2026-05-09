@@ -1,4 +1,5 @@
 export type PurchaseStatus = 'active' | 'returned' | 'kept' | 'pending';
+export type PurchaseSyncStatus = 'error' | 'local' | 'synced';
 
 export type MockPurchase = {
   comment?: string;
@@ -17,9 +18,12 @@ export type MockPurchase = {
   returnBy: string;
   returnByDetail?: string;
   returnDateISO?: string;
+  remoteId?: string;
   resolvedAt?: number;
   status: PurchaseStatus;
   store: string;
+  syncStatus?: PurchaseSyncStatus;
+  lastSyncedAt?: string;
 };
 
 export const purchaseStatusLabels: Record<PurchaseStatus, string> = {

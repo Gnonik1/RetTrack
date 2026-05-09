@@ -369,7 +369,7 @@ export function AddFirstPurchaseScreen({
       : 'Guest limit reached';
   const limitBody =
     activeLimitKind === 'account'
-      ? `Your account includes ${ACCOUNT_ITEM_LIMIT} tracked items.`
+      ? `Your account includes ${ACCOUNT_ITEM_LIMIT} purchase entries.`
       : `Guest mode includes ${GUEST_ITEM_LIMIT} purchase entries. Create an account to add more.`;
   const saveSuccessText =
     mode === 'editPurchase' ? 'Purchase updated' : 'Purchase added';

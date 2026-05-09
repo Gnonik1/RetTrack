@@ -11,6 +11,12 @@ import {
 } from 'react';
 
 import { rescheduleAllPurchaseReminders } from '../../notifications/notifications';
+import {
+  createRemotePurchase,
+  resolveRemotePurchase,
+  softDeleteRemotePurchase,
+  updateRemotePurchase,
+} from '../../../services/purchaseSyncService';
 import { useAuth } from '../../../state/AuthState';
 import { GUEST_PHOTO_LIMIT } from '../constants';
 import {
@@ -18,6 +24,7 @@ import {
   mockPurchases,
   type MockPurchase,
   type PurchaseStatus,
+  type PurchaseSyncStatus,
 } from '../data/mockPurchases';
 import {
   formatCompactDate,
@@ -46,6 +53,7 @@ export type AddPurchaseInput = {
 };
 
 type PurchasesStateValue = {
+  accountPurchaseEntriesUsed: number;
   addPurchase: (input: AddPurchaseInput) => MockPurchase;
   deletePurchase: (itemId: string) => boolean;
   findPurchaseById: (itemId?: string | string[]) => MockPurchase | null;
@@ -93,6 +101,17 @@ function isOptionalString(value: unknown) {
   return value === undefined || typeof value === 'string';
 }
 
+function isOptionalPurchaseSyncStatus(
+  value: unknown,
+): value is PurchaseSyncStatus | undefined {
+  return (
+    value === undefined ||
+    value === 'local' ||
+    value === 'synced' ||
+    value === 'error'
+  );
+}
+
 function isOptionalNumber(value: unknown) {
   return value === undefined || typeof value === 'number';
 }
@@ -127,8 +146,11 @@ function isStoredPurchase(value: unknown): value is MockPurchase {
     isOptionalString(value.purchased) &&
     isOptionalString(value.returnByDetail) &&
     isOptionalString(value.returnDateISO) &&
+    isOptionalString(value.remoteId) &&
     isOptionalNumber(value.createdAt) &&
-    isOptionalNumber(value.resolvedAt)
+    isOptionalNumber(value.resolvedAt) &&
+    isOptionalPurchaseSyncStatus(value.syncStatus) &&
+    isOptionalString(value.lastSyncedAt)
   );
 }
 
@@ -379,6 +401,20 @@ function getActiveToPendingPurchaseIds(
     .map((purchase) => purchase.id);
 }
 
+function getSyncedPurchaseMetadata(remoteId: string, syncedAt = new Date()) {
+  return {
+    lastSyncedAt: syncedAt.toISOString(),
+    remoteId,
+    syncStatus: 'synced' as const,
+  };
+}
+
+function getSyncErrorMetadata() {
+  return {
+    syncStatus: 'error' as const,
+  };
+}
+
 export function PurchasesProvider({ children }: { children: ReactNode }) {
   const { isAuthLoading, user } = useAuth();
   const purchaseScopeKey = useMemo(
@@ -398,6 +434,7 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
   const hasSkippedInitialPersistRef = useRef(false);
   const lastReminderPurchasesRef = useRef<MockPurchase[] | null>(null);
   const reminderSyncQueueRef = useRef(Promise.resolve());
+  const signedInUserId = user?.id;
 
   useEffect(() => {
     if (purchaseScopeKey === null) {
@@ -504,6 +541,131 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
     purchaseScopeKey,
   ]);
 
+  const markPurchaseSyncMetadata = useCallback(
+    (
+      itemId: string,
+      metadata: Partial<
+        Pick<MockPurchase, 'lastSyncedAt' | 'remoteId' | 'syncStatus'>
+      >,
+    ) => {
+      setPurchases((currentPurchases) =>
+        currentPurchases.map((purchase) =>
+          purchase.id === itemId
+            ? {
+                ...purchase,
+                ...metadata,
+              }
+            : purchase,
+        ),
+      );
+    },
+    [],
+  );
+
+  const syncCreatedPurchase = useCallback(
+    async (localPurchase: MockPurchase) => {
+      if (!signedInUserId) {
+        return;
+      }
+
+      try {
+        const { data, error } = await createRemotePurchase(
+          signedInUserId,
+          localPurchase,
+        );
+
+        if (error) {
+          markPurchaseSyncMetadata(localPurchase.id, getSyncErrorMetadata());
+          return;
+        }
+
+        markPurchaseSyncMetadata(
+          localPurchase.id,
+          getSyncedPurchaseMetadata(data.id),
+        );
+      } catch {
+        markPurchaseSyncMetadata(localPurchase.id, getSyncErrorMetadata());
+      }
+    },
+    [markPurchaseSyncMetadata, signedInUserId],
+  );
+
+  const syncUpdatedPurchase = useCallback(
+    async (localPurchase: MockPurchase) => {
+      if (!signedInUserId) {
+        return;
+      }
+
+      try {
+        const { data, error } = await updateRemotePurchase(
+          signedInUserId,
+          localPurchase,
+        );
+
+        if (error) {
+          markPurchaseSyncMetadata(localPurchase.id, getSyncErrorMetadata());
+          return;
+        }
+
+        markPurchaseSyncMetadata(
+          localPurchase.id,
+          getSyncedPurchaseMetadata(data.id),
+        );
+      } catch {
+        markPurchaseSyncMetadata(localPurchase.id, getSyncErrorMetadata());
+      }
+    },
+    [markPurchaseSyncMetadata, signedInUserId],
+  );
+
+  const syncDeletedPurchase = useCallback(
+    async (localPurchase: MockPurchase) => {
+      if (!signedInUserId) {
+        return;
+      }
+
+      try {
+        await softDeleteRemotePurchase(
+          signedInUserId,
+          localPurchase.remoteId ?? localPurchase.id,
+        );
+      } catch {
+        // Local deletion remains authoritative until a future retry queue exists.
+      }
+    },
+    [signedInUserId],
+  );
+
+  const syncResolvedPurchase = useCallback(
+    async (localPurchase: MockPurchase, status: ResolvedPurchaseStatus) => {
+      if (!signedInUserId || !localPurchase.resolvedAt) {
+        return;
+      }
+
+      try {
+        const { data, error } = await resolveRemotePurchase(
+          signedInUserId,
+          localPurchase.remoteId ?? localPurchase.id,
+          status,
+          new Date(localPurchase.resolvedAt),
+        );
+
+        if (error) {
+          markPurchaseSyncMetadata(localPurchase.id, getSyncErrorMetadata());
+          return;
+        }
+
+        markPurchaseSyncMetadata(
+          localPurchase.id,
+          getSyncedPurchaseMetadata(data.id),
+        );
+      } catch {
+        markPurchaseSyncMetadata(localPurchase.id, getSyncErrorMetadata());
+      }
+    },
+    [markPurchaseSyncMetadata, signedInUserId],
+  );
+
   const addPurchase = useCallback((input: AddPurchaseInput) => {
     const createdAt = Date.now();
     const itemName = input.itemName.trim();
@@ -522,6 +684,7 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
       purchaseDateISO: input.purchaseDateISO,
       purchased: compactText(input.purchased),
       ...returnDateFields,
+      ...(signedInUserId ? { syncStatus: 'local' as const } : {}),
       status: 'active',
       store,
     };
@@ -534,8 +697,10 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
     setPurchases((currentPurchases) => [datedPurchase, ...currentPurchases]);
     setGuestPurchaseEntriesUsed((currentEntriesUsed) => currentEntriesUsed + 1);
 
+    void syncCreatedPurchase(datedPurchase);
+
     return datedPurchase;
-  }, []);
+  }, [signedInUserId, syncCreatedPurchase]);
 
   const findPurchaseById = useCallback(
     (itemId?: string | string[]) => {
@@ -569,9 +734,10 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
   );
 
   const deletePurchase = useCallback((itemId: string) => {
-    const hasPurchase = purchases.some((purchase) => purchase.id === itemId);
+    const purchaseToDelete =
+      purchases.find((purchase) => purchase.id === itemId) ?? null;
 
-    if (!hasPurchase) {
+    if (!purchaseToDelete) {
       return false;
     }
 
@@ -583,13 +749,34 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
       return currentPurchases.filter((purchase) => purchase.id !== itemId);
     });
 
+    void syncDeletedPurchase(purchaseToDelete);
+
     return true;
-  }, [purchases]);
+  }, [purchases, syncDeletedPurchase]);
 
   const resolvePurchase = useCallback(
     (itemId: string, status: ResolvedPurchaseStatus) => {
       const resolvedDate = new Date();
       const completedText = getResolvedStatusText(status, resolvedDate);
+      const purchaseToResolve =
+        purchases.find((purchase) => purchase.id === itemId) ?? null;
+
+      if (!purchaseToResolve) {
+        return;
+      }
+
+      const resolvedPurchase: MockPurchase = {
+        ...purchaseToResolve,
+        completedText,
+        days: completedText,
+        resolvedAt: resolvedDate.getTime(),
+        status,
+        ...(signedInUserId
+          ? { syncStatus: 'local' as const }
+          : purchaseToResolve.syncStatus
+            ? { syncStatus: purchaseToResolve.syncStatus }
+            : {}),
+      };
 
       setPurchases((currentPurchases) =>
         currentPurchases.map((purchase) => {
@@ -597,17 +784,13 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
             return purchase;
           }
 
-          return {
-            ...purchase,
-            completedText,
-            days: completedText,
-            resolvedAt: resolvedDate.getTime(),
-            status,
-          };
+          return resolvedPurchase;
         }),
       );
+
+      void syncResolvedPurchase(resolvedPurchase, status);
     },
-    [],
+    [purchases, signedInUserId, syncResolvedPurchase],
   );
 
   const updatePurchase = useCallback((itemId: string, input: AddPurchaseInput) => {
@@ -616,6 +799,33 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
     const productLink = compactText(input.productLink);
     const returnDateFields = getPurchaseDateFields(input);
     const updatedAt = new Date();
+    const purchaseToUpdate =
+      purchases.find((purchase) => purchase.id === itemId) ?? null;
+
+    if (!purchaseToUpdate) {
+      return;
+    }
+
+    const updatedPurchase = getPurchaseWithCurrentDateState(
+      {
+        ...purchaseToUpdate,
+        comment: compactText(input.comment),
+        itemName,
+        photoUris: compactPhotoUris(input.photoUris),
+        price: compactText(input.price),
+        productLink,
+        purchaseDateISO: input.purchaseDateISO,
+        purchased: compactText(input.purchased),
+        ...returnDateFields,
+        store,
+        ...(signedInUserId
+          ? { syncStatus: 'local' as const }
+          : purchaseToUpdate.syncStatus
+            ? { syncStatus: purchaseToUpdate.syncStatus }
+            : {}),
+      },
+      updatedAt,
+    );
 
     setPurchases((currentPurchases) =>
       currentPurchases.map((purchase) => {
@@ -623,24 +833,12 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
           return purchase;
         }
 
-        return getPurchaseWithCurrentDateState(
-          {
-            ...purchase,
-            comment: compactText(input.comment),
-            itemName,
-            photoUris: compactPhotoUris(input.photoUris),
-            price: compactText(input.price),
-            productLink,
-            purchaseDateISO: input.purchaseDateISO,
-            purchased: compactText(input.purchased),
-            ...returnDateFields,
-            store,
-          },
-          updatedAt,
-        );
+        return updatedPurchase;
       }),
     );
-  }, []);
+
+    void syncUpdatedPurchase(updatedPurchase);
+  }, [purchases, signedInUserId, syncUpdatedPurchase]);
 
   useEffect(() => {
     if (
@@ -677,6 +875,7 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo(
     () => ({
+      accountPurchaseEntriesUsed: guestPurchaseEntriesUsed,
       addPurchase,
       deletePurchase,
       findPurchaseById,
