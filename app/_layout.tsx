@@ -1,5 +1,6 @@
 import { Stack } from 'expo-router';
 
+import { AuthDeepLinkHandler } from '../src/components/AuthDeepLinkHandler';
 import { configureNotificationHandler } from '../src/features/notifications/notifications';
 import { PurchasesProvider } from '../src/features/purchases/state/PurchasesState';
 import { AppSettingsProvider } from '../src/features/settings/state/AppSettingsState';
@@ -10,6 +11,7 @@ configureNotificationHandler();
 export default function RootLayout() {
   return (
     <AuthProvider>
+      <AuthDeepLinkHandler />
       <AppSettingsProvider>
         <PurchasesProvider>
           <Stack screenOptions={{ headerShown: false }}>

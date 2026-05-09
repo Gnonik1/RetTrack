@@ -1,3 +1,5 @@
+import * as Linking from "expo-linking";
+
 import { supabase } from "../lib/supabase";
 
 type SignUpWithEmailResult = Awaited<ReturnType<typeof supabase.auth.signUp>>;
@@ -8,6 +10,7 @@ type SignOutResult = Awaited<ReturnType<typeof supabase.auth.signOut>>;
 type ResetPasswordResult = Awaited<
   ReturnType<typeof supabase.auth.resetPasswordForEmail>
 >;
+type UpdatePasswordResult = Awaited<ReturnType<typeof supabase.auth.updateUser>>;
 type CurrentSessionResult = Awaited<ReturnType<typeof supabase.auth.getSession>>;
 type CurrentUserResult = Awaited<ReturnType<typeof supabase.auth.getUser>>;
 
@@ -34,8 +37,20 @@ export function signOut(): Promise<SignOutResult> {
   return supabase.auth.signOut();
 }
 
+export function getPasswordResetRedirectUrl() {
+  return Linking.createURL("/reset-password");
+}
+
 export function resetPassword(email: string): Promise<ResetPasswordResult> {
-  return supabase.auth.resetPasswordForEmail(email);
+  const redirectTo = getPasswordResetRedirectUrl();
+
+  return supabase.auth.resetPasswordForEmail(email, {
+    redirectTo,
+  });
+}
+
+export function updatePassword(password: string): Promise<UpdatePasswordResult> {
+  return supabase.auth.updateUser({ password });
 }
 
 export function getCurrentSession(): Promise<CurrentSessionResult> {

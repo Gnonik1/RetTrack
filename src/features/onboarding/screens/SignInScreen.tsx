@@ -15,7 +15,10 @@ import { AppText } from '../../../components/AppText';
 import { AppTextField } from '../../../components/AppTextField';
 import { theme } from '../../../constants/theme';
 import { getStoredHasCompletedOnboardingForUser } from '../../settings/state/AppSettingsState';
-import { signInWithEmail } from '../../../services/authService';
+import {
+  resetPassword,
+  signInWithEmail,
+} from '../../../services/authService';
 
 type SignInScreenProps = {
   onBack?: () => void;
@@ -25,6 +28,11 @@ type SignInScreenProps = {
 type SignInErrors = {
   email?: string;
   password?: string;
+};
+
+type ResetMessage = {
+  text: string;
+  type: 'error' | 'success';
 };
 
 type SignInSource = 'limit' | 'onboarding' | 'profile';
@@ -72,10 +80,7 @@ async function getSignInSuccessRoute(
   return '/profile';
 }
 
-export function SignInScreen({
-  onBack,
-  onForgotPassword,
-}: SignInScreenProps) {
+export function SignInScreen({ onBack }: SignInScreenProps) {
   const router = useRouter();
   const { source } = useLocalSearchParams<{ source?: string | string[] }>();
   const signInSource = getSignInSource(source);
@@ -83,6 +88,8 @@ export function SignInScreen({
   const [password, setPassword] = useState('');
   const [errors, setErrors] = useState<SignInErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
+  const [resetMessage, setResetMessage] = useState<ResetMessage | null>(null);
   const [submitError, setSubmitError] = useState('');
   const passwordInputRef = useRef<TextInput>(null);
 
@@ -101,6 +108,7 @@ export function SignInScreen({
 
   const handleEmailChange = (text: string) => {
     setEmail(text);
+    setResetMessage(null);
     setSubmitError('');
     clearFieldError('email');
   };
@@ -137,6 +145,7 @@ export function SignInScreen({
 
   const handleSignInPress = async () => {
     Keyboard.dismiss();
+    setResetMessage(null);
     setSubmitError('');
 
     if (!validateForm()) {
@@ -165,9 +174,55 @@ export function SignInScreen({
     }
   };
 
-  const handleForgotPasswordPress = () => {
+  const handleForgotPasswordPress = async () => {
     Keyboard.dismiss();
-    onForgotPassword?.();
+    setResetMessage(null);
+    setSubmitError('');
+
+    const trimmedEmail = email.trim();
+
+    if (!trimmedEmail) {
+      setErrors((currentErrors) => ({
+        ...currentErrors,
+        email: 'Enter your email first.',
+      }));
+      return;
+    }
+
+    if (!isValidEmailForMvp(trimmedEmail)) {
+      setErrors((currentErrors) => ({
+        ...currentErrors,
+        email: 'Enter a valid email address.',
+      }));
+      return;
+    }
+
+    clearFieldError('email');
+    setIsResettingPassword(true);
+
+    try {
+      const { error } = await resetPassword(trimmedEmail);
+
+      if (error) {
+        setResetMessage({
+          text: "We couldn't send a reset email. Check your email and try again.",
+          type: 'error',
+        });
+        return;
+      }
+
+      setResetMessage({
+        text: 'Password reset email sent.',
+        type: 'success',
+      });
+    } catch {
+      setResetMessage({
+        text: "We couldn't send a reset email. Check your connection and try again.",
+        type: 'error',
+      });
+    } finally {
+      setIsResettingPassword(false);
+    }
   };
 
   return (
@@ -231,13 +286,42 @@ export function SignInScreen({
 
           <Pressable
             accessibilityRole="button"
+            disabled={isSubmitting || isResettingPassword}
             onPress={handleForgotPasswordPress}
-            style={styles.forgotButton}
+            style={[
+              styles.forgotButton,
+              isSubmitting || isResettingPassword
+                ? styles.forgotButtonDisabled
+                : null,
+            ]}
           >
             <AppText style={styles.forgotText} variant="button">
-              Forgot password?
+              {isResettingPassword ? 'Sending reset...' : 'Forgot password?'}
             </AppText>
           </Pressable>
+
+          {resetMessage ? (
+            <View
+              style={[
+                styles.resetMessageCard,
+                resetMessage.type === 'error'
+                  ? styles.resetErrorCard
+                  : styles.resetSuccessCard,
+              ]}
+            >
+              <AppText
+                style={[
+                  styles.resetMessageText,
+                  resetMessage.type === 'error'
+                    ? styles.resetErrorText
+                    : styles.resetSuccessText,
+                ]}
+                variant="caption"
+              >
+                {resetMessage.text}
+              </AppText>
+            </View>
+          ) : null}
 
           {submitError ? (
             <View style={styles.submitErrorCard}>
@@ -250,19 +334,19 @@ export function SignInScreen({
 
         <View style={styles.actions}>
           <AppButton
-            disabled={isSubmitting}
+            disabled={isSubmitting || isResettingPassword}
             onPress={handleSignInPress}
             title={isSubmitting ? 'Signing in...' : 'Sign in'}
             variant="primary"
           />
           <AppButton
-            disabled={isSubmitting}
+            disabled={isSubmitting || isResettingPassword}
             onPress={Keyboard.dismiss}
             title="Continue with Google"
             variant="outline"
           />
           <AppButton
-            disabled={isSubmitting}
+            disabled={isSubmitting || isResettingPassword}
             onPress={Keyboard.dismiss}
             title="Continue with Apple"
             variant="outline"
@@ -324,10 +408,39 @@ const styles = StyleSheet.create({
     marginTop: theme.spacing.sm,
     paddingVertical: theme.spacing.xs,
   },
+  forgotButtonDisabled: {
+    opacity: 0.7,
+  },
   forgotText: {
     ...theme.typography.textLink,
     color: theme.colors.green,
     fontWeight: theme.fontWeight.medium,
+  },
+  resetMessageCard: {
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    marginTop: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: 10,
+  },
+  resetErrorCard: {
+    backgroundColor: theme.colors.softPending,
+    borderColor: '#E4C8C1',
+  },
+  resetSuccessCard: {
+    backgroundColor: theme.colors.sage,
+    borderColor: theme.colors.border,
+  },
+  resetMessageText: {
+    fontSize: 13,
+    fontWeight: theme.fontWeight.medium,
+    lineHeight: 18,
+  },
+  resetErrorText: {
+    color: theme.colors.pending,
+  },
+  resetSuccessText: {
+    color: theme.colors.greenDark,
   },
   submitErrorCard: {
     backgroundColor: theme.colors.softPending,
