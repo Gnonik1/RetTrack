@@ -32,6 +32,12 @@
     "plugins": [
       "expo-apple-authentication",
       "expo-router"
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "5ffd6801-d7bb-4f8f-855e-9f2a0bf17922"
+      }
+    }
   }
 }
