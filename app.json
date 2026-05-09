@@ -15,7 +15,8 @@
     },
     "ios": {
       "bundleIdentifier": "com.gnonik.rettrack",
-      "supportsTablet": true
+      "supportsTablet": true,
+      "usesAppleSignIn": true
     },
     "android": {
       "adaptiveIcon": {
@@ -29,6 +30,7 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
+      "expo-apple-authentication",
       "expo-router"
     ]
   }

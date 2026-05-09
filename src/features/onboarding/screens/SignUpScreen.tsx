@@ -14,7 +14,10 @@ import { AppScreen } from '../../../components/AppScreen';
 import { AppText } from '../../../components/AppText';
 import { AppTextField } from '../../../components/AppTextField';
 import { theme } from '../../../constants/theme';
-import { signUpWithEmail } from '../../../services/authService';
+import {
+  signInWithApple,
+  signUpWithEmail,
+} from '../../../services/authService';
 import { useAuth } from '../../../state/AuthState';
 
 type SignUpScreenProps = {
@@ -67,6 +70,28 @@ function getSignUpSuccessRoute(source: SignUpSource | null) {
   return '/profile';
 }
 
+function getAppleSignUpErrorMessage(
+  status:
+    | 'missingToken'
+    | 'providerSetupRequired'
+    | 'unavailable'
+    | 'unknownError',
+) {
+  if (status === 'unavailable') {
+    return 'Apple sign-in is available only on supported Apple devices.';
+  }
+
+  if (status === 'missingToken') {
+    return "Apple couldn't complete account setup. Please try again.";
+  }
+
+  if (status === 'providerSetupRequired') {
+    return "Apple sign-in isn't fully set up yet. Please use email sign-up for now.";
+  }
+
+  return "We couldn't continue with Apple. Please try again.";
+}
+
 export function SignUpScreen({ onBack }: SignUpScreenProps) {
   const router = useRouter();
   const { refreshProfile } = useAuth();
@@ -77,6 +102,7 @@ export function SignUpScreen({ onBack }: SignUpScreenProps) {
   const [password, setPassword] = useState('');
   const [errors, setErrors] = useState<SignUpErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSigningInWithApple, setIsSigningInWithApple] = useState(false);
   const [submitError, setSubmitError] = useState('');
   const emailInputRef = useRef<TextInput>(null);
   const passwordInputRef = useRef<TextInput>(null);
@@ -178,6 +204,32 @@ export function SignUpScreen({ onBack }: SignUpScreenProps) {
     }
   };
 
+  const handleAppleSignInPress = async () => {
+    Keyboard.dismiss();
+    setSubmitError('');
+    setIsSigningInWithApple(true);
+
+    try {
+      const result = await signInWithApple();
+
+      if (result.status === 'canceled') {
+        return;
+      }
+
+      if (result.status !== 'success') {
+        setSubmitError(getAppleSignUpErrorMessage(result.status));
+        return;
+      }
+
+      await refreshProfile();
+      router.replace(getSignUpSuccessRoute(signUpSource));
+    } catch {
+      setSubmitError("We couldn't continue with Apple. Please try again.");
+    } finally {
+      setIsSigningInWithApple(false);
+    }
+  };
+
   return (
     <AppScreen style={styles.screen}>
       <ScrollView
@@ -260,21 +312,25 @@ export function SignUpScreen({ onBack }: SignUpScreenProps) {
 
         <View style={styles.actions}>
           <AppButton
-            disabled={isSubmitting}
+            disabled={isSubmitting || isSigningInWithApple}
             onPress={handleCreateAccountPress}
             title={isSubmitting ? 'Creating account...' : 'Create account'}
             variant="primary"
           />
           <AppButton
-            disabled={isSubmitting}
+            disabled={isSubmitting || isSigningInWithApple}
             onPress={Keyboard.dismiss}
             title="Continue with Google"
             variant="outline"
           />
           <AppButton
-            disabled={isSubmitting}
-            onPress={Keyboard.dismiss}
-            title="Continue with Apple"
+            disabled={isSubmitting || isSigningInWithApple}
+            onPress={handleAppleSignInPress}
+            title={
+              isSigningInWithApple
+                ? 'Continuing with Apple...'
+                : 'Continue with Apple'
+            }
             variant="outline"
           />
         </View>

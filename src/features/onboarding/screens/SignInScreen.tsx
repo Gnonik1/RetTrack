@@ -17,6 +17,7 @@ import { theme } from '../../../constants/theme';
 import { getStoredHasCompletedOnboardingForUser } from '../../settings/state/AppSettingsState';
 import {
   resetPassword,
+  signInWithApple,
   signInWithEmail,
 } from '../../../services/authService';
 
@@ -80,6 +81,28 @@ async function getSignInSuccessRoute(
   return '/profile';
 }
 
+function getAppleSignInErrorMessage(
+  status:
+    | 'missingToken'
+    | 'providerSetupRequired'
+    | 'unavailable'
+    | 'unknownError',
+) {
+  if (status === 'unavailable') {
+    return 'Apple sign-in is available only on supported Apple devices.';
+  }
+
+  if (status === 'missingToken') {
+    return "Apple couldn't complete sign-in. Please try again.";
+  }
+
+  if (status === 'providerSetupRequired') {
+    return "Apple sign-in isn't fully set up yet. Please use email sign-in for now.";
+  }
+
+  return "We couldn't sign you in with Apple. Please try again.";
+}
+
 export function SignInScreen({ onBack }: SignInScreenProps) {
   const router = useRouter();
   const { source } = useLocalSearchParams<{ source?: string | string[] }>();
@@ -88,6 +111,7 @@ export function SignInScreen({ onBack }: SignInScreenProps) {
   const [password, setPassword] = useState('');
   const [errors, setErrors] = useState<SignInErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSigningInWithApple, setIsSigningInWithApple] = useState(false);
   const [isResettingPassword, setIsResettingPassword] = useState(false);
   const [resetMessage, setResetMessage] = useState<ResetMessage | null>(null);
   const [submitError, setSubmitError] = useState('');
@@ -171,6 +195,34 @@ export function SignInScreen({ onBack }: SignInScreenProps) {
       );
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleAppleSignInPress = async () => {
+    Keyboard.dismiss();
+    setResetMessage(null);
+    setSubmitError('');
+    setIsSigningInWithApple(true);
+
+    try {
+      const result = await signInWithApple();
+
+      if (result.status === 'canceled') {
+        return;
+      }
+
+      if (result.status !== 'success') {
+        setSubmitError(getAppleSignInErrorMessage(result.status));
+        return;
+      }
+
+      router.replace(
+        await getSignInSuccessRoute(signInSource, result.data.user?.id),
+      );
+    } catch {
+      setSubmitError("We couldn't sign you in with Apple. Please try again.");
+    } finally {
+      setIsSigningInWithApple(false);
     }
   };
 
@@ -286,11 +338,13 @@ export function SignInScreen({ onBack }: SignInScreenProps) {
 
           <Pressable
             accessibilityRole="button"
-            disabled={isSubmitting || isResettingPassword}
+            disabled={
+              isSubmitting || isResettingPassword || isSigningInWithApple
+            }
             onPress={handleForgotPasswordPress}
             style={[
               styles.forgotButton,
-              isSubmitting || isResettingPassword
+              isSubmitting || isResettingPassword || isSigningInWithApple
                 ? styles.forgotButtonDisabled
                 : null,
             ]}
@@ -334,21 +388,31 @@ export function SignInScreen({ onBack }: SignInScreenProps) {
 
         <View style={styles.actions}>
           <AppButton
-            disabled={isSubmitting || isResettingPassword}
+            disabled={
+              isSubmitting || isResettingPassword || isSigningInWithApple
+            }
             onPress={handleSignInPress}
             title={isSubmitting ? 'Signing in...' : 'Sign in'}
             variant="primary"
           />
           <AppButton
-            disabled={isSubmitting || isResettingPassword}
+            disabled={
+              isSubmitting || isResettingPassword || isSigningInWithApple
+            }
             onPress={Keyboard.dismiss}
             title="Continue with Google"
             variant="outline"
           />
           <AppButton
-            disabled={isSubmitting || isResettingPassword}
-            onPress={Keyboard.dismiss}
-            title="Continue with Apple"
+            disabled={
+              isSubmitting || isResettingPassword || isSigningInWithApple
+            }
+            onPress={handleAppleSignInPress}
+            title={
+              isSigningInWithApple
+                ? 'Continuing with Apple...'
+                : 'Continue with Apple'
+            }
             variant="outline"
           />
         </View>

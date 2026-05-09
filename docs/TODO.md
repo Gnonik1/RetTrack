@@ -22,15 +22,43 @@
 - Clean up orphaned local photo files after Delete Purchase.
 - Review photo permissions and iOS behavior before production release.
 
-## Profile / Guest Mode
+## Profile and Settings refinement
 
+Profile should be refined later based on the saved Profile design direction:
+- Use avatar or initials.
+- Show full name and email.
+- Show signed-in/account status.
+- Show plan or usage information.
+- Keep Rate RetTrack visible and wire it to the App Store rating/review flow later.
+- Add tracked / returned / kept stats only when they come from real data.
+- Add last activity only when it is backed by real data.
+- Do not add fake stats.
 - Build signed-in Profile screen/state after real auth exists.
 - Raise the signed-in account item limit to 20 items when account state exists.
 - Preserve local guest purchases during future guest-to-account migration/sync.
-- Wire Rate RetTrack to the App Store rating/review flow later.
 
-## Settings
+Settings should be refined later without copying the friend's app structure directly.
+Use selected inspiration only:
+- softer premium background
+- grouped cards
+- Share app
+- Send feedback
+- Contact support
+- Privacy Policy
+- Terms of Use
 
+Avoid duplicating Profile content in Settings:
+- do not repeat account limits
+- do not repeat the signed-in account card
+- do not repeat Rate RetTrack if it remains in Profile
+
+Keep RetTrack's own visual identity:
+- warm cream background
+- sage / swamp-green accents
+- soft premium feel
+- do not copy the friend's blue/purple visual language
+
+Additional Settings backlog:
 - When auth/backend sync is implemented, update the Settings App info card from guest/local state to signed-in/sync state: Signed in, Purchases sync across devices, Version 1.0.
 - Consider storing currency as a separate structured field later instead of embedding it in the price string.
 - Post-MVP: Consider full app-wide dark mode after runtime theme support.
