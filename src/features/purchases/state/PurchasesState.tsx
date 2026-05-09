@@ -13,6 +13,9 @@ import {
 import { rescheduleAllPurchaseReminders } from '../../notifications/notifications';
 import {
   createRemotePurchase,
+  fetchRemotePurchaseEntryCount,
+  fetchRemotePurchases,
+  mapRemotePurchaseRowToLocalPurchase,
   resolveRemotePurchase,
   softDeleteRemotePurchase,
   updateRemotePurchase,
@@ -217,6 +220,109 @@ function getPurchaseStorageSnapshot(
   };
 }
 
+function isUnsyncedLocalPurchase(purchase: MockPurchase) {
+  return purchase.syncStatus === 'local' || purchase.syncStatus === 'error';
+}
+
+function getPurchaseIdentityValues(purchase: MockPurchase) {
+  return [purchase.id, purchase.remoteId].filter(
+    (value): value is string => Boolean(value),
+  );
+}
+
+function hasSharedPurchaseIdentity(
+  purchase: MockPurchase,
+  identityValues: Set<string>,
+) {
+  return getPurchaseIdentityValues(purchase).some((value) =>
+    identityValues.has(value),
+  );
+}
+
+function getPurchaseIdentitySet(purchases: MockPurchase[]) {
+  return new Set(purchases.flatMap(getPurchaseIdentityValues));
+}
+
+function findPurchaseBySharedIdentity(
+  purchase: MockPurchase,
+  purchases: MockPurchase[],
+) {
+  const identityValues = new Set(getPurchaseIdentityValues(purchase));
+
+  return (
+    purchases.find((candidatePurchase) =>
+      hasSharedPurchaseIdentity(candidatePurchase, identityValues),
+    ) ?? null
+  );
+}
+
+function getPurchaseWithLocalDeviceData(
+  purchase: MockPurchase,
+  localPurchases: MockPurchase[],
+) {
+  const localPurchase = findPurchaseBySharedIdentity(purchase, localPurchases);
+
+  if (!localPurchase?.photoUris?.length) {
+    return purchase;
+  }
+
+  return {
+    ...purchase,
+    photoUris: localPurchase.photoUris,
+  };
+}
+
+function mergeRemotePurchasesWithLocalUnsynced(
+  remotePurchases: MockPurchase[],
+  localPurchases: MockPurchase[],
+) {
+  const preservedLocalPurchases = localPurchases.filter(isUnsyncedLocalPurchase);
+  const preservedIdentityValues = getPurchaseIdentitySet(
+    preservedLocalPurchases,
+  );
+  const remotePurchasesWithoutPreservedLocal = remotePurchases
+    .filter(
+      (purchase) => !hasSharedPurchaseIdentity(purchase, preservedIdentityValues),
+    )
+    .map((purchase) => getPurchaseWithLocalDeviceData(purchase, localPurchases));
+
+  return [...preservedLocalPurchases, ...remotePurchasesWithoutPreservedLocal];
+}
+
+function getGuestPurchasesForAccountMigration(
+  guestPurchases: MockPurchase[],
+  accountPurchases: MockPurchase[],
+) {
+  const accountIdentityValues = getPurchaseIdentitySet(accountPurchases);
+
+  return guestPurchases
+    .filter(
+      (purchase) => !hasSharedPurchaseIdentity(purchase, accountIdentityValues),
+    )
+    .map((purchase) => ({
+      ...purchase,
+      lastSyncedAt: undefined,
+      remoteId: undefined,
+      syncStatus: 'local' as const,
+    }));
+}
+
+function getReconciledAccountPurchaseEntriesUsed({
+  localKnownEntriesUsed,
+  remoteTotalEntryCount,
+  storedEntriesUsed,
+}: {
+  localKnownEntriesUsed: number;
+  remoteTotalEntryCount: number;
+  storedEntriesUsed: number;
+}) {
+  return Math.max(
+    storedEntriesUsed,
+    remoteTotalEntryCount,
+    localKnownEntriesUsed,
+  );
+}
+
 async function persistPurchaseStorageSnapshot(
   scopeKey: string,
   snapshot: ReturnType<typeof getPurchaseStorageSnapshot>,
@@ -415,6 +521,36 @@ function getSyncErrorMetadata() {
   };
 }
 
+async function syncGuestMigrationPurchases(
+  userId: string,
+  guestPurchases: MockPurchase[],
+) {
+  return Promise.all(
+    guestPurchases.map(async (purchase) => {
+      try {
+        const { data, error } = await createRemotePurchase(userId, purchase);
+
+        if (error) {
+          return {
+            ...purchase,
+            ...getSyncErrorMetadata(),
+          };
+        }
+
+        return {
+          ...purchase,
+          ...getSyncedPurchaseMetadata(data.id),
+        };
+      } catch {
+        return {
+          ...purchase,
+          ...getSyncErrorMetadata(),
+        };
+      }
+    }),
+  );
+}
+
 export function PurchasesProvider({ children }: { children: ReactNode }) {
   const { isAuthLoading, user } = useAuth();
   const purchaseScopeKey = useMemo(
@@ -466,6 +602,70 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
         setGuestPurchaseEntriesUsed(
           scopedPurchaseSnapshot.guestPurchaseEntriesUsed,
         );
+
+        if (!signedInUserId) {
+          return;
+        }
+
+        try {
+          const { data: remoteRows, error } =
+            await fetchRemotePurchases(signedInUserId);
+
+          if (!isMounted || error) {
+            return;
+          }
+
+          const remotePurchases = remoteRows.map(
+            mapRemotePurchaseRowToLocalPurchase,
+          );
+          const mergedPurchases = mergeRemotePurchasesWithLocalUnsynced(
+            remotePurchases,
+            scopedPurchaseSnapshot.purchases,
+          );
+          const guestPurchaseSnapshot = await hydratePurchaseStorageScope(
+            GUEST_PURCHASE_SCOPE_KEY,
+          );
+          const guestPurchasesForMigration =
+            getGuestPurchasesForAccountMigration(
+              guestPurchaseSnapshot.purchases,
+              mergedPurchases,
+            );
+          const migratedGuestPurchases =
+            guestPurchasesForMigration.length > 0
+              ? await syncGuestMigrationPurchases(
+                  signedInUserId,
+                  guestPurchasesForMigration,
+                )
+              : [];
+          const accountPurchases = [
+            ...migratedGuestPurchases,
+            ...mergedPurchases,
+          ];
+          const { data: remoteTotalEntryCount } =
+            await fetchRemotePurchaseEntryCount(signedInUserId);
+          const remoteHydratedSnapshot = {
+            guestPurchaseEntriesUsed: getReconciledAccountPurchaseEntriesUsed({
+              localKnownEntriesUsed: Math.max(
+                scopedPurchaseSnapshot.purchases.length,
+                accountPurchases.length,
+              ),
+              remoteTotalEntryCount: remoteTotalEntryCount ?? remoteRows.length,
+              storedEntriesUsed: scopedPurchaseSnapshot.guestPurchaseEntriesUsed,
+            }),
+            purchases: accountPurchases,
+          };
+
+          setPurchases(remoteHydratedSnapshot.purchases);
+          setGuestPurchaseEntriesUsed(
+            remoteHydratedSnapshot.guestPurchaseEntriesUsed,
+          );
+          await persistPurchaseStorageSnapshot(
+            purchaseScopeKey,
+            remoteHydratedSnapshot,
+          );
+        } catch {
+          // Keep the scoped local cache visible if remote hydration fails.
+        }
       } catch {
         if (isMounted) {
           const emptyPurchases = getPurchasesForEmptyStorage();
@@ -486,7 +686,7 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
     return () => {
       isMounted = false;
     };
-  }, [purchaseScopeKey]);
+  }, [purchaseScopeKey, signedInUserId]);
 
   useEffect(() => {
     if (

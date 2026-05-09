@@ -337,6 +337,24 @@ export async function fetchRemotePurchases(
   };
 }
 
+export async function fetchRemotePurchaseEntryCount(
+  userId: string,
+): Promise<PurchaseSyncResult<number>> {
+  const { count, error } = await supabase
+    .from('purchases')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', userId);
+
+  if (error) {
+    return { data: null, error };
+  }
+
+  return {
+    data: count ?? 0,
+    error: null,
+  };
+}
+
 export async function createRemotePurchase(
   userId: string,
   localPurchase: MockPurchase,
