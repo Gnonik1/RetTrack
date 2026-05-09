@@ -24,6 +24,10 @@ function isResetPasswordPath(url: string) {
   return getPathFromUrl(url).includes('reset-password');
 }
 
+export function isAuthCallbackUrl(url: string) {
+  return getPathFromUrl(url).includes('auth-callback');
+}
+
 export async function createSessionFromUrl(
   url: string,
 ): Promise<AuthDeepLinkSessionResult> {

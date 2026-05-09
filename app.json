@@ -16,7 +16,10 @@
     "ios": {
       "bundleIdentifier": "com.gnonik.rettrack",
       "supportsTablet": true,
-      "usesAppleSignIn": true
+      "usesAppleSignIn": true,
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -31,7 +34,8 @@
     },
     "plugins": [
       "expo-apple-authentication",
-      "expo-router"
+      "expo-router",
+      "expo-web-browser"
     ],
     "extra": {
       "router": {},

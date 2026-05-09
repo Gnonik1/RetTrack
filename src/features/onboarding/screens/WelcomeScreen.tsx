@@ -6,14 +6,20 @@ import { AppText } from '../../../components/AppText';
 import { theme } from '../../../constants/theme';
 
 type WelcomeScreenProps = {
+  googleError?: string;
+  isContinuingWithGoogle?: boolean;
   onContinueAsGuest?: () => void;
   onContinueWithEmail?: () => void;
+  onContinueWithGoogle?: () => void;
   onSignIn?: () => void;
 };
 
 export function WelcomeScreen({
+  googleError,
+  isContinuingWithGoogle = false,
   onContinueAsGuest,
   onContinueWithEmail,
+  onContinueWithGoogle,
   onSignIn,
 }: WelcomeScreenProps) {
   return (
@@ -42,13 +48,31 @@ export function WelcomeScreen({
 
       <View style={styles.actions}>
         <AppButton title="Continue with Apple" variant="outline" />
-        <AppButton title="Continue with Google" variant="primary" />
         <AppButton
+          disabled={isContinuingWithGoogle}
+          onPress={onContinueWithGoogle}
+          title={
+            isContinuingWithGoogle
+              ? 'Continuing with Google...'
+              : 'Continue with Google'
+          }
+          variant="primary"
+        />
+        {googleError ? (
+          <View style={styles.errorCard}>
+            <AppText style={styles.errorText} variant="caption">
+              {googleError}
+            </AppText>
+          </View>
+        ) : null}
+        <AppButton
+          disabled={isContinuingWithGoogle}
           onPress={onContinueWithEmail}
           title="Continue with Email"
           variant="outline"
         />
         <AppButton
+          disabled={isContinuingWithGoogle}
           onPress={onContinueAsGuest}
           title="Continue as guest"
           variant="secondary"
@@ -56,8 +80,12 @@ export function WelcomeScreen({
 
         <Pressable
           accessibilityRole="button"
+          disabled={isContinuingWithGoogle}
           onPress={onSignIn}
-          style={styles.signInButton}
+          style={[
+            styles.signInButton,
+            isContinuingWithGoogle ? styles.signInButtonDisabled : null,
+          ]}
         >
           <View style={styles.signInRow}>
             <AppText style={styles.signInPrompt} variant="body">
@@ -131,10 +159,28 @@ const styles = StyleSheet.create({
     gap: 12,
     width: '100%',
   },
+  errorCard: {
+    backgroundColor: theme.colors.softPending,
+    borderColor: '#E4C8C1',
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: 10,
+  },
+  errorText: {
+    color: theme.colors.pending,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.medium,
+    lineHeight: 18,
+    textAlign: 'center',
+  },
   signInButton: {
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: theme.spacing.sm,
+  },
+  signInButtonDisabled: {
+    opacity: 0.7,
   },
   signInRow: {
     alignItems: 'center',

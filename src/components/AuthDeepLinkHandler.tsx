@@ -2,7 +2,10 @@ import * as Linking from 'expo-linking';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef } from 'react';
 
-import { createSessionFromUrl } from '../services/authDeepLinkService';
+import {
+  createSessionFromUrl,
+  isAuthCallbackUrl,
+} from '../services/authDeepLinkService';
 
 export function AuthDeepLinkHandler() {
   const router = useRouter();
@@ -12,7 +15,7 @@ export function AuthDeepLinkHandler() {
     let isMounted = true;
 
     const handleUrl = async (url: string | null) => {
-      if (!url || handledUrlsRef.current.has(url)) {
+      if (!url || handledUrlsRef.current.has(url) || isAuthCallbackUrl(url)) {
         return;
       }
 

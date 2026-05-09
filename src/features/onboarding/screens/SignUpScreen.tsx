@@ -16,6 +16,7 @@ import { AppTextField } from '../../../components/AppTextField';
 import { theme } from '../../../constants/theme';
 import {
   signInWithApple,
+  signInWithGoogle,
   signUpWithEmail,
 } from '../../../services/authService';
 import { useAuth } from '../../../state/AuthState';
@@ -92,6 +93,28 @@ function getAppleSignUpErrorMessage(
   return "We couldn't continue with Apple. Please try again.";
 }
 
+function getGoogleSignUpErrorMessage(
+  status:
+    | 'missingProviderUrl'
+    | 'providerSetupRequired'
+    | 'sessionExchangeFailed'
+    | 'unknownError',
+) {
+  if (status === 'providerSetupRequired') {
+    return "Google sign-in isn't fully set up yet. Please use email sign-up for now.";
+  }
+
+  if (status === 'missingProviderUrl') {
+    return "Google couldn't start account setup. Please try again.";
+  }
+
+  if (status === 'sessionExchangeFailed') {
+    return "Google sign-in couldn't finish. Please try again.";
+  }
+
+  return "We couldn't continue with Google. Please try again.";
+}
+
 export function SignUpScreen({ onBack }: SignUpScreenProps) {
   const router = useRouter();
   const { refreshProfile } = useAuth();
@@ -103,6 +126,7 @@ export function SignUpScreen({ onBack }: SignUpScreenProps) {
   const [errors, setErrors] = useState<SignUpErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSigningInWithApple, setIsSigningInWithApple] = useState(false);
+  const [isSigningInWithGoogle, setIsSigningInWithGoogle] = useState(false);
   const [submitError, setSubmitError] = useState('');
   const emailInputRef = useRef<TextInput>(null);
   const passwordInputRef = useRef<TextInput>(null);
@@ -230,6 +254,32 @@ export function SignUpScreen({ onBack }: SignUpScreenProps) {
     }
   };
 
+  const handleGoogleSignInPress = async () => {
+    Keyboard.dismiss();
+    setSubmitError('');
+    setIsSigningInWithGoogle(true);
+
+    try {
+      const result = await signInWithGoogle();
+
+      if (result.status === 'canceled') {
+        return;
+      }
+
+      if (result.status !== 'success') {
+        setSubmitError(getGoogleSignUpErrorMessage(result.status));
+        return;
+      }
+
+      await refreshProfile();
+      router.replace(getSignUpSuccessRoute(signUpSource));
+    } catch {
+      setSubmitError("We couldn't continue with Google. Please try again.");
+    } finally {
+      setIsSigningInWithGoogle(false);
+    }
+  };
+
   return (
     <AppScreen style={styles.screen}>
       <ScrollView
@@ -312,19 +362,29 @@ export function SignUpScreen({ onBack }: SignUpScreenProps) {
 
         <View style={styles.actions}>
           <AppButton
-            disabled={isSubmitting || isSigningInWithApple}
+            disabled={
+              isSubmitting || isSigningInWithApple || isSigningInWithGoogle
+            }
             onPress={handleCreateAccountPress}
             title={isSubmitting ? 'Creating account...' : 'Create account'}
             variant="primary"
           />
           <AppButton
-            disabled={isSubmitting || isSigningInWithApple}
-            onPress={Keyboard.dismiss}
-            title="Continue with Google"
+            disabled={
+              isSubmitting || isSigningInWithApple || isSigningInWithGoogle
+            }
+            onPress={handleGoogleSignInPress}
+            title={
+              isSigningInWithGoogle
+                ? 'Continuing with Google...'
+                : 'Continue with Google'
+            }
             variant="outline"
           />
           <AppButton
-            disabled={isSubmitting || isSigningInWithApple}
+            disabled={
+              isSubmitting || isSigningInWithApple || isSigningInWithGoogle
+            }
             onPress={handleAppleSignInPress}
             title={
               isSigningInWithApple

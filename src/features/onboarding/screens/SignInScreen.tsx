@@ -19,6 +19,7 @@ import {
   resetPassword,
   signInWithApple,
   signInWithEmail,
+  signInWithGoogle,
 } from '../../../services/authService';
 
 type SignInScreenProps = {
@@ -103,6 +104,28 @@ function getAppleSignInErrorMessage(
   return "We couldn't sign you in with Apple. Please try again.";
 }
 
+function getGoogleSignInErrorMessage(
+  status:
+    | 'missingProviderUrl'
+    | 'providerSetupRequired'
+    | 'sessionExchangeFailed'
+    | 'unknownError',
+) {
+  if (status === 'providerSetupRequired') {
+    return "Google sign-in isn't fully set up yet. Please use email sign-in for now.";
+  }
+
+  if (status === 'missingProviderUrl') {
+    return "Google couldn't start sign-in. Please try again.";
+  }
+
+  if (status === 'sessionExchangeFailed') {
+    return "Google sign-in couldn't finish. Please try again.";
+  }
+
+  return "We couldn't sign you in with Google. Please try again.";
+}
+
 export function SignInScreen({ onBack }: SignInScreenProps) {
   const router = useRouter();
   const { source } = useLocalSearchParams<{ source?: string | string[] }>();
@@ -112,6 +135,7 @@ export function SignInScreen({ onBack }: SignInScreenProps) {
   const [errors, setErrors] = useState<SignInErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSigningInWithApple, setIsSigningInWithApple] = useState(false);
+  const [isSigningInWithGoogle, setIsSigningInWithGoogle] = useState(false);
   const [isResettingPassword, setIsResettingPassword] = useState(false);
   const [resetMessage, setResetMessage] = useState<ResetMessage | null>(null);
   const [submitError, setSubmitError] = useState('');
@@ -223,6 +247,34 @@ export function SignInScreen({ onBack }: SignInScreenProps) {
       setSubmitError("We couldn't sign you in with Apple. Please try again.");
     } finally {
       setIsSigningInWithApple(false);
+    }
+  };
+
+  const handleGoogleSignInPress = async () => {
+    Keyboard.dismiss();
+    setResetMessage(null);
+    setSubmitError('');
+    setIsSigningInWithGoogle(true);
+
+    try {
+      const result = await signInWithGoogle();
+
+      if (result.status === 'canceled') {
+        return;
+      }
+
+      if (result.status !== 'success') {
+        setSubmitError(getGoogleSignInErrorMessage(result.status));
+        return;
+      }
+
+      router.replace(
+        await getSignInSuccessRoute(signInSource, result.data.session?.user.id),
+      );
+    } catch {
+      setSubmitError("We couldn't sign you in with Google. Please try again.");
+    } finally {
+      setIsSigningInWithGoogle(false);
     }
   };
 
@@ -339,12 +391,18 @@ export function SignInScreen({ onBack }: SignInScreenProps) {
           <Pressable
             accessibilityRole="button"
             disabled={
-              isSubmitting || isResettingPassword || isSigningInWithApple
+              isSubmitting ||
+              isResettingPassword ||
+              isSigningInWithApple ||
+              isSigningInWithGoogle
             }
             onPress={handleForgotPasswordPress}
             style={[
               styles.forgotButton,
-              isSubmitting || isResettingPassword || isSigningInWithApple
+              isSubmitting ||
+              isResettingPassword ||
+              isSigningInWithApple ||
+              isSigningInWithGoogle
                 ? styles.forgotButtonDisabled
                 : null,
             ]}
@@ -389,7 +447,10 @@ export function SignInScreen({ onBack }: SignInScreenProps) {
         <View style={styles.actions}>
           <AppButton
             disabled={
-              isSubmitting || isResettingPassword || isSigningInWithApple
+              isSubmitting ||
+              isResettingPassword ||
+              isSigningInWithApple ||
+              isSigningInWithGoogle
             }
             onPress={handleSignInPress}
             title={isSubmitting ? 'Signing in...' : 'Sign in'}
@@ -397,15 +458,25 @@ export function SignInScreen({ onBack }: SignInScreenProps) {
           />
           <AppButton
             disabled={
-              isSubmitting || isResettingPassword || isSigningInWithApple
+              isSubmitting ||
+              isResettingPassword ||
+              isSigningInWithApple ||
+              isSigningInWithGoogle
             }
-            onPress={Keyboard.dismiss}
-            title="Continue with Google"
+            onPress={handleGoogleSignInPress}
+            title={
+              isSigningInWithGoogle
+                ? 'Continuing with Google...'
+                : 'Continue with Google'
+            }
             variant="outline"
           />
           <AppButton
             disabled={
-              isSubmitting || isResettingPassword || isSigningInWithApple
+              isSubmitting ||
+              isResettingPassword ||
+              isSigningInWithApple ||
+              isSigningInWithGoogle
             }
             onPress={handleAppleSignInPress}
             title={
