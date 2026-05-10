@@ -1,9 +1,16 @@
+import { useEffect, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
+  FlatList,
   Image,
+  Modal,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
   Pressable,
   ScrollView,
   StyleSheet,
+  useWindowDimensions,
   View,
 } from 'react-native';
 
@@ -124,13 +131,127 @@ function getResolvedStatusText(purchase: MockPurchase) {
   return purchase.completedText ?? statusLabel;
 }
 
+function getUniquePhotoUris(photoUris?: string[]) {
+  const seenPhotoUris = new Set<string>();
+
+  return (photoUris ?? [])
+    .map((photoUri) => photoUri.trim())
+    .filter((photoUri) => {
+      if (!photoUri || seenPhotoUris.has(photoUri)) {
+        return false;
+      }
+
+      seenPhotoUris.add(photoUri);
+      return true;
+    });
+}
+
+function isLocalPreviewUri(photoUri: string) {
+  return photoUri.startsWith('file:') || photoUri.startsWith('content:');
+}
+
 export function PurchaseDetailsScreen({
   itemId,
   onBack,
   onEdit,
 }: PurchaseDetailsScreenProps) {
   const { deletePurchase, findPurchaseById, resolvePurchase } = usePurchases();
+  const { width: windowWidth } = useWindowDimensions();
+  const previewListRef = useRef<FlatList<string>>(null);
+  const isPhotoPreviewVisibleRef = useRef(false);
+  const [isPhotoPreviewVisible, setIsPhotoPreviewVisible] = useState(false);
+  const [previewPhotoIndex, setPreviewPhotoIndex] = useState<number | null>(
+    null,
+  );
+  const [loadedPreviewPhotoUris, setLoadedPreviewPhotoUris] = useState<
+    string[]
+  >([]);
   const purchaseDetails = findPurchaseById(itemId);
+  const photoUris = getUniquePhotoUris(purchaseDetails?.photoUris);
+  const previewPhotoPosition =
+    previewPhotoIndex === null ? 1 : previewPhotoIndex + 1;
+  const photoUriKey = photoUris.join('|');
+  const markPreviewPhotoLoaded = (photoUri: string) => {
+    setLoadedPreviewPhotoUris((currentPhotoUris) =>
+      currentPhotoUris.includes(photoUri)
+        ? currentPhotoUris
+        : [...currentPhotoUris, photoUri],
+    );
+  };
+  const warmPreviewPhoto = (photoUri?: string) => {
+    if (!photoUri || isLocalPreviewUri(photoUri)) {
+      return;
+    }
+
+    Image.prefetch(photoUri).catch(() => undefined);
+  };
+  const openPhotoPreview = (photoIndex: number) => {
+    isPhotoPreviewVisibleRef.current = true;
+    setPreviewPhotoIndex(
+      Math.min(Math.max(photoIndex, 0), photoUris.length - 1),
+    );
+    setIsPhotoPreviewVisible(true);
+  };
+  const closePhotoPreview = () => {
+    isPhotoPreviewVisibleRef.current = false;
+    setIsPhotoPreviewVisible(false);
+    setPreviewPhotoIndex(null);
+  };
+  const handlePreviewScrollEnd = (
+    event: NativeSyntheticEvent<NativeScrollEvent>,
+  ) => {
+    if (!isPhotoPreviewVisibleRef.current || !photoUris.length) {
+      return;
+    }
+
+    const pageWidth = event.nativeEvent.layoutMeasurement.width || windowWidth;
+    const nextIndex = Math.round(event.nativeEvent.contentOffset.x / pageWidth);
+
+    setPreviewPhotoIndex(
+      Math.min(Math.max(nextIndex, 0), photoUris.length - 1),
+    );
+  };
+
+  useEffect(() => {
+    let isMounted = true;
+    const localPhotoUris = photoUris.filter(isLocalPreviewUri);
+
+    if (localPhotoUris.length) {
+      setLoadedPreviewPhotoUris((currentPhotoUris) => [
+        ...currentPhotoUris,
+        ...localPhotoUris.filter(
+          (photoUri) => !currentPhotoUris.includes(photoUri),
+        ),
+      ]);
+    }
+
+    photoUris.forEach((photoUri) => {
+      Image.prefetch(photoUri)
+        .then(() => {
+          if (isMounted) {
+            markPreviewPhotoLoaded(photoUri);
+          }
+        })
+        .catch(() => undefined);
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [photoUriKey]);
+
+  useEffect(() => {
+    if (!isPhotoPreviewVisible || previewPhotoIndex === null) {
+      return;
+    }
+
+    requestAnimationFrame(() => {
+      previewListRef.current?.scrollToIndex({
+        animated: false,
+        index: previewPhotoIndex,
+      });
+    });
+  }, [isPhotoPreviewVisible, previewPhotoIndex, windowWidth]);
 
   if (!purchaseDetails) {
     return (
@@ -181,7 +302,6 @@ export function PurchaseDetailsScreen({
   const storeMetaLine = purchaseDetails.productDomain
     ? `${purchaseDetails.store} · ${purchaseDetails.productDomain}`
     : purchaseDetails.store;
-  const photoUri = purchaseDetails.photoUris?.[0];
   const resolvedStatusText = getResolvedStatusText(purchaseDetails);
   const infoItems = [
     {
@@ -269,12 +389,53 @@ export function PurchaseDetailsScreen({
       >
         <View style={styles.detailsCard}>
           <View style={styles.photoPlaceholder}>
-            {photoUri ? (
-              <Image
-                resizeMode="cover"
-                source={{ uri: photoUri }}
-                style={styles.photoImage}
-              />
+            {photoUris.length === 1 ? (
+              <Pressable
+                accessibilityLabel="Open photo preview"
+                accessibilityRole="button"
+                onPressIn={() => warmPreviewPhoto(photoUris[0])}
+                onPress={() => openPhotoPreview(0)}
+                style={({ pressed }) => [
+                  styles.photoPressable,
+                  pressed && styles.controlPressed,
+                ]}
+              >
+                <Image
+                  resizeMode="cover"
+                  source={{ uri: photoUris[0] }}
+                  style={styles.photoImage}
+                />
+              </Pressable>
+            ) : photoUris.length > 1 ? (
+              <>
+                <View style={styles.photoCountBadge}>
+                  <AppText style={styles.photoCountBadgeText} variant="caption">
+                    {photoUris.length} photos
+                  </AppText>
+                </View>
+
+                <View style={styles.photoStrip}>
+                  {photoUris.map((photoUri, index) => (
+                    <Pressable
+                      accessibilityLabel={`Open photo ${index + 1} of ${photoUris.length}`}
+                      accessibilityRole="button"
+                      key={`${photoUri}-${index}`}
+                      onPressIn={() => warmPreviewPhoto(photoUri)}
+                      onPress={() => openPhotoPreview(index)}
+                      style={({ pressed }) => [
+                        styles.photoStripItem,
+                        pressed && styles.controlPressed,
+                      ]}
+                    >
+                      <Image
+                        resizeMode="cover"
+                        source={{ uri: photoUri }}
+                        style={styles.photoStripImage}
+                      />
+                    </Pressable>
+                  ))}
+                </View>
+              </>
             ) : (
               <>
                 <DetailsProductIcon />
@@ -395,6 +556,95 @@ export function PurchaseDetailsScreen({
           </AppText>
         </Pressable>
       </View>
+
+      <Modal
+        animationType="fade"
+        onRequestClose={closePhotoPreview}
+        transparent
+        visible={isPhotoPreviewVisible && photoUris.length > 0}
+      >
+        <View style={styles.photoPreviewOverlay}>
+          <View style={styles.photoPreviewHeader}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={(event) => {
+                event.stopPropagation();
+                closePhotoPreview();
+              }}
+              style={({ pressed }) => [
+                styles.photoPreviewClose,
+                pressed && styles.controlPressed,
+              ]}
+            >
+              <AppText style={styles.photoPreviewCloseText} variant="button">
+                Close
+              </AppText>
+            </Pressable>
+
+            <AppText style={styles.photoPreviewCount} variant="caption">
+              {previewPhotoPosition} of {photoUris.length}
+            </AppText>
+          </View>
+
+          <FlatList
+            data={photoUris}
+            getItemLayout={(_, index) => ({
+              index,
+              length: windowWidth,
+              offset: windowWidth * index,
+            })}
+            horizontal
+            initialScrollIndex={previewPhotoIndex ?? 0}
+            keyExtractor={(photoUri, index) => `${photoUri}-${index}`}
+            onMomentumScrollEnd={handlePreviewScrollEnd}
+            onScrollToIndexFailed={({ index }) => {
+              requestAnimationFrame(() => {
+                previewListRef.current?.scrollToOffset({
+                  animated: false,
+                  offset: windowWidth * index,
+                });
+              });
+            }}
+            pagingEnabled
+            ref={previewListRef}
+            renderItem={({ item }) => {
+              const hasLoadedPhoto = loadedPreviewPhotoUris.includes(item);
+
+              return (
+                <View style={[styles.photoPreviewPage, { width: windowWidth }]}>
+                  {!hasLoadedPhoto ? (
+                    <View style={styles.photoPreviewLoading}>
+                      <ActivityIndicator color="#FAFBF5" />
+                    </View>
+                  ) : null}
+                  <Image
+                    onError={() => markPreviewPhotoLoaded(item)}
+                    onLoadEnd={() => markPreviewPhotoLoaded(item)}
+                    resizeMode="contain"
+                    source={{ uri: item }}
+                    style={styles.photoPreviewImage}
+                  />
+                </View>
+              );
+            }}
+            showsHorizontalScrollIndicator={false}
+          />
+
+          {photoUris.length > 1 ? (
+            <View style={styles.photoPreviewDots}>
+              {photoUris.map((photoUri, index) => (
+                <View
+                  key={`${photoUri}-${index}`}
+                  style={[
+                    styles.photoPreviewDot,
+                    index === previewPhotoIndex && styles.photoPreviewDotActive,
+                  ]}
+                />
+              ))}
+            </View>
+          ) : null}
+        </View>
+      </Modal>
     </AppScreen>
   );
 }
@@ -526,11 +776,119 @@ const styles = StyleSheet.create({
     height: '100%',
     width: '100%',
   },
+  photoPressable: {
+    height: '100%',
+    width: '100%',
+  },
   photoPlaceholderText: {
     color: '#7A846F',
     fontSize: 12,
     fontWeight: theme.fontWeight.medium,
     lineHeight: 16,
+  },
+  photoCountBadge: {
+    backgroundColor: 'rgba(250, 251, 245, 0.92)',
+    borderColor: 'rgba(63, 81, 58, 0.12)',
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    position: 'absolute',
+    right: 12,
+    top: 12,
+    zIndex: 2,
+  },
+  photoCountBadgeText: {
+    color: theme.colors.greenDark,
+    fontSize: 11,
+    fontWeight: theme.fontWeight.semibold,
+    lineHeight: 14,
+  },
+  photoPreviewClose: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(250, 251, 245, 0.92)',
+    borderRadius: theme.radius.pill,
+    justifyContent: 'center',
+    minHeight: 40,
+    paddingHorizontal: theme.spacing.md,
+  },
+  photoPreviewCloseText: {
+    color: theme.colors.greenDark,
+    fontSize: 14,
+    fontWeight: theme.fontWeight.semibold,
+    lineHeight: 18,
+  },
+  photoPreviewCount: {
+    color: '#FAFBF5',
+    fontSize: 13,
+    fontWeight: theme.fontWeight.semibold,
+    lineHeight: 18,
+  },
+  photoPreviewHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    left: theme.spacing.lg,
+    position: 'absolute',
+    right: theme.spacing.lg,
+    top: 58,
+    zIndex: 2,
+  },
+  photoPreviewImage: {
+    height: '100%',
+    width: '100%',
+  },
+  photoPreviewDot: {
+    backgroundColor: 'rgba(250, 251, 245, 0.34)',
+    borderRadius: theme.radius.pill,
+    height: 6,
+    width: 6,
+  },
+  photoPreviewDotActive: {
+    backgroundColor: '#FAFBF5',
+    width: 18,
+  },
+  photoPreviewDots: {
+    alignSelf: 'center',
+    bottom: 34,
+    flexDirection: 'row',
+    gap: 7,
+    position: 'absolute',
+  },
+  photoPreviewLoading: {
+    alignItems: 'center',
+    bottom: 0,
+    justifyContent: 'center',
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+  },
+  photoPreviewOverlay: {
+    backgroundColor: 'rgba(24, 31, 24, 0.94)',
+    flex: 1,
+    justifyContent: 'center',
+  },
+  photoPreviewPage: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  photoStrip: {
+    alignSelf: 'stretch',
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+    padding: 10,
+  },
+  photoStripItem: {
+    borderRadius: 20,
+    flex: 1,
+    overflow: 'hidden',
+  },
+  photoStripImage: {
+    borderRadius: 20,
+    height: 194,
+    width: '100%',
   },
   productIconShell: {
     alignItems: 'center',

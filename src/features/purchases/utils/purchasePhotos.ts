@@ -9,13 +9,19 @@ type PurchasePhotoResult =
       status: 'cancelled' | 'denied' | 'error';
     }
   | {
+      assets: PurchasePhotoDraft[];
       status: 'selected';
-    } & PurchasePhotoDraft;
+    };
 
 export type PurchasePhotoDraft = {
   fileName?: string | null;
   mimeType?: string;
   uri: string;
+};
+
+type PurchasePhotoPickerOptions = {
+  allowsMultipleSelection?: boolean;
+  selectionLimit?: number;
 };
 
 function getPurchasePhotoDirectory() {
@@ -99,7 +105,10 @@ async function ensureMediaLibraryPermission() {
   return nextPermission.granted;
 }
 
-export async function pickPurchasePhotoDraft(): Promise<PurchasePhotoResult> {
+export async function pickPurchasePhotoDraft({
+  allowsMultipleSelection = false,
+  selectionLimit,
+}: PurchasePhotoPickerOptions = {}): Promise<PurchasePhotoResult> {
   try {
     const hasPermission = await ensureMediaLibraryPermission();
 
@@ -109,12 +118,24 @@ export async function pickPurchasePhotoDraft(): Promise<PurchasePhotoResult> {
       };
     }
 
-    const pickerResult = await ImagePicker.launchImageLibraryAsync({
-      allowsEditing: false,
-      allowsMultipleSelection: false,
+    const pickerOptions: ImagePicker.ImagePickerOptions = {
+      allowsMultipleSelection,
       mediaTypes: ['images'],
+      preferredAssetRepresentationMode:
+        ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
       quality: 0.8,
-    });
+    };
+
+    if (allowsMultipleSelection) {
+      pickerOptions.orderedSelection = true;
+      pickerOptions.selectionLimit = selectionLimit;
+    } else {
+      pickerOptions.allowsEditing = false;
+    }
+
+    const pickerResult = await ImagePicker.launchImageLibraryAsync(
+      pickerOptions,
+    );
 
     if (pickerResult.canceled) {
       return {
@@ -122,19 +143,23 @@ export async function pickPurchasePhotoDraft(): Promise<PurchasePhotoResult> {
       };
     }
 
-    const selectedAsset = pickerResult.assets[0];
+    const selectedAssets = pickerResult.assets
+      .map((asset) => ({
+        fileName: asset.fileName,
+        mimeType: asset.mimeType,
+        uri: asset.uri,
+      }))
+      .filter((asset) => Boolean(asset.uri));
 
-    if (!selectedAsset?.uri) {
+    if (!selectedAssets.length) {
       return {
         status: 'cancelled',
       };
     }
 
     return {
-      fileName: selectedAsset.fileName,
-      mimeType: selectedAsset.mimeType,
+      assets: selectedAssets,
       status: 'selected',
-      uri: selectedAsset.uri,
     };
   } catch {
     return {

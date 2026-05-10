@@ -8,7 +8,10 @@ export type MockPurchase = {
   days: string;
   id: string;
   itemName: string;
+  lastPhotoSyncedAt?: string;
   pendingAt?: number;
+  photoRemotePaths?: Array<string | null>;
+  photoSyncStatus?: PurchaseSyncStatus;
   photoUris?: string[];
   price?: string;
   productDomain?: string;

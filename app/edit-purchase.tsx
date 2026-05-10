@@ -7,10 +7,12 @@ import { AppText } from '../src/components/AppText';
 import { theme } from '../src/constants/theme';
 import { AddFirstPurchaseScreen } from '../src/features/purchases/screens/AddFirstPurchaseScreen';
 import { usePurchases } from '../src/features/purchases/state/PurchasesState';
+import { useAuth } from '../src/state/AuthState';
 
 export default function EditPurchaseRoute() {
   const router = useRouter();
   const { itemId } = useLocalSearchParams<{ itemId?: string }>();
+  const { isAuthenticated } = useAuth();
   const { findPurchaseById, updatePurchase } = usePurchases();
   const purchaseDetails = findPurchaseById(itemId);
 
@@ -57,6 +59,7 @@ export default function EditPurchaseRoute() {
   return (
     <AddFirstPurchaseScreen
       initialValues={purchaseDetails}
+      isSignedIn={isAuthenticated}
       key={purchaseDetails.id}
       mode="editPurchase"
       onBack={returnToDetails}

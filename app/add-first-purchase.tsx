@@ -34,6 +34,7 @@ export default function AddFirstPurchaseRoute() {
       mode="firstPurchase"
       isAccountItemLimitReached={isAccountItemLimitReached}
       isGuestItemLimitReached={isGuestItemLimitReached}
+      isSignedIn={isAuthenticated}
       onBack={handleBack}
       onLimitSignUp={() => router.push('/sign-up?source=limit')}
       onSaveItem={(input) => {

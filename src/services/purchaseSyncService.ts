@@ -381,11 +381,12 @@ export async function updateRemotePurchase(
   localPurchase: MockPurchase,
 ): Promise<PurchaseSyncResult<SupabasePurchaseRow>> {
   const payload = mapLocalPurchaseToRemoteUpdatePayload(localPurchase);
+  const purchaseId = localPurchase.remoteId ?? localPurchase.id;
   const { data, error } = await supabase
     .from('purchases')
     .update(payload)
     .eq('user_id', userId)
-    .eq('client_local_id', localPurchase.id)
+    .or(`id.eq.${purchaseId},client_local_id.eq.${localPurchase.id}`)
     .is('deleted_at', null)
     .select('*')
     .single();

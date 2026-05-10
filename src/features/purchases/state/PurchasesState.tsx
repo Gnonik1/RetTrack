@@ -20,8 +20,14 @@ import {
   softDeleteRemotePurchase,
   updateRemotePurchase,
 } from '../../../services/purchaseSyncService';
+import {
+  fetchPurchasePhotos,
+  getSignedPhotoUrls,
+  syncPurchasePhotos,
+  type SupabasePurchasePhotoRow,
+} from '../../../services/purchasePhotoSyncService';
 import { useAuth } from '../../../state/AuthState';
-import { GUEST_PHOTO_LIMIT } from '../constants';
+import { ACCOUNT_PHOTO_LIMIT, GUEST_PHOTO_LIMIT } from '../constants';
 import {
   getMockPurchaseById,
   mockPurchases,
@@ -45,6 +51,7 @@ export type ResolvedPurchaseStatus = Extract<
 export type AddPurchaseInput = {
   comment?: string;
   itemName: string;
+  photoRemotePaths?: Array<string | null>;
   photoUris?: string[];
   price?: string;
   purchaseDateISO?: string;
@@ -126,6 +133,18 @@ function isOptionalStringArray(value: unknown) {
   );
 }
 
+function isOptionalNullableStringArray(value: unknown) {
+  return (
+    value === undefined ||
+    (Array.isArray(value) &&
+      value.every((item) => item === null || typeof item === 'string'))
+  );
+}
+
+function isLocalPhotoUri(value: string) {
+  return value.startsWith('file:') || value.startsWith('content:');
+}
+
 function isStoredPurchase(value: unknown): value is MockPurchase {
   if (!isObjectRecord(value)) {
     return false;
@@ -140,6 +159,8 @@ function isStoredPurchase(value: unknown): value is MockPurchase {
     isPurchaseStatus(value.status) &&
     isOptionalString(value.comment) &&
     isOptionalString(value.completedText) &&
+    isOptionalNullableStringArray(value.photoRemotePaths) &&
+    isOptionalPurchaseSyncStatus(value.photoSyncStatus) &&
     isOptionalStringArray(value.photoUris) &&
     isOptionalString(value.price) &&
     isOptionalString(value.productDomain) &&
@@ -153,6 +174,7 @@ function isStoredPurchase(value: unknown): value is MockPurchase {
     isOptionalNumber(value.createdAt) &&
     isOptionalNumber(value.resolvedAt) &&
     isOptionalPurchaseSyncStatus(value.syncStatus) &&
+    isOptionalString(value.lastPhotoSyncedAt) &&
     isOptionalString(value.lastSyncedAt)
   );
 }
@@ -266,8 +288,15 @@ function getPurchaseWithLocalDeviceData(
     return purchase;
   }
 
+  const hasLocalDevicePhoto = localPurchase.photoUris.some(isLocalPhotoUri);
+
+  if (!hasLocalDevicePhoto) {
+    return purchase;
+  }
+
   return {
     ...purchase,
+    photoRemotePaths: localPurchase.photoRemotePaths ?? purchase.photoRemotePaths,
     photoUris: localPurchase.photoUris,
   };
 }
@@ -347,13 +376,178 @@ function compactText(value?: string) {
   return trimmedValue ? trimmedValue : undefined;
 }
 
-function compactPhotoUris(photoUris?: string[]) {
+function getPhotoLimit(userId?: string | null) {
+  return userId ? ACCOUNT_PHOTO_LIMIT : GUEST_PHOTO_LIMIT;
+}
+
+function compactPhotoUris(photoUris: string[] | undefined, photoLimit: number) {
   const compactUris = photoUris
     ?.map((photoUri) => photoUri.trim())
     .filter(Boolean)
-    .slice(0, GUEST_PHOTO_LIMIT);
+    .slice(0, photoLimit);
 
   return compactUris?.length ? compactUris : undefined;
+}
+
+function getAlignedPhotoRemotePaths(
+  photoRemotePaths: Array<string | null | undefined> | undefined,
+  photoCount: number,
+) {
+  return Array.from(
+    { length: photoCount },
+    (_, index) => photoRemotePaths?.[index] ?? null,
+  );
+}
+
+function areStringArraysEqual(firstValues?: string[], secondValues?: string[]) {
+  const first = firstValues ?? [];
+  const second = secondValues ?? [];
+
+  return (
+    first.length === second.length &&
+    first.every((value, index) => value === second[index])
+  );
+}
+
+function areNullableStringArraysEqual(
+  firstValues?: Array<string | null>,
+  secondValues?: Array<string | null>,
+) {
+  const first = firstValues ?? [];
+  const second = secondValues ?? [];
+
+  return (
+    first.length === second.length &&
+    first.every((value, index) => value === second[index])
+  );
+}
+
+function compactPhotoRemotePaths(
+  photoRemotePaths: Array<string | null | undefined> | undefined,
+  photoCount: number,
+  shouldKeepNullPaths = false,
+) {
+  if (!photoCount) {
+    return undefined;
+  }
+
+  const compactRemotePaths = getAlignedPhotoRemotePaths(
+    photoRemotePaths,
+    photoCount,
+  );
+
+  return shouldKeepNullPaths || compactRemotePaths.some(Boolean)
+    ? compactRemotePaths
+    : undefined;
+}
+
+function getPreservedPhotoRemotePaths(
+  previousPurchase: MockPurchase,
+  nextPhotoUris?: string[],
+  submittedPhotoRemotePaths?: Array<string | null>,
+) {
+  const previousPhotoUris = previousPurchase.photoUris ?? [];
+  const previousRemotePaths = previousPurchase.photoRemotePaths ?? [];
+  const nextRemotePaths = nextPhotoUris?.map((photoUri) => {
+    const matchingPreviousIndex = previousPhotoUris.findIndex(
+      (previousPhotoUri) => previousPhotoUri === photoUri,
+    );
+
+    return matchingPreviousIndex >= 0
+      ? previousRemotePaths[matchingPreviousIndex]
+      : null;
+  });
+
+  if (!nextPhotoUris?.length) {
+    return undefined;
+  }
+
+  const preservedRemotePaths = nextPhotoUris.map((_, index) => {
+    const submittedRemotePath = submittedPhotoRemotePaths?.[index];
+
+    if (submittedRemotePath) {
+      return submittedRemotePath;
+    }
+
+    if (submittedPhotoRemotePaths && submittedRemotePath === null) {
+      return null;
+    }
+
+    return nextRemotePaths?.[index] ?? null;
+  });
+
+  return submittedPhotoRemotePaths || preservedRemotePaths.some(Boolean)
+    ? preservedRemotePaths
+    : undefined;
+}
+
+function getPhotoRowsByPurchaseId(photoRows: SupabasePurchasePhotoRow[]) {
+  const rowsByPurchaseId = new Map<string, SupabasePurchasePhotoRow[]>();
+
+  photoRows.forEach((photoRow) => {
+    const currentRows = rowsByPurchaseId.get(photoRow.purchase_id) ?? [];
+
+    rowsByPurchaseId.set(photoRow.purchase_id, [...currentRows, photoRow]);
+  });
+
+  return rowsByPurchaseId;
+}
+
+function getCurrentAccountPhotoRows(photoRows: SupabasePurchasePhotoRow[]) {
+  const usedPositions = new Set<number>();
+  const currentRows: SupabasePurchasePhotoRow[] = [];
+  const sortedPhotoRows = [...photoRows].sort((firstRow, secondRow) => {
+    if (firstRow.position !== secondRow.position) {
+      return firstRow.position - secondRow.position;
+    }
+
+    return firstRow.storage_path.localeCompare(secondRow.storage_path);
+  });
+
+  for (const photoRow of sortedPhotoRows) {
+    if (currentRows.length >= ACCOUNT_PHOTO_LIMIT) {
+      break;
+    }
+
+    if (usedPositions.has(photoRow.position)) {
+      continue;
+    }
+
+    usedPositions.add(photoRow.position);
+    currentRows.push(photoRow);
+  }
+
+  return currentRows;
+}
+
+function getPurchaseWithRemotePhotoData(
+  purchase: MockPurchase,
+  photoRows: SupabasePurchasePhotoRow[] | undefined,
+  signedUrlByPath: Map<string, string>,
+) {
+  if (!photoRows?.length) {
+    return purchase;
+  }
+
+  const currentPhotoRows = getCurrentAccountPhotoRows(photoRows);
+  const hasStaleRemotePhotoRows = currentPhotoRows.length < photoRows.length;
+  const photoRemotePaths = currentPhotoRows.map(
+    (photoRow) => photoRow.storage_path,
+  );
+  const photoUris = photoRemotePaths
+    .map((storagePath) => signedUrlByPath.get(storagePath))
+    .filter((value): value is string => Boolean(value));
+  const hasCompleteCurrentPhotoUris =
+    photoUris.length === photoRemotePaths.length;
+
+  return {
+    ...purchase,
+    photoRemotePaths,
+    photoUris: photoUris.length ? photoUris : purchase.photoUris,
+    photoSyncStatus: hasStaleRemotePhotoRows && hasCompleteCurrentPhotoUris
+      ? ('error' as const)
+      : ('synced' as const),
+  };
 }
 
 function getLocalPurchaseId(itemName: string, createdAt: number) {
@@ -521,6 +715,49 @@ function getSyncErrorMetadata() {
   };
 }
 
+function getPhotoSyncMetadata(
+  photoRows: SupabasePurchasePhotoRow[],
+  didError: boolean,
+) {
+  return {
+    lastPhotoSyncedAt: didError ? undefined : new Date().toISOString(),
+    photoRemotePaths: photoRows.length
+      ? photoRows.map((photoRow) => photoRow.storage_path)
+      : undefined,
+    photoSyncStatus: didError ? ('error' as const) : ('synced' as const),
+  };
+}
+
+function hasLocalPhotoUris(purchase: MockPurchase) {
+  return Boolean(purchase.photoUris?.some(isLocalPhotoUri));
+}
+
+function shouldSyncLocalPurchasePhotos(purchase: MockPurchase) {
+  if (!purchase.remoteId) {
+    return false;
+  }
+
+  const photoUriCount = purchase.photoUris?.length ?? 0;
+  const remotePathCount =
+    purchase.photoRemotePaths?.filter((storagePath) => Boolean(storagePath))
+      .length ?? 0;
+
+  if (
+    purchase.photoSyncStatus === 'error' ||
+    purchase.photoSyncStatus === 'local'
+  ) {
+    return true;
+  }
+
+  if (!hasLocalPhotoUris(purchase)) {
+    return false;
+  }
+
+  return (
+    purchase.photoSyncStatus !== 'synced' || remotePathCount < photoUriCount
+  );
+}
+
 async function syncGuestMigrationPurchases(
   userId: string,
   guestPurchases: MockPurchase[],
@@ -537,14 +774,59 @@ async function syncGuestMigrationPurchases(
           };
         }
 
+        const photoSyncSummary = await syncPurchasePhotos({
+          photoUris: purchase.photoUris,
+          purchaseId: data.id,
+          userId,
+        });
+
         return {
           ...purchase,
           ...getSyncedPurchaseMetadata(data.id),
+          ...getPhotoSyncMetadata(
+            photoSyncSummary.rows,
+            photoSyncSummary.didError,
+          ),
         };
       } catch {
         return {
           ...purchase,
           ...getSyncErrorMetadata(),
+        };
+      }
+    }),
+  );
+}
+
+async function syncAccountLocalPurchasePhotos(
+  userId: string,
+  accountPurchases: MockPurchase[],
+) {
+  return Promise.all(
+    accountPurchases.map(async (purchase) => {
+      if (!shouldSyncLocalPurchasePhotos(purchase) || !purchase.remoteId) {
+        return purchase;
+      }
+
+      try {
+        const photoSyncSummary = await syncPurchasePhotos({
+          existingStoragePaths: purchase.photoRemotePaths,
+          photoUris: purchase.photoUris,
+          purchaseId: purchase.remoteId,
+          userId,
+        });
+
+        return {
+          ...purchase,
+          ...getPhotoSyncMetadata(
+            photoSyncSummary.rows,
+            photoSyncSummary.didError,
+          ),
+        };
+      } catch {
+        return {
+          ...purchase,
+          photoSyncStatus: 'error' as const,
         };
       }
     }),
@@ -615,8 +897,23 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
             return;
           }
 
-          const remotePurchases = remoteRows.map(
-            mapRemotePurchaseRowToLocalPurchase,
+          const purchaseIds = remoteRows.map((remoteRow) => remoteRow.id);
+          const { data: remotePhotoRows } = await fetchPurchasePhotos(
+            signedInUserId,
+            purchaseIds,
+          );
+          const signedUrlByPath = await getSignedPhotoUrls(
+            (remotePhotoRows ?? []).map((photoRow) => photoRow.storage_path),
+          );
+          const photoRowsByPurchaseId = getPhotoRowsByPurchaseId(
+            remotePhotoRows ?? [],
+          );
+          const remotePurchases = remoteRows.map((remoteRow) =>
+            getPurchaseWithRemotePhotoData(
+              mapRemotePurchaseRowToLocalPurchase(remoteRow),
+              photoRowsByPurchaseId.get(remoteRow.id),
+              signedUrlByPath,
+            ),
           );
           const mergedPurchases = mergeRemotePurchasesWithLocalUnsynced(
             remotePurchases,
@@ -641,18 +938,23 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
             ...migratedGuestPurchases,
             ...mergedPurchases,
           ];
+          const accountPurchasesWithSyncedPhotos =
+            await syncAccountLocalPurchasePhotos(
+              signedInUserId,
+              accountPurchases,
+            );
           const { data: remoteTotalEntryCount } =
             await fetchRemotePurchaseEntryCount(signedInUserId);
           const remoteHydratedSnapshot = {
             guestPurchaseEntriesUsed: getReconciledAccountPurchaseEntriesUsed({
               localKnownEntriesUsed: Math.max(
                 scopedPurchaseSnapshot.purchases.length,
-                accountPurchases.length,
+                accountPurchasesWithSyncedPhotos.length,
               ),
               remoteTotalEntryCount: remoteTotalEntryCount ?? remoteRows.length,
               storedEntriesUsed: scopedPurchaseSnapshot.guestPurchaseEntriesUsed,
             }),
-            purchases: accountPurchases,
+            purchases: accountPurchasesWithSyncedPhotos,
           };
 
           setPurchases(remoteHydratedSnapshot.purchases);
@@ -762,6 +1064,30 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  const markPurchasePhotoSyncMetadata = useCallback(
+    (
+      itemId: string,
+      metadata: Partial<
+        Pick<
+          MockPurchase,
+          'lastPhotoSyncedAt' | 'photoRemotePaths' | 'photoSyncStatus'
+        >
+      >,
+    ) => {
+      setPurchases((currentPurchases) =>
+        currentPurchases.map((purchase) =>
+          purchase.id === itemId
+            ? {
+                ...purchase,
+                ...metadata,
+              }
+            : purchase,
+        ),
+      );
+    },
+    [],
+  );
+
   const syncCreatedPurchase = useCallback(
     async (localPurchase: MockPurchase) => {
       if (!signedInUserId) {
@@ -783,11 +1109,26 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
           localPurchase.id,
           getSyncedPurchaseMetadata(data.id),
         );
+
+        const photoSyncSummary = await syncPurchasePhotos({
+          existingStoragePaths: localPurchase.photoRemotePaths,
+          photoUris: localPurchase.photoUris,
+          purchaseId: data.id,
+          userId: signedInUserId,
+        });
+
+        markPurchasePhotoSyncMetadata(
+          localPurchase.id,
+          getPhotoSyncMetadata(
+            photoSyncSummary.rows,
+            photoSyncSummary.didError,
+          ),
+        );
       } catch {
         markPurchaseSyncMetadata(localPurchase.id, getSyncErrorMetadata());
       }
     },
-    [markPurchaseSyncMetadata, signedInUserId],
+    [markPurchasePhotoSyncMetadata, markPurchaseSyncMetadata, signedInUserId],
   );
 
   const syncUpdatedPurchase = useCallback(
@@ -811,11 +1152,26 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
           localPurchase.id,
           getSyncedPurchaseMetadata(data.id),
         );
+
+        const photoSyncSummary = await syncPurchasePhotos({
+          existingStoragePaths: localPurchase.photoRemotePaths,
+          photoUris: localPurchase.photoUris,
+          purchaseId: data.id,
+          userId: signedInUserId,
+        });
+
+        markPurchasePhotoSyncMetadata(
+          localPurchase.id,
+          getPhotoSyncMetadata(
+            photoSyncSummary.rows,
+            photoSyncSummary.didError,
+          ),
+        );
       } catch {
         markPurchaseSyncMetadata(localPurchase.id, getSyncErrorMetadata());
       }
     },
-    [markPurchaseSyncMetadata, signedInUserId],
+    [markPurchasePhotoSyncMetadata, markPurchaseSyncMetadata, signedInUserId],
   );
 
   const syncDeletedPurchase = useCallback(
@@ -872,13 +1228,23 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
     const store = compactText(input.store) ?? 'Online purchase';
     const productLink = compactText(input.productLink);
     const returnDateFields = getPurchaseDateFields(input);
+    const photoUris = compactPhotoUris(
+      input.photoUris,
+      getPhotoLimit(signedInUserId),
+    );
+    const photoRemotePaths = compactPhotoRemotePaths(
+      input.photoRemotePaths,
+      photoUris?.length ?? 0,
+      Boolean(signedInUserId),
+    );
     const newPurchase: MockPurchase = {
       comment: compactText(input.comment),
       createdAt,
       days: 'Due later',
       id: getLocalPurchaseId(itemName, createdAt),
       itemName,
-      photoUris: compactPhotoUris(input.photoUris),
+      photoRemotePaths,
+      photoUris,
       price: compactText(input.price),
       productLink,
       purchaseDateISO: input.purchaseDateISO,
@@ -1006,12 +1372,39 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    const nextPhotoUris = compactPhotoUris(
+      input.photoUris,
+      getPhotoLimit(signedInUserId),
+    );
+    const submittedPhotoRemotePaths =
+      input.photoRemotePaths === undefined
+        ? undefined
+        : compactPhotoRemotePaths(
+            input.photoRemotePaths,
+            nextPhotoUris?.length ?? 0,
+            true,
+          );
+    const nextPhotoRemotePaths = signedInUserId
+      ? getPreservedPhotoRemotePaths(
+          purchaseToUpdate,
+          nextPhotoUris,
+          submittedPhotoRemotePaths,
+        )
+      : undefined;
+    const didPhotoStateChange =
+      !areStringArraysEqual(purchaseToUpdate.photoUris, nextPhotoUris) ||
+      !areNullableStringArraysEqual(
+        purchaseToUpdate.photoRemotePaths,
+        nextPhotoRemotePaths,
+      );
+
     const updatedPurchase = getPurchaseWithCurrentDateState(
       {
         ...purchaseToUpdate,
         comment: compactText(input.comment),
         itemName,
-        photoUris: compactPhotoUris(input.photoUris),
+        photoRemotePaths: nextPhotoRemotePaths,
+        photoUris: nextPhotoUris,
         price: compactText(input.price),
         productLink,
         purchaseDateISO: input.purchaseDateISO,
@@ -1023,6 +1416,9 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
           : purchaseToUpdate.syncStatus
             ? { syncStatus: purchaseToUpdate.syncStatus }
             : {}),
+        ...(signedInUserId && didPhotoStateChange
+          ? { photoSyncStatus: 'local' as const }
+          : {}),
       },
       updatedAt,
     );

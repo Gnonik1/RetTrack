@@ -1,8 +1,17 @@
-import { useEffect, useRef, useState, type Ref } from 'react';
 import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type Ref,
+} from 'react';
+import {
+  Animated,
   Image,
   Keyboard,
   Modal,
+  PanResponder,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -26,6 +35,7 @@ import {
 } from '../../settings/state/AppSettingsState';
 import {
   ACCOUNT_ITEM_LIMIT,
+  ACCOUNT_PHOTO_LIMIT,
   GUEST_ITEM_LIMIT,
   GUEST_PHOTO_LIMIT,
 } from '../constants';
@@ -44,6 +54,7 @@ type AddFirstPurchaseScreenProps = {
   initialValues?: PurchaseFormInitialValues;
   isAccountItemLimitReached?: boolean;
   isGuestItemLimitReached?: boolean;
+  isSignedIn?: boolean;
   mode?: AddPurchaseMode;
   onBack?: () => void;
   onLimitSignUp?: () => void;
@@ -60,6 +71,8 @@ type PurchaseFormInitialValues = Partial<AddPurchaseInput> & {
 type OptionalSectionKey = 'price' | 'purchaseDate' | 'photos' | 'comment';
 
 type DatePickerMode = 'return' | 'purchase';
+
+type PhotoPickerMode = 'add' | 'replace';
 
 type FormErrors = {
   itemName?: string;
@@ -123,6 +136,8 @@ const optionalDetailRows = [
 ] as const;
 
 const weekdayLabels = ['S', 'M', 'T', 'W', 'T', 'F', 'S'] as const;
+const PHOTO_SLOT_SIZE = 48;
+const PHOTO_SLOT_REORDER_STEP = PHOTO_SLOT_SIZE + theme.spacing.sm;
 
 const monthLabels = [
   'Jan',
@@ -215,6 +230,37 @@ function getInitialPurchaseDate(initialValues?: PurchaseFormInitialValues) {
   });
 }
 
+function getAlignedPhotoRemotePaths(
+  photoRemotePaths: Array<string | null | undefined> | undefined,
+  photoCount: number,
+) {
+  return Array.from(
+    { length: photoCount },
+    (_, index) => photoRemotePaths?.[index] ?? null,
+  );
+}
+
+function clampIndex(index: number, maxIndex: number) {
+  return Math.min(Math.max(index, 0), maxIndex);
+}
+
+function moveArrayItem<T>(items: T[], fromIndex: number, toIndex: number) {
+  if (fromIndex === toIndex) {
+    return items;
+  }
+
+  const nextItems = [...items];
+  const [movedItem] = nextItems.splice(fromIndex, 1);
+
+  if (movedItem === undefined) {
+    return items;
+  }
+
+  nextItems.splice(toIndex, 0, movedItem);
+
+  return nextItems;
+}
+
 function getInitialPriceParts(
   initialValues?: PurchaseFormInitialValues,
   fallbackCurrency: CurrencyCode = DEFAULT_CURRENCY,
@@ -288,6 +334,7 @@ export function AddFirstPurchaseScreen({
   initialValues,
   isAccountItemLimitReached = false,
   isGuestItemLimitReached = false,
+  isSignedIn = false,
   mode = 'firstPurchase',
   onBack,
   onLimitSignUp,
@@ -299,6 +346,11 @@ export function AddFirstPurchaseScreen({
   const initialPrice = getInitialPriceParts(initialValues, defaultCurrency);
   const initialReturnDate = getInitialReturnDate(initialValues);
   const initialPurchaseDate = getInitialPurchaseDate(initialValues);
+  const photoLimit = isSignedIn ? ACCOUNT_PHOTO_LIMIT : GUEST_PHOTO_LIMIT;
+  const initialPhotoUris = (initialValues?.photoUris ?? []).slice(
+    0,
+    photoLimit,
+  );
   const [itemName, setItemName] = useState(initialValues?.itemName ?? '');
   const [store, setStore] = useState(initialValues?.store ?? '');
   const [productLink, setProductLink] = useState(
@@ -314,11 +366,23 @@ export function AddFirstPurchaseScreen({
     initialPurchaseDate,
   );
   const [comment, setComment] = useState(initialValues?.comment ?? '');
-  const [photoUris, setPhotoUris] = useState<string[]>(() =>
-    (initialValues?.photoUris ?? []).slice(0, GUEST_PHOTO_LIMIT),
+  const [photoUris, setPhotoUris] = useState<string[]>(() => initialPhotoUris);
+  const [photoRemotePaths, setPhotoRemotePaths] = useState<
+    Array<string | null>
+  >(() =>
+    getAlignedPhotoRemotePaths(
+      initialValues?.photoRemotePaths,
+      initialPhotoUris.length,
+    ),
   );
-  const [draftPhoto, setDraftPhoto] = useState<PurchasePhotoDraft | null>(null);
+  const [draftPhotos, setDraftPhotos] = useState<PurchasePhotoDraft[]>([]);
   const [photoMessage, setPhotoMessage] = useState('');
+  const [activePhotoIndex, setActivePhotoIndex] = useState(0);
+  const [photoPickerMode, setPhotoPickerMode] =
+    useState<PhotoPickerMode>('add');
+  const [draggedPhotoIndex, setDraggedPhotoIndex] = useState<number | null>(
+    null,
+  );
   const [isPickingPhoto, setIsPickingPhoto] = useState(false);
   const [isSavingPhoto, setIsSavingPhoto] = useState(false);
   const [formErrors, setFormErrors] = useState<FormErrors>({});
@@ -343,6 +407,7 @@ export function AddFirstPurchaseScreen({
   const [commentModalError, setCommentModalError] = useState('');
   const storeInputRef = useRef<TextInput>(null);
   const productLinkInputRef = useRef<TextInput>(null);
+  const photoDragOffsetX = useRef(new Animated.Value(0)).current;
   const photoPickRequestIdRef = useRef(0);
   const saveSuccessTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
@@ -379,8 +444,37 @@ export function AddFirstPurchaseScreen({
       : 'Select return date';
   const calendarRows = getCalendarRows(visibleMonth);
   const pricePreview = priceAmount ? `${selectedCurrency} ${priceAmount}` : '';
-  const selectedPhotoUri = photoUris[0];
-  const draftPhotoUri = draftPhoto?.uri;
+  const selectedPhotoIndex = photoUris.length
+    ? Math.min(activePhotoIndex, photoUris.length - 1)
+    : 0;
+  const selectedPhotoUri = photoUris[selectedPhotoIndex];
+  const draftPhotoCount = draftPhotos.length;
+  const draftPhotoUri = draftPhotos[0]?.uri;
+  const remainingPhotoSlots = Math.max(photoLimit - photoUris.length, 0);
+  const photoLimitCaption = isSignedIn
+    ? `Account purchases support up to ${ACCOUNT_PHOTO_LIMIT} photos per item.`
+    : 'Guest mode supports 1 photo per item.';
+  const photoCountLabel =
+    photoUris.length === 1 ? '1 photo' : `${photoUris.length} photos`;
+  const canAddAnotherPhoto = photoUris.length < photoLimit;
+  const photoModalTitle =
+    photoPickerMode === 'replace' && selectedPhotoUri
+      ? 'Replace photo'
+      : 'Add photo';
+  const photoModalBody =
+    draftPhotoCount > 1
+      ? `${draftPhotoCount} photos selected`
+      : photoPickerMode === 'replace' && selectedPhotoUri
+        ? `Replace photo ${selectedPhotoIndex + 1} of ${photoUris.length}`
+        : 'Add a receipt or product photo';
+  const photoConfirmTitle =
+    draftPhotoCount > 1 ? `Add ${draftPhotoCount} photos` : 'Done';
+  const photoChooseTitle =
+    photoPickerMode === 'replace' && selectedPhotoUri
+      ? 'Choose replacement'
+      : isSignedIn && photoPickerMode === 'add' && remainingPhotoSlots > 1
+        ? 'Choose photos'
+        : 'Choose photo';
 
   useEffect(() => {
     return () => {
@@ -405,6 +499,16 @@ export function AddFirstPurchaseScreen({
     setDraftCurrency(defaultCurrency);
   }, [defaultCurrency, hasInitialPrice, isPriceModalOpen, priceAmount]);
 
+  useEffect(() => {
+    setActivePhotoIndex((currentIndex) => {
+      if (!photoUris.length) {
+        return 0;
+      }
+
+      return Math.min(currentIndex, photoUris.length - 1);
+    });
+  }, [photoUris.length]);
+
   const clearSaveSuccess = () => {
     if (saveSuccessTimerRef.current) {
       clearTimeout(saveSuccessTimerRef.current);
@@ -424,6 +528,83 @@ export function AddFirstPurchaseScreen({
       setIsSaveSuccessful(false);
       saveSuccessTimerRef.current = null;
     }, 2400);
+  };
+
+  const reorderPhotos = useCallback(
+    (fromIndex: number, toIndex: number) => {
+      const maxPhotoIndex = photoUris.length - 1;
+      const safeFromIndex = clampIndex(fromIndex, maxPhotoIndex);
+      const safeToIndex = clampIndex(toIndex, maxPhotoIndex);
+
+      if (safeFromIndex === safeToIndex) {
+        setActivePhotoIndex(safeToIndex);
+        return;
+      }
+
+      const alignedPhotoRemotePaths = getAlignedPhotoRemotePaths(
+        photoRemotePaths,
+        photoUris.length,
+      );
+
+      clearSaveSuccess();
+      setPhotoUris(moveArrayItem(photoUris, safeFromIndex, safeToIndex));
+      setPhotoRemotePaths(
+        moveArrayItem(alignedPhotoRemotePaths, safeFromIndex, safeToIndex),
+      );
+      setActivePhotoIndex(safeToIndex);
+    },
+    [photoRemotePaths, photoUris],
+  );
+
+  const finishPhotoDrag = useCallback(
+    (gestureDx = 0) => {
+      if (draggedPhotoIndex === null || photoUris.length < 2) {
+        setDraggedPhotoIndex(null);
+        photoDragOffsetX.setValue(0);
+        return;
+      }
+
+      const targetIndex = clampIndex(
+        draggedPhotoIndex + Math.round(gestureDx / PHOTO_SLOT_REORDER_STEP),
+        photoUris.length - 1,
+      );
+
+      reorderPhotos(draggedPhotoIndex, targetIndex);
+      setDraggedPhotoIndex(null);
+      photoDragOffsetX.setValue(0);
+    },
+    [draggedPhotoIndex, photoDragOffsetX, photoUris.length, reorderPhotos],
+  );
+
+  const photoSlotPanResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_, gestureState) =>
+          draggedPhotoIndex !== null && Math.abs(gestureState.dx) > 3,
+        onPanResponderMove: (_, gestureState) => {
+          if (draggedPhotoIndex !== null) {
+            photoDragOffsetX.setValue(gestureState.dx);
+          }
+        },
+        onPanResponderRelease: (_, gestureState) => {
+          finishPhotoDrag(gestureState.dx);
+        },
+        onPanResponderTerminate: () => {
+          finishPhotoDrag(0);
+        },
+        onPanResponderTerminationRequest: () => false,
+      }),
+    [draggedPhotoIndex, finishPhotoDrag, photoDragOffsetX],
+  );
+
+  const startPhotoDrag = (photoIndex: number) => {
+    if (!isSignedIn || photoUris.length < 2) {
+      return;
+    }
+
+    setActivePhotoIndex(photoIndex);
+    setDraggedPhotoIndex(photoIndex);
+    photoDragOffsetX.setValue(0);
   };
 
   const clearFormError = (field: keyof FormErrors) => {
@@ -488,11 +669,18 @@ export function AddFirstPurchaseScreen({
 
   const getPurchaseInput = (): AddPurchaseInput => {
     const trimmedPriceAmount = priceAmount.trim();
+    const nextPhotoUris = photoUris.slice(0, photoLimit);
+    const nextPhotoRemotePaths = getAlignedPhotoRemotePaths(
+      photoRemotePaths,
+      nextPhotoUris.length,
+    );
 
     return {
       comment: comment.trim() || undefined,
       itemName: itemName.trim(),
-      photoUris: photoUris.length ? photoUris : undefined,
+      photoRemotePaths:
+        isSignedIn && nextPhotoUris.length ? nextPhotoRemotePaths : undefined,
+      photoUris: nextPhotoUris.length ? nextPhotoUris : undefined,
       price: trimmedPriceAmount
         ? `${selectedCurrency} ${trimmedPriceAmount}`
         : undefined,
@@ -518,7 +706,10 @@ export function AddFirstPurchaseScreen({
     setPurchaseDate(null);
     setComment('');
     setPhotoUris([]);
-    setDraftPhoto(null);
+    setPhotoRemotePaths([]);
+    setActivePhotoIndex(0);
+    setPhotoPickerMode('add');
+    setDraftPhotos([]);
     setPhotoMessage('');
     setIsPickingPhoto(false);
     setIsSavingPhoto(false);
@@ -713,27 +904,50 @@ export function AddFirstPurchaseScreen({
     }
 
     if (section === 'photos') {
-      openPhotosModal();
+      if (canAddAnotherPhoto) {
+        openAddPhotoModal();
+        return;
+      }
+
+      openReplacePhotoModal(selectedPhotoIndex);
       return;
     }
 
     openCommentModal();
   };
 
-  const openPhotosModal = () => {
+  const openPhotosModal = (mode: PhotoPickerMode, photoIndex = 0) => {
     Keyboard.dismiss();
     clearSaveSuccess();
     photoPickRequestIdRef.current += 1;
-    setDraftPhoto(null);
+    setActivePhotoIndex(photoIndex);
+    setPhotoPickerMode(mode);
+    setDraftPhotos([]);
     setPhotoMessage('');
     setIsPickingPhoto(false);
     setIsSavingPhoto(false);
     setIsPhotosModalOpen(true);
   };
 
+  const openAddPhotoModal = () => {
+    openPhotosModal('add', photoUris.length);
+  };
+
+  const openReplacePhotoModal = (photoIndex: number) => {
+    if (!photoUris.length) {
+      openAddPhotoModal();
+      return;
+    }
+
+    openPhotosModal(
+      'replace',
+      Math.min(Math.max(photoIndex, 0), photoUris.length - 1),
+    );
+  };
+
   const closePhotosModal = () => {
     photoPickRequestIdRef.current += 1;
-    setDraftPhoto(null);
+    setDraftPhotos([]);
     setPhotoMessage('');
     setIsPickingPhoto(false);
     setIsSavingPhoto(false);
@@ -753,18 +967,30 @@ export function AddFirstPurchaseScreen({
     setIsPickingPhoto(true);
 
     try {
-      const result = await pickPurchasePhotoDraft();
+      const allowsMultipleSelection =
+        isSignedIn && photoPickerMode === 'add';
+      const multiSelectLimit = photoLimit - photoUris.length;
+
+      if (allowsMultipleSelection && multiSelectLimit <= 0) {
+        return;
+      }
+
+      const selectionLimit = allowsMultipleSelection
+        ? multiSelectLimit
+        : undefined;
+      const result = await pickPurchasePhotoDraft({
+        allowsMultipleSelection,
+        selectionLimit,
+      });
 
       if (photoPickRequestIdRef.current !== requestId) {
         return;
       }
 
       if (result.status === 'selected') {
-        setDraftPhoto({
-          fileName: result.fileName,
-          mimeType: result.mimeType,
-          uri: result.uri,
-        });
+        setDraftPhotos(
+          result.assets.slice(0, allowsMultipleSelection ? selectionLimit : 1),
+        );
         return;
       }
 
@@ -784,7 +1010,7 @@ export function AddFirstPurchaseScreen({
   };
 
   const handleConfirmPhoto = async () => {
-    if (!draftPhoto || isSavingPhoto) {
+    if (!draftPhotos.length || isSavingPhoto) {
       return;
     }
 
@@ -793,18 +1019,59 @@ export function AddFirstPurchaseScreen({
     setPhotoMessage('');
 
     try {
-      const storedPhotoUri = await storePurchasePhoto(draftPhoto);
+      const storedPhotoUris = await Promise.all(
+        draftPhotos.map((draftPhoto) => storePurchasePhoto(draftPhoto)),
+      );
 
       if (photoPickRequestIdRef.current !== requestId) {
         return;
       }
 
-      if (!storedPhotoUri) {
+      const validStoredPhotoUris = storedPhotoUris.filter(
+        (photoUri): photoUri is string => Boolean(photoUri),
+      );
+
+      if (validStoredPhotoUris.length !== draftPhotos.length) {
         setPhotoMessage("We couldn't attach that photo. Please try another image.");
         return;
       }
 
-      setPhotoUris([storedPhotoUri].slice(0, GUEST_PHOTO_LIMIT));
+      const currentPhotoRemotePaths = getAlignedPhotoRemotePaths(
+        photoRemotePaths,
+        photoUris.length,
+      );
+      const shouldAppendPhotos = isSignedIn && photoPickerMode === 'add';
+      const appendedPhotoUris = validStoredPhotoUris.slice(
+        0,
+        remainingPhotoSlots,
+      );
+      const replacementPhotoUri = validStoredPhotoUris[0];
+      const nextPhotoUris = shouldAppendPhotos
+        ? [...photoUris, ...appendedPhotoUris].slice(0, photoLimit)
+        : photoUris.length
+          ? photoUris.map((photoUri, index) =>
+              index === selectedPhotoIndex ? replacementPhotoUri : photoUri,
+            )
+          : replacementPhotoUri
+            ? [replacementPhotoUri].slice(0, photoLimit)
+            : [];
+      const nextPhotoRemotePaths = shouldAppendPhotos
+        ? [
+            ...currentPhotoRemotePaths,
+            ...appendedPhotoUris.map(() => null),
+          ].slice(0, nextPhotoUris.length)
+        : nextPhotoUris.map((_, index) =>
+            index === selectedPhotoIndex
+              ? null
+              : currentPhotoRemotePaths[index] ?? null,
+          );
+      const nextActivePhotoIndex = shouldAppendPhotos
+        ? nextPhotoUris.length - 1
+        : Math.min(selectedPhotoIndex, nextPhotoUris.length - 1);
+
+      setPhotoUris(nextPhotoUris);
+      setPhotoRemotePaths(nextPhotoRemotePaths);
+      setActivePhotoIndex(Math.max(nextActivePhotoIndex, 0));
       closePhotosModal();
     } catch {
       if (photoPickRequestIdRef.current === requestId) {
@@ -819,8 +1086,21 @@ export function AddFirstPurchaseScreen({
 
   const handleRemovePhoto = () => {
     clearSaveSuccess();
-    setPhotoUris([]);
-    setDraftPhoto(null);
+    const nextPhotoUris = photoUris.filter(
+      (_, index) => index !== selectedPhotoIndex,
+    );
+    const nextPhotoRemotePaths = getAlignedPhotoRemotePaths(
+      photoRemotePaths,
+      photoUris.length,
+    ).filter((_, index) => index !== selectedPhotoIndex);
+    const nextActivePhotoIndex = nextPhotoUris.length
+      ? Math.min(selectedPhotoIndex, nextPhotoUris.length - 1)
+      : 0;
+
+    setPhotoUris(nextPhotoUris);
+    setPhotoRemotePaths(nextPhotoRemotePaths);
+    setActivePhotoIndex(nextActivePhotoIndex);
+    setDraftPhotos([]);
     setPhotoMessage('');
   };
 
@@ -979,7 +1259,7 @@ export function AddFirstPurchaseScreen({
                   : key === 'purchaseDate' && purchaseDate
                     ? formatDate(purchaseDate)
                     : key === 'photos' && selectedPhotoUri
-                      ? 'Photo added'
+                      ? photoCountLabel
                     : key === 'comment' && comment.trim()
                       ? 'Added'
                       : '';
@@ -1026,29 +1306,110 @@ export function AddFirstPurchaseScreen({
 
                         <View style={styles.photoInlineCopy}>
                           <AppText style={styles.photoInlineTitle} variant="body">
-                            Photo attached
+                            {photoUris.length === 1
+                              ? 'Photo attached'
+                              : `${photoUris.length} photos attached`}
                           </AppText>
                           <AppText
                             style={styles.photoInlineHelper}
                             variant="caption"
                           >
-                            Guest mode supports 1 photo per item.
+                            {photoLimitCaption}
                           </AppText>
                         </View>
                       </View>
 
+                      {isSignedIn && photoUris.length > 1 ? (
+                        <View style={styles.photoSlotRow}>
+                          {photoUris.map((photoUri, index) => {
+                            const isSelected = index === selectedPhotoIndex;
+                            const isDragging = index === draggedPhotoIndex;
+
+                            return (
+                              <Animated.View
+                                key={`${photoUri}-${index}`}
+                                style={[
+                                  styles.photoSlotWrapper,
+                                  isDragging && styles.photoSlotWrapperDragging,
+                                  isDragging && {
+                                    transform: [
+                                      { translateX: photoDragOffsetX },
+                                    ],
+                                  },
+                                ]}
+                                {...photoSlotPanResponder.panHandlers}
+                              >
+                                <Pressable
+                                  accessibilityLabel={`Select photo ${index + 1}. Press and hold to reorder.`}
+                                  accessibilityRole="button"
+                                  delayLongPress={220}
+                                  onLongPress={() => startPhotoDrag(index)}
+                                  onPress={() => setActivePhotoIndex(index)}
+                                  style={({ pressed }) => [
+                                    styles.photoSlotButton,
+                                    isSelected && styles.photoSlotButtonSelected,
+                                    pressed && styles.photoInlineActionPressed,
+                                  ]}
+                                >
+                                  <Image
+                                    resizeMode="cover"
+                                    source={{ uri: photoUri }}
+                                    style={styles.photoSlotImage}
+                                  />
+                                  {index === 0 ? (
+                                    <View style={styles.photoSlotMainBadge}>
+                                      <AppText
+                                        style={styles.photoSlotMainBadgeText}
+                                        variant="caption"
+                                      >
+                                        Main
+                                      </AppText>
+                                    </View>
+                                  ) : null}
+                                </Pressable>
+                              </Animated.View>
+                            );
+                          })}
+                        </View>
+                      ) : null}
+
                       <View style={styles.photoInlineActions}>
+                        {canAddAnotherPhoto ? (
+                          <Pressable
+                            accessibilityRole="button"
+                            onPress={openAddPhotoModal}
+                            style={({ pressed }) => [
+                              styles.photoInlineAction,
+                              styles.photoInlinePrimaryAction,
+                              pressed && styles.photoInlineActionPressed,
+                            ]}
+                          >
+                            <AppText
+                              style={styles.photoInlinePrimaryText}
+                              variant="button"
+                            >
+                              Add photo
+                            </AppText>
+                          </Pressable>
+                        ) : null}
+
                         <Pressable
                           accessibilityRole="button"
-                          onPress={openPhotosModal}
+                          onPress={() => openReplacePhotoModal(selectedPhotoIndex)}
                           style={({ pressed }) => [
                             styles.photoInlineAction,
-                            styles.photoInlinePrimaryAction,
+                            canAddAnotherPhoto
+                              ? styles.photoInlineSecondaryAction
+                              : styles.photoInlinePrimaryAction,
                             pressed && styles.photoInlineActionPressed,
                           ]}
                         >
                           <AppText
-                            style={styles.photoInlinePrimaryText}
+                            style={
+                              canAddAnotherPhoto
+                                ? styles.photoInlineSecondaryText
+                                : styles.photoInlinePrimaryText
+                            }
                             variant="button"
                           >
                             Replace photo
@@ -1273,7 +1634,7 @@ export function AddFirstPurchaseScreen({
                   ]}
                 >
                   <AppText style={styles.modalDoneText} variant="button">
-                    Done
+                    {photoConfirmTitle}
                   </AppText>
                 </Pressable>
               </View>
@@ -1444,13 +1805,13 @@ export function AddFirstPurchaseScreen({
 
           <View style={styles.standardModalCard}>
             <AppText style={styles.centeredModalTitle} variant="title">
-              Add photo
+              {photoModalTitle}
             </AppText>
             <AppText style={styles.centeredModalBody} variant="body">
-              Add a receipt or product photo
+              {photoModalBody}
             </AppText>
             <AppText style={styles.centeredModalCaption} variant="caption">
-              Guest mode supports 1 photo per item.
+              {photoLimitCaption}
             </AppText>
 
             {draftPhotoUri ? (
@@ -1516,7 +1877,7 @@ export function AddFirstPurchaseScreen({
                   ]}
                 >
                   <AppText style={styles.modalDoneText} variant="button">
-                    {isPickingPhoto ? 'Opening...' : 'Choose photo'}
+                    {isPickingPhoto ? 'Opening...' : photoChooseTitle}
                   </AppText>
                 </Pressable>
               )}
@@ -2186,6 +2547,58 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: theme.fontWeight.semibold,
     lineHeight: 19,
+  },
+  photoSlotButton: {
+    borderColor: 'transparent',
+    borderRadius: theme.radius.md,
+    borderWidth: 2,
+    height: PHOTO_SLOT_SIZE,
+    overflow: 'hidden',
+    width: PHOTO_SLOT_SIZE,
+  },
+  photoSlotButtonSelected: {
+    borderColor: theme.colors.green,
+  },
+  photoSlotImage: {
+    height: '100%',
+    width: '100%',
+  },
+  photoSlotMainBadge: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(250, 251, 245, 0.94)',
+    borderRadius: theme.radius.pill,
+    bottom: 3,
+    left: 3,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    position: 'absolute',
+  },
+  photoSlotMainBadgeText: {
+    color: theme.colors.greenDark,
+    fontSize: 9,
+    fontWeight: theme.fontWeight.semibold,
+    lineHeight: 11,
+  },
+  photoSlotRow: {
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+    marginTop: 10,
+  },
+  photoSlotWrapper: {
+    height: PHOTO_SLOT_SIZE,
+    width: PHOTO_SLOT_SIZE,
+  },
+  photoSlotWrapperDragging: {
+    elevation: 4,
+    opacity: 0.92,
+    shadowColor: theme.colors.text,
+    shadowOffset: {
+      height: 8,
+      width: 0,
+    },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    zIndex: 5,
   },
   photoModalImage: {
     height: '100%',
