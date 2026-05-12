@@ -6,6 +6,7 @@ import {
   useState,
   type Ref,
 } from 'react';
+import { LinearGradient } from 'expo-linear-gradient';
 import {
   Animated,
   Image,
@@ -153,6 +154,24 @@ const monthLabels = [
   'Nov',
   'Dec',
 ] as const;
+
+function FormBackground() {
+  return (
+    <>
+      <LinearGradient
+        colors={['#FBFAF3', '#F5F7EF', '#FFF8EB']}
+        end={{ x: 1, y: 1 }}
+        pointerEvents="none"
+        start={{ x: 0, y: 0 }}
+        style={styles.backgroundBase}
+      />
+      <View pointerEvents="none" style={styles.backgroundTopSageGlow} />
+      <View pointerEvents="none" style={styles.backgroundPaperWash} />
+      <View pointerEvents="none" style={styles.backgroundWarmVeil} />
+      <View pointerEvents="none" style={styles.backgroundLowerSageWash} />
+    </>
+  );
+}
 
 function addDays(date: Date, days: number) {
   const nextDate = new Date(date);
@@ -1111,6 +1130,8 @@ export function AddFirstPurchaseScreen({
 
   return (
     <AppScreen style={styles.screen}>
+      <FormBackground />
+
       <View style={styles.header}>
         <Pressable
           accessibilityLabel="Back"
@@ -1494,6 +1515,7 @@ export function AddFirstPurchaseScreen({
         <AppButton
           disabled={shouldShowLimitMessage}
           onPress={handleSaveItem}
+          style={styles.saveButton}
           title={saveButtonTitle}
           variant="primary"
         />
@@ -1966,22 +1988,79 @@ export function AddFirstPurchaseScreen({
 
 const styles = StyleSheet.create({
   screen: {
+    backgroundColor: '#FBFAF3',
+    overflow: 'hidden',
     paddingBottom: theme.spacing.md,
     paddingTop: theme.spacing.lg,
+  },
+  backgroundBase: {
+    ...StyleSheet.absoluteFillObject,
+    bottom: -theme.spacing.xxl,
+    left: -theme.spacing.md,
+    right: -theme.spacing.md,
+  },
+  backgroundLowerSageWash: {
+    backgroundColor: 'rgba(225, 234, 217, 0.18)',
+    borderRadius: 190,
+    bottom: -105,
+    height: 235,
+    position: 'absolute',
+    right: -145,
+    transform: [{ rotate: '11deg' }],
+    width: 470,
+  },
+  backgroundPaperWash: {
+    backgroundColor: 'rgba(255, 253, 248, 0.62)',
+    borderRadius: 190,
+    height: 245,
+    left: -120,
+    position: 'absolute',
+    top: 210,
+    transform: [{ rotate: '-16deg' }],
+    width: 540,
+  },
+  backgroundTopSageGlow: {
+    backgroundColor: 'rgba(215, 229, 205, 0.36)',
+    borderRadius: 180,
+    height: 260,
+    left: -235,
+    position: 'absolute',
+    top: -76,
+    transform: [{ rotate: '-13deg' }],
+    width: 520,
+  },
+  backgroundWarmVeil: {
+    backgroundColor: 'rgba(241, 225, 196, 0.18)',
+    borderRadius: 200,
+    bottom: 90,
+    height: 250,
+    left: -250,
+    position: 'absolute',
+    transform: [{ rotate: '9deg' }],
+    width: 560,
   },
   header: {
     alignItems: 'center',
     flexDirection: 'row',
     gap: theme.spacing.md,
+    zIndex: 1,
   },
   backButton: {
     alignItems: 'center',
-    backgroundColor: theme.colors.card,
-    borderColor: theme.colors.border,
+    backgroundColor: 'rgba(255, 253, 248, 0.94)',
+    borderColor: 'rgba(222, 227, 216, 0.9)',
     borderRadius: theme.radius.lg,
     borderWidth: 1,
+    elevation: 3,
     height: 44,
     justifyContent: 'center',
+    shadowColor: theme.colors.text,
+    shadowOffset: {
+      height: 8,
+      width: 0,
+    },
+    shadowOpacity: 0.07,
+    shadowRadius: 16,
     width: 44,
   },
   backButtonText: {
@@ -2026,9 +2105,10 @@ const styles = StyleSheet.create({
   form: {
     flex: 1,
     marginTop: theme.spacing.lg + theme.spacing.xs,
+    zIndex: 1,
   },
   formContent: {
-    paddingBottom: theme.spacing.xl + theme.spacing.lg,
+    paddingBottom: theme.spacing.lg,
   },
   fieldGroup: {
     gap: 7,
@@ -2043,13 +2123,21 @@ const styles = StyleSheet.create({
   },
   inputCard: {
     alignItems: 'center',
-    backgroundColor: theme.colors.card,
-    borderColor: theme.colors.border,
+    backgroundColor: 'rgba(255, 253, 248, 0.95)',
+    borderColor: 'rgba(222, 227, 216, 0.92)',
     borderRadius: theme.radius.lg,
     borderWidth: 1,
+    elevation: 1,
     flexDirection: 'row',
     height: 56,
     paddingHorizontal: theme.spacing.md,
+    shadowColor: theme.colors.text,
+    shadowOffset: {
+      height: 6,
+      width: 0,
+    },
+    shadowOpacity: 0.035,
+    shadowRadius: 12,
   },
   input: {
     ...theme.typography.input,
@@ -2089,13 +2177,21 @@ const styles = StyleSheet.create({
   },
   returnDateCard: {
     alignItems: 'center',
-    backgroundColor: theme.colors.card,
-    borderColor: theme.colors.border,
+    backgroundColor: 'rgba(255, 253, 248, 0.95)',
+    borderColor: 'rgba(222, 227, 216, 0.92)',
     borderRadius: theme.radius.lg,
     borderWidth: 1,
+    elevation: 1,
     flexDirection: 'row',
     height: 52,
     paddingHorizontal: theme.spacing.md,
+    shadowColor: theme.colors.text,
+    shadowOffset: {
+      height: 6,
+      width: 0,
+    },
+    shadowOpacity: 0.035,
+    shadowRadius: 12,
   },
   returnDateCardError: {
     borderColor: theme.colors.pending,
@@ -2116,7 +2212,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   helperNote: {
-    backgroundColor: theme.colors.sage,
+    backgroundColor: 'rgba(238, 243, 233, 0.82)',
+    borderColor: 'rgba(216, 226, 207, 0.92)',
+    borderWidth: 1,
     borderRadius: theme.radius.md,
     paddingHorizontal: theme.spacing.md,
     paddingVertical: 10,
@@ -2144,21 +2242,26 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   optionalRows: {
-    gap: theme.spacing.sm,
+    backgroundColor: 'rgba(255, 253, 248, 0.48)',
+    borderColor: 'rgba(227, 226, 214, 0.86)',
+    borderRadius: theme.radius.xl,
+    borderWidth: 1,
+    gap: 7,
     marginTop: theme.spacing.sm,
+    padding: 6,
   },
   optionalItem: {
-    gap: theme.spacing.sm,
+    gap: 7,
   },
   optionalRow: {
     alignItems: 'center',
-    backgroundColor: theme.colors.card,
-    borderColor: theme.colors.border,
+    backgroundColor: 'rgba(255, 253, 248, 0.96)',
+    borderColor: 'rgba(222, 227, 216, 0.92)',
     borderRadius: theme.radius.lg,
     borderWidth: 1,
     flexDirection: 'row',
     justifyContent: 'space-between',
-    minHeight: 50,
+    minHeight: 52,
     paddingHorizontal: theme.spacing.md,
   },
   optionalRowPressed: {
@@ -2484,8 +2587,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderRadius: theme.radius.pill,
     justifyContent: 'center',
-    minHeight: 34,
-    paddingHorizontal: 13,
+    minHeight: 38,
+    paddingHorizontal: theme.spacing.md,
   },
   photoInlineActionPressed: {
     opacity: 0.78,
@@ -2493,8 +2596,8 @@ const styles = StyleSheet.create({
   photoInlineActions: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: theme.spacing.sm,
-    marginTop: 10,
+    gap: 10,
+    marginTop: 12,
   },
   photoInlineCopy: {
     flex: 1,
@@ -2508,16 +2611,24 @@ const styles = StyleSheet.create({
   },
   photoInlineImage: {
     borderRadius: theme.radius.md,
-    height: 54,
-    width: 54,
+    height: 58,
+    width: 58,
   },
   photoInlinePanel: {
-    backgroundColor: theme.colors.paper,
-    borderColor: theme.colors.border,
+    backgroundColor: '#FAFBF5',
+    borderColor: 'rgba(218, 226, 209, 0.96)',
     borderRadius: theme.radius.lg,
     borderWidth: 1,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: 11,
+    elevation: 1,
+    paddingHorizontal: 13,
+    paddingVertical: 12,
+    shadowColor: theme.colors.text,
+    shadowOffset: {
+      height: 8,
+      width: 0,
+    },
+    shadowOpacity: 0.04,
+    shadowRadius: 14,
   },
   photoInlinePreviewRow: {
     alignItems: 'center',
@@ -2533,8 +2644,8 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeight.semibold,
   },
   photoInlineSecondaryAction: {
-    backgroundColor: theme.colors.card,
-    borderColor: theme.colors.border,
+    backgroundColor: 'rgba(255, 253, 248, 0.92)',
+    borderColor: 'rgba(222, 227, 216, 0.95)',
     borderWidth: 1,
   },
   photoInlineSecondaryText: {
@@ -2549,15 +2660,17 @@ const styles = StyleSheet.create({
     lineHeight: 19,
   },
   photoSlotButton: {
-    borderColor: 'transparent',
+    backgroundColor: theme.colors.sage,
+    borderColor: 'rgba(255, 253, 248, 0.9)',
     borderRadius: theme.radius.md,
-    borderWidth: 2,
+    borderWidth: 1,
     height: PHOTO_SLOT_SIZE,
     overflow: 'hidden',
     width: PHOTO_SLOT_SIZE,
   },
   photoSlotButtonSelected: {
     borderColor: theme.colors.green,
+    borderWidth: 2,
   },
   photoSlotImage: {
     height: '100%',
@@ -2699,8 +2812,19 @@ const styles = StyleSheet.create({
   },
   actions: {
     gap: theme.spacing.sm,
-    paddingTop: theme.spacing.xs,
+    paddingTop: 8,
     width: '100%',
+    zIndex: 1,
+  },
+  saveButton: {
+    elevation: 4,
+    shadowColor: theme.colors.greenDark,
+    shadowOffset: {
+      height: 9,
+      width: 0,
+    },
+    shadowOpacity: 0.12,
+    shadowRadius: 18,
   },
   successText: {
     color: theme.colors.greenDark,
