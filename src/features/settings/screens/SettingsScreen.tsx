@@ -2,6 +2,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { type ReactNode, useState } from 'react';
 import {
   Image,
+  Linking,
   Pressable,
   ScrollView,
   Share,
@@ -25,10 +26,11 @@ type SettingsModalKey =
   | 'notifications'
   | 'currency'
   | 'deleteAccount'
+  | 'legalLinkError'
   | 'shareError';
 type StaticSettingsModalKey = Exclude<SettingsModalKey, 'deleteAccount'>;
-type RowTone = 'danger' | 'gold' | 'sage';
-type SectionTone = 'account' | 'app' | 'rettrack';
+type RowTone = 'danger' | 'gold' | 'paper' | 'sage';
+type SectionTone = 'account' | 'app' | 'legal' | 'rettrack';
 
 type SettingsModalContent = {
   body: string;
@@ -38,6 +40,9 @@ type SettingsModalContent = {
 
 const SHARE_MESSAGE =
   "I'm using RetTrack to keep track of purchases and return dates.";
+const PRIVACY_POLICY_URL =
+  'https://gnonik1.github.io/rettrack-legal/privacy-policy/';
+const TERMS_OF_USE_URL = 'https://gnonik1.github.io/rettrack-legal/terms-of-use/';
 const RETTRACK_LOGO_MARK = require('../../../../assets/rettrack-logo-mark.png');
 
 const SETTINGS_MODAL_CONTENT: Record<
@@ -53,6 +58,11 @@ const SETTINGS_MODAL_CONTENT: Record<
     body: 'Return reminders are scheduled 7 days before, 3 days before, and on the last day.',
     secondaryBody: 'Quiet hours are 9 PM to 9 AM.',
     title: 'Notifications',
+  },
+  legalLinkError: {
+    body: "The legal page couldn't be opened right now.",
+    secondaryBody: 'Please try again in a moment.',
+    title: 'Legal',
   },
   shareError: {
     body: "Sharing isn't available right now.",
@@ -114,6 +124,7 @@ function SettingsSection({
         styles.sectionCard,
         tone === 'app' && styles.sectionCardApp,
         tone === 'rettrack' && styles.sectionCardRetTrack,
+        tone === 'legal' && styles.sectionCardLegal,
         tone === 'account' && styles.sectionCardAccount,
       ]}
     >
@@ -122,6 +133,7 @@ function SettingsSection({
           styles.sectionHeader,
           tone === 'app' && styles.sectionHeaderApp,
           tone === 'rettrack' && styles.sectionHeaderRetTrack,
+          tone === 'legal' && styles.sectionHeaderLegal,
           tone === 'account' && styles.sectionHeaderAccount,
         ]}
       >
@@ -130,6 +142,7 @@ function SettingsSection({
             styles.sectionIcon,
             tone === 'app' && styles.sectionIconApp,
             tone === 'rettrack' && styles.sectionIconRetTrack,
+            tone === 'legal' && styles.sectionIconLegal,
             tone === 'account' && styles.sectionIconAccount,
           ]}
         >
@@ -185,6 +198,7 @@ function SettingsRow({
           styles.rowIcon,
           tone === 'sage' && styles.rowIconSage,
           tone === 'gold' && styles.rowIconGold,
+          tone === 'paper' && styles.rowIconPaper,
           tone === 'danger' && styles.rowIconDanger,
         ]}
       >
@@ -285,6 +299,47 @@ function RetTrackSectionIcon() {
   );
 }
 
+function LegalSectionIcon() {
+  return (
+    <View accessibilityElementsHidden style={styles.legalIcon}>
+      <View style={styles.legalPage}>
+        <View style={styles.legalPageFold} />
+        <View style={[styles.legalPageLine, styles.legalPageLineLong]} />
+        <View style={[styles.legalPageLine, styles.legalPageLineMedium]} />
+        <View style={[styles.legalPageLine, styles.legalPageLineShort]} />
+      </View>
+    </View>
+  );
+}
+
+function PrivacyPolicyIcon() {
+  return (
+    <View accessibilityElementsHidden style={styles.lockIcon}>
+      <View style={styles.lockShackle} />
+      <View style={styles.lockBody}>
+        <View style={styles.lockDot} />
+      </View>
+    </View>
+  );
+}
+
+function TermsIcon() {
+  return (
+    <View accessibilityElementsHidden style={styles.termsIcon}>
+      <View style={styles.termsScale}>
+        <View style={styles.termsScaleCap} />
+        <View style={styles.termsScaleBeam} />
+        <View style={styles.termsScaleStem} />
+        <View style={[styles.termsScaleCord, styles.termsScaleCordLeft]} />
+        <View style={[styles.termsScaleCord, styles.termsScaleCordRight]} />
+        <View style={[styles.termsScalePan, styles.termsScalePanLeft]} />
+        <View style={[styles.termsScalePan, styles.termsScalePanRight]} />
+        <View style={styles.termsScaleBase} />
+      </View>
+    </View>
+  );
+}
+
 function AccountSectionIcon() {
   return (
     <View accessibilityElementsHidden style={styles.accountIcon}>
@@ -356,6 +411,12 @@ export function SettingsScreen() {
     }
   };
 
+  const handleOpenLegalUrl = (url: string) => {
+    void Linking.openURL(url).catch(() => {
+      setActiveModal('legalLinkError');
+    });
+  };
+
   return (
     <AppScreen style={styles.screen}>
       <LinearGradient
@@ -420,6 +481,29 @@ export function SettingsScreen() {
               onPress={handleShareRetTrack}
               title="Share RetTrack"
               tone="gold"
+            />
+          </SettingsSection>
+
+          <SettingsSection
+            detail="Privacy and terms for RetTrack."
+            icon={<LegalSectionIcon />}
+            title="Legal"
+            tone="legal"
+          >
+            <SettingsRow
+              detail="How RetTrack handles your data"
+              icon={<PrivacyPolicyIcon />}
+              onPress={() => handleOpenLegalUrl(PRIVACY_POLICY_URL)}
+              title="Privacy Policy"
+              tone="paper"
+            />
+            <SettingsRow
+              detail="Rules for using RetTrack"
+              icon={<TermsIcon />}
+              isLast
+              onPress={() => handleOpenLegalUrl(TERMS_OF_USE_URL)}
+              title="Terms of Use"
+              tone="paper"
             />
           </SettingsSection>
 
@@ -869,6 +953,78 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingTop: theme.spacing.xs,
   },
+  legalIcon: {
+    alignItems: 'center',
+    height: 28,
+    justifyContent: 'center',
+    width: 28,
+  },
+  legalPage: {
+    alignItems: 'center',
+    borderColor: '#706A4A',
+    borderRadius: 5,
+    borderWidth: 2,
+    gap: 3,
+    height: 24,
+    justifyContent: 'center',
+    position: 'relative',
+    width: 20,
+  },
+  legalPageFold: {
+    borderLeftColor: 'transparent',
+    borderLeftWidth: 5,
+    borderTopColor: '#706A4A',
+    borderTopWidth: 5,
+    opacity: 0.42,
+    position: 'absolute',
+    right: 1,
+    top: 1,
+  },
+  legalPageLine: {
+    backgroundColor: '#706A4A',
+    borderRadius: theme.radius.pill,
+    height: 2,
+  },
+  legalPageLineLong: {
+    width: 10,
+  },
+  legalPageLineMedium: {
+    width: 8,
+  },
+  legalPageLineShort: {
+    width: 6,
+  },
+  lockBody: {
+    alignItems: 'center',
+    borderColor: '#706A4A',
+    borderRadius: 5,
+    borderWidth: 2,
+    height: 15,
+    justifyContent: 'center',
+    width: 20,
+  },
+  lockDot: {
+    backgroundColor: '#706A4A',
+    borderRadius: theme.radius.pill,
+    height: 4,
+    width: 4,
+  },
+  lockIcon: {
+    alignItems: 'center',
+    height: 28,
+    justifyContent: 'center',
+    width: 28,
+  },
+  lockShackle: {
+    borderColor: '#706A4A',
+    borderTopLeftRadius: 8,
+    borderTopRightRadius: 8,
+    borderWidth: 2,
+    borderBottomWidth: 0,
+    height: 10,
+    marginBottom: -1,
+    width: 14,
+  },
   modalAccent: {
     alignSelf: 'center',
     backgroundColor: theme.colors.greenDark,
@@ -982,6 +1138,9 @@ const styles = StyleSheet.create({
   rowIconGold: {
     backgroundColor: '#F8E8BF',
   },
+  rowIconPaper: {
+    backgroundColor: '#EFECD5',
+  },
   rowIconSage: {
     backgroundColor: '#E7EEDF',
   },
@@ -1034,6 +1193,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#EEF4EA',
     borderColor: '#DCE8D5',
   },
+  sectionCardLegal: {
+    backgroundColor: '#FFFBEF',
+    borderColor: '#E2DFC8',
+  },
   sectionCardRetTrack: {
     backgroundColor: '#FFF6DF',
     borderColor: '#EBDDBB',
@@ -1060,6 +1223,9 @@ const styles = StyleSheet.create({
   sectionHeaderApp: {
     backgroundColor: '#F2F7EE',
   },
+  sectionHeaderLegal: {
+    backgroundColor: '#FFF9EA',
+  },
   sectionHeaderRetTrack: {
     backgroundColor: '#FFF6E0',
   },
@@ -1075,6 +1241,9 @@ const styles = StyleSheet.create({
   },
   sectionIconApp: {
     backgroundColor: '#E4EEDC',
+  },
+  sectionIconLegal: {
+    backgroundColor: '#EFECD5',
   },
   sectionIconRetTrack: {
     backgroundColor: '#F8E7B9',
@@ -1199,6 +1368,84 @@ const styles = StyleSheet.create({
     color: '#12322D',
     fontSize: 32,
     lineHeight: 39,
+  },
+  termsIcon: {
+    alignItems: 'center',
+    height: 28,
+    justifyContent: 'center',
+    width: 28,
+  },
+  termsScale: {
+    height: 26,
+    position: 'relative',
+    width: 26,
+  },
+  termsScaleBase: {
+    backgroundColor: '#706A4A',
+    borderRadius: theme.radius.pill,
+    bottom: 3,
+    height: 2,
+    left: 8,
+    position: 'absolute',
+    width: 10,
+  },
+  termsScaleBeam: {
+    backgroundColor: '#706A4A',
+    borderRadius: theme.radius.pill,
+    height: 2,
+    left: 4,
+    position: 'absolute',
+    top: 7,
+    width: 18,
+  },
+  termsScaleCap: {
+    backgroundColor: '#706A4A',
+    borderRadius: theme.radius.pill,
+    height: 4,
+    left: 11,
+    position: 'absolute',
+    top: 3,
+    width: 4,
+  },
+  termsScaleCord: {
+    backgroundColor: '#706A4A',
+    borderRadius: theme.radius.pill,
+    height: 6,
+    position: 'absolute',
+    top: 8,
+    width: 2,
+  },
+  termsScaleCordLeft: {
+    left: 6,
+  },
+  termsScaleCordRight: {
+    right: 6,
+  },
+  termsScalePan: {
+    borderBottomWidth: 2,
+    borderColor: '#706A4A',
+    borderLeftWidth: 2,
+    borderRadius: 4,
+    borderRightWidth: 2,
+    height: 5,
+    position: 'absolute',
+    top: 14,
+    width: 10,
+  },
+  termsScalePanLeft: {
+    left: 2,
+  },
+  termsScalePanRight: {
+    right: 2,
+  },
+  termsScaleStem: {
+    backgroundColor: '#706A4A',
+    borderRadius: theme.radius.pill,
+    height: 16,
+    left: 12,
+    position: 'absolute',
+    top: 7,
+    width: 2,
   },
   trashCan: {
     alignItems: 'center',
