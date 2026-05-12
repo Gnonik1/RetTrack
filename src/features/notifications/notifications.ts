@@ -8,13 +8,12 @@ import { getPurchaseReturnDate } from '../purchases/utils/purchaseDates';
 const REMINDER_CHANNEL_ID = 'rettrack-reminders';
 const REMINDER_MINUTE = 0;
 const FUTURE_RETURN_REMINDER_HOUR = 10;
-const LAST_DAY_REMINDER_HOUR = 9;
+const LAST_DAY_REMINDER_HOUR = 10;
 const NEAR_FUTURE_REMINDER_DELAY_MS = 60 * 1000;
 const PENDING_DIGEST_ANCHOR_STORAGE_KEY =
   'rettrack:pendingDigestAnchorAt:v1';
-const PENDING_SOON_DELAY_MS = 60 * 1000;
-const QUIET_HOUR_END = 9;
-const QUIET_HOUR_START = 21;
+const QUIET_HOUR_END = 10;
+const QUIET_HOUR_START = 22;
 
 type ReminderKind =
   | 'due-today-group'
@@ -142,6 +141,7 @@ export async function rescheduleAllPurchaseReminders(
   }
 
   await cancelAllScheduledAppReminders();
+  await dismissPresentedPendingDigestNotifications();
 
   const canSchedule = await canScheduleNotifications();
 
@@ -199,6 +199,48 @@ function cancelAllScheduledAppReminders() {
   });
 }
 
+async function dismissPresentedPendingDigestNotifications() {
+  try {
+    const presentedNotifications =
+      await Notifications.getPresentedNotificationsAsync();
+    const pendingDigestNotifications = presentedNotifications.filter(
+      isPresentedPendingDigestNotification,
+    );
+
+    await Promise.all(
+      pendingDigestNotifications.map((notification) =>
+        Notifications.dismissNotificationAsync(
+          notification.request.identifier,
+        ).catch(() => {
+          // Dismissing stale delivered digests is best-effort.
+        }),
+      ),
+    );
+  } catch {
+    // Presented notification cleanup should not block schedule reconciliation.
+  }
+}
+
+function isPresentedPendingDigestNotification(
+  notification: Notifications.Notification,
+) {
+  const { content, identifier } = notification.request;
+
+  return (
+    identifier.startsWith('rettrack:pending-digest:') ||
+    (content.data?.source === 'rettrack-local-reminder' &&
+      isPendingDigestReminderKind(content.data.reminderKind))
+  );
+}
+
+function isPendingDigestReminderKind(reminderKind: unknown) {
+  return (
+    reminderKind === 'pending-digest-initial' ||
+    reminderKind === 'pending-digest-three-days' ||
+    reminderKind === 'pending-digest-seven-days'
+  );
+}
+
 async function canScheduleNotifications() {
   const status = await getNotificationPermissionsStatus();
 
@@ -215,19 +257,30 @@ async function getOrCreatePendingDigestAnchorDate(now: Date) {
   const storedAnchorDate = await getStoredPendingDigestAnchorDate();
 
   if (storedAnchorDate) {
-    return storedAnchorDate;
+    const normalizedAnchorDate =
+      normalizePendingDigestAnchorDate(storedAnchorDate);
+
+    if (normalizedAnchorDate.getTime() !== storedAnchorDate.getTime()) {
+      await storePendingDigestAnchorDate(normalizedAnchorDate);
+    }
+
+    return normalizedAnchorDate;
   }
 
   const nextAnchorDate = getImmediatePendingReminderDate(now);
 
+  await storePendingDigestAnchorDate(nextAnchorDate);
+
+  return nextAnchorDate;
+}
+
+async function storePendingDigestAnchorDate(anchorDate: Date) {
   await AsyncStorage.setItem(
     PENDING_DIGEST_ANCHOR_STORAGE_KEY,
-    String(nextAnchorDate.getTime()),
+    String(anchorDate.getTime()),
   ).catch(() => {
     // If local tracking cannot be written, keep this reconcile best-effort.
   });
-
-  return nextAnchorDate;
 }
 
 async function getStoredPendingDigestAnchorDate() {
@@ -403,21 +456,21 @@ function getPendingFollowUpDate(startDate: Date, daysLater: number) {
 }
 
 function getImmediatePendingReminderDate(now: Date) {
-  if (isBeforeQuietHourEnd(now)) {
+  if (now.getTime() < atReminderTime(now, QUIET_HOUR_END).getTime()) {
     return atReminderTime(now, QUIET_HOUR_END);
   }
 
-  if (isAtOrAfterQuietHourStart(now)) {
-    return atReminderTime(addDays(now, 1), QUIET_HOUR_END);
+  return atReminderTime(addDays(now, 1), QUIET_HOUR_END);
+}
+
+function normalizePendingDigestAnchorDate(anchorDate: Date) {
+  const morningAnchorDate = atReminderTime(anchorDate, QUIET_HOUR_END);
+
+  if (anchorDate.getTime() <= morningAnchorDate.getTime()) {
+    return morningAnchorDate;
   }
 
-  const nearFutureDate = new Date(
-    now.getTime() + PENDING_SOON_DELAY_MS,
-  );
-
-  return isWithinReminderHours(nearFutureDate)
-    ? nearFutureDate
-    : atReminderTime(addDays(now, 1), QUIET_HOUR_END);
+  return atReminderTime(addDays(anchorDate, 1), QUIET_HOUR_END);
 }
 
 function getDueTodayReminderDate(now: Date) {

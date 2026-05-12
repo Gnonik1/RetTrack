@@ -78,7 +78,7 @@ export function NotificationPermissionScreen({
                     Quiet hours
                   </AppText>
                   <AppText style={styles.enabledItemBody} variant="caption">
-                    No reminders from 9 PM to 9 AM
+                    No reminders from 10 PM to 10 AM
                   </AppText>
                 </View>
               </View>

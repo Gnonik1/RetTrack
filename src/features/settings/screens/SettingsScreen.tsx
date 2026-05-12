@@ -55,8 +55,8 @@ const SETTINGS_MODAL_CONTENT: Record<
     title: 'Currency',
   },
   notifications: {
-    body: 'Return reminders are scheduled 7 days before, 3 days before, and on the last day.',
-    secondaryBody: 'Quiet hours are 9 PM to 9 AM.',
+    body: 'Return reminders: 7 days before, 3 days before, and last day.\n\nPending decisions: 10\u00A0AM',
+    secondaryBody: 'Quiet hours: 10\u00A0PM \u2013 10\u00A0AM.',
     title: 'Notifications',
   },
   legalLinkError: {
