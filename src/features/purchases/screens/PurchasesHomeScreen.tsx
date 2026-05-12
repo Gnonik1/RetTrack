@@ -1,3 +1,4 @@
+import { LinearGradient } from 'expo-linear-gradient';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
@@ -787,6 +788,28 @@ export function PurchasesHomeScreen({
 
   return (
     <AppScreen style={styles.screen}>
+      <LinearGradient
+        colors={['#FBFAF3', '#F4F7EE', '#FFF7EC']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        pointerEvents="none"
+        style={styles.backgroundBase}
+      />
+      <View pointerEvents="none" style={styles.backgroundSageGlow} />
+      <View pointerEvents="none" style={styles.backgroundDashboardGlow} />
+      <View pointerEvents="none" style={styles.backgroundWarmGlow} />
+      <View pointerEvents="none" style={styles.backgroundLowerSageWash} />
+      <LinearGradient
+        colors={[
+          'rgba(255, 250, 238, 0)',
+          'rgba(247, 239, 218, 0.28)',
+          'rgba(238, 245, 231, 0.2)',
+        ]}
+        pointerEvents="none"
+        style={styles.backgroundLowerBlend}
+      />
+      <View pointerEvents="none" style={styles.backgroundPaperWash} />
+
       <ScrollView
         contentContainerStyle={styles.content}
         scrollEnabled={isScrollEnabled}
@@ -813,7 +836,13 @@ export function PurchasesHomeScreen({
           </Pressable>
         </View>
 
-        <View style={styles.attentionCard}>
+        <LinearGradient
+          colors={['#2F442F', '#415C3D', '#314832']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.attentionCard}
+        >
+          <View pointerEvents="none" style={styles.attentionCardGlow} />
           <View style={styles.attentionTopRow}>
             <AppText style={styles.attentionLabel} variant="caption">
               Needs attention
@@ -835,7 +864,7 @@ export function PurchasesHomeScreen({
               </View>
             ))}
           </View>
-        </View>
+        </LinearGradient>
 
         <View style={styles.segmentedFilter}>
           {filterItems.map((filterItem) => {
@@ -908,55 +937,123 @@ export function PurchasesHomeScreen({
 
 const styles = StyleSheet.create({
   screen: {
+    backgroundColor: '#FBFAF3',
     paddingBottom: 0,
     paddingTop: theme.spacing.xl,
+    position: 'relative',
+  },
+  backgroundBase: {
+    ...StyleSheet.absoluteFillObject,
+    bottom: -48,
+    left: -theme.spacing.md,
+    right: -theme.spacing.md,
+    top: -48,
+  },
+  backgroundDashboardGlow: {
+    backgroundColor: 'rgba(234, 241, 226, 0.74)',
+    borderRadius: 170,
+    height: 260,
+    left: -126,
+    position: 'absolute',
+    top: 104,
+    transform: [{ rotate: '-18deg' }],
+    width: 470,
+  },
+  backgroundPaperWash: {
+    backgroundColor: 'rgba(255, 253, 246, 0.78)',
+    borderRadius: 170,
+    height: 330,
+    left: -144,
+    position: 'absolute',
+    top: 158,
+    transform: [{ rotate: '-22deg' }],
+    width: 500,
+  },
+  backgroundSageGlow: {
+    backgroundColor: 'rgba(212, 228, 203, 0.84)',
+    borderRadius: 180,
+    height: 292,
+    position: 'absolute',
+    right: -116,
+    top: -84,
+    width: 318,
+  },
+  backgroundWarmGlow: {
+    backgroundColor: 'rgba(238, 219, 185, 0.3)',
+    borderRadius: 260,
+    bottom: -34,
+    height: 430,
+    left: -228,
+    position: 'absolute',
+    transform: [{ rotate: '-8deg' }],
+    width: 448,
+  },
+  backgroundLowerSageWash: {
+    backgroundColor: 'rgba(224, 233, 215, 0.28)',
+    borderRadius: 260,
+    bottom: 58,
+    height: 270,
+    position: 'absolute',
+    right: -244,
+    transform: [{ rotate: '-14deg' }],
+    width: 520,
+  },
+  backgroundLowerBlend: {
+    bottom: -48,
+    height: 360,
+    left: -theme.spacing.md,
+    position: 'absolute',
+    right: -theme.spacing.md,
   },
   scroll: {
     flex: 1,
+    position: 'relative',
   },
   content: {
     flexGrow: 1,
-    paddingBottom: 112,
-    paddingTop: theme.spacing.xs,
+    paddingBottom: 122,
+    paddingTop: theme.spacing.sm,
   },
   header: {
     alignItems: 'center',
     flexDirection: 'row',
     gap: theme.spacing.md,
     justifyContent: 'space-between',
+    marginTop: 2,
   },
   headerCopy: {
     flex: 1,
+    gap: 3,
   },
   greeting: {
     color: theme.colors.muted,
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: theme.fontWeight.medium,
-    lineHeight: 17,
+    lineHeight: 18,
   },
   title: {
     ...theme.typography.screenTitle,
-    color: theme.colors.text,
-    fontSize: 29,
-    lineHeight: 35,
-    marginTop: 3,
+    color: '#12322D',
+    fontSize: 32,
+    lineHeight: 38,
   },
   notificationButton: {
     alignItems: 'center',
-    backgroundColor: theme.colors.card,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.lg,
+    backgroundColor: '#FFFDF8',
+    borderColor: 'rgba(92, 111, 82, 0.18)',
+    borderRadius: 20,
     borderWidth: 1,
-    height: 44,
+    height: 48,
     justifyContent: 'center',
-    shadowColor: theme.colors.text,
+    shadowColor: theme.colors.greenDark,
     shadowOffset: {
-      height: 8,
+      height: 10,
       width: 0,
     },
-    shadowOpacity: 0.045,
-    shadowRadius: 14,
-    width: 44,
+    shadowOpacity: 0.08,
+    shadowRadius: 18,
+    width: 48,
+    elevation: 2,
   },
   bellIcon: {
     alignItems: 'center',
@@ -1027,102 +1124,131 @@ const styles = StyleSheet.create({
     width: 4,
   },
   attentionCard: {
-    backgroundColor: theme.colors.greenDark,
-    borderRadius: theme.radius.xl,
-    marginTop: theme.spacing.lg,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    borderColor: 'rgba(255, 255, 255, 0.14)',
+    borderRadius: 28,
+    borderWidth: 1,
+    marginTop: 22,
+    overflow: 'hidden',
+    paddingHorizontal: 16,
+    paddingVertical: 15,
     shadowColor: theme.colors.greenDark,
     shadowOffset: {
-      height: 12,
+      height: 18,
       width: 0,
     },
-    shadowOpacity: 0.15,
-    shadowRadius: 22,
+    shadowOpacity: 0.2,
+    shadowRadius: 28,
+    elevation: 4,
+  },
+  attentionCardGlow: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 130,
+    height: 160,
+    position: 'absolute',
+    right: -72,
+    top: -82,
+    width: 180,
   },
   attentionTopRow: {
     gap: 2,
+    position: 'relative',
+    zIndex: 1,
   },
   attentionLabel: {
-    color: 'rgba(255, 255, 255, 0.72)',
+    color: 'rgba(255, 255, 255, 0.7)',
     fontSize: 11,
     fontWeight: theme.fontWeight.semibold,
-    lineHeight: 16,
+    lineHeight: 15,
     textTransform: 'uppercase',
   },
   attentionCount: {
-    color: theme.colors.card,
-    fontSize: 26,
+    color: '#FFFDF7',
+    fontSize: 28,
     fontWeight: theme.fontWeight.bold,
-    lineHeight: 32,
+    lineHeight: 34,
   },
   attentionMiniCards: {
     flexDirection: 'row',
     gap: theme.spacing.sm,
-    marginTop: 10,
+    marginTop: 12,
+    position: 'relative',
+    zIndex: 1,
   },
   attentionMiniCard: {
-    backgroundColor: 'rgba(255, 255, 255, 0.16)',
-    borderColor: 'rgba(255, 255, 255, 0.2)',
-    borderRadius: theme.radius.lg,
+    backgroundColor: 'rgba(255, 255, 255, 0.13)',
+    borderColor: 'rgba(255, 255, 255, 0.22)',
+    borderRadius: 18,
     borderWidth: 1,
     flex: 1,
-    minHeight: 62,
-    paddingHorizontal: 11,
-    paddingVertical: 8,
+    minHeight: 66,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
   },
   attentionMiniLabel: {
-    color: 'rgba(255, 255, 255, 0.68)',
+    color: 'rgba(255, 255, 255, 0.66)',
     fontSize: 11,
     fontWeight: theme.fontWeight.medium,
-    lineHeight: 16,
+    lineHeight: 15,
   },
   attentionMiniValue: {
-    color: theme.colors.card,
-    fontSize: 13,
+    color: '#FFFDF7',
+    fontSize: 14,
     fontWeight: theme.fontWeight.semibold,
-    lineHeight: 18,
+    lineHeight: 19,
     marginTop: 6,
   },
   segmentedFilter: {
-    backgroundColor: theme.colors.sage,
-    borderColor: theme.colors.border,
+    backgroundColor: 'rgba(246, 247, 240, 0.86)',
+    borderColor: 'rgba(91, 105, 82, 0.13)',
     borderRadius: theme.radius.pill,
     borderWidth: 1,
     flexDirection: 'row',
-    gap: 2,
-    marginTop: 18,
-    padding: 4,
+    gap: 3,
+    marginTop: 20,
+    padding: 5,
+    shadowColor: theme.colors.greenDark,
+    shadowOffset: {
+      height: 8,
+      width: 0,
+    },
+    shadowOpacity: 0.045,
+    shadowRadius: 18,
+    elevation: 1,
   },
   filterItem: {
     alignItems: 'center',
+    borderColor: 'transparent',
     borderRadius: theme.radius.pill,
+    borderWidth: 1,
     flex: 1,
     justifyContent: 'center',
-    minHeight: 36,
+    minHeight: 38,
   },
   filterItemSelected: {
-    backgroundColor: theme.colors.card,
-    shadowColor: theme.colors.text,
+    backgroundColor: '#FFFDF8',
+    borderColor: 'rgba(223, 226, 216, 0.9)',
+    borderWidth: 1,
+    shadowColor: theme.colors.greenDark,
     shadowOffset: {
       height: 5,
       width: 0,
     },
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
+    shadowOpacity: 0.055,
+    shadowRadius: 12,
+    elevation: 1,
   },
   filterText: {
-    color: theme.colors.muted,
-    fontSize: 12,
+    color: '#747A70',
+    fontSize: 13,
     fontWeight: theme.fontWeight.semibold,
-    lineHeight: 16,
+    lineHeight: 17,
   },
   filterTextSelected: {
     color: theme.colors.greenDark,
   },
   swipeContent: {
     flexGrow: 1,
-    marginTop: 18,
+    marginTop: 20,
   },
   sectionRow: {
     alignItems: 'center',
@@ -1130,48 +1256,49 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   sectionTitle: {
-    color: theme.colors.text,
-    fontSize: 16,
+    color: '#111A14',
+    fontSize: 17,
     fontWeight: theme.fontWeight.semibold,
-    lineHeight: 21,
+    lineHeight: 22,
   },
   sectionMeta: {
-    color: '#8C9186',
-    fontSize: 10,
+    color: '#858B80',
+    fontSize: 11,
     fontWeight: theme.fontWeight.medium,
-    lineHeight: 14,
+    lineHeight: 15,
     textTransform: 'uppercase',
   },
   itemList: {
-    gap: 11,
-    marginTop: 10,
+    gap: 12,
+    marginTop: 12,
   },
   emptyStateCard: {
     alignItems: 'center',
-    backgroundColor: theme.colors.card,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.xl,
+    backgroundColor: '#FFFDF8',
+    borderColor: 'rgba(92, 111, 82, 0.14)',
+    borderRadius: 26,
     borderWidth: 1,
     paddingHorizontal: 18,
-    paddingVertical: 22,
-    shadowColor: theme.colors.text,
+    paddingVertical: 24,
+    shadowColor: theme.colors.greenDark,
     shadowOffset: {
-      height: 8,
+      height: 12,
       width: 0,
     },
-    shadowOpacity: 0.035,
-    shadowRadius: 14,
+    shadowOpacity: 0.055,
+    shadowRadius: 22,
+    elevation: 2,
   },
   emptyStateTitle: {
-    color: theme.colors.text,
-    fontSize: 16,
+    color: '#111A14',
+    fontSize: 17,
     fontWeight: theme.fontWeight.semibold,
-    lineHeight: 22,
+    lineHeight: 23,
     marginTop: 13,
     textAlign: 'center',
   },
   emptyStateBody: {
-    color: theme.colors.muted,
+    color: '#73786E',
     fontSize: 13,
     fontWeight: theme.fontWeight.regular,
     lineHeight: 19,
@@ -1181,14 +1308,14 @@ const styles = StyleSheet.create({
   },
   emptyStateAction: {
     alignItems: 'center',
-    backgroundColor: theme.colors.sage,
-    borderColor: '#D8E3D0',
+    backgroundColor: '#EEF4EA',
+    borderColor: '#DCE8D5',
     borderRadius: theme.radius.pill,
     borderWidth: 1,
     justifyContent: 'center',
     marginTop: 14,
-    minHeight: 36,
-    paddingHorizontal: 17,
+    minHeight: 38,
+    paddingHorizontal: 18,
   },
   emptyStateActionPressed: {
     opacity: 0.82,
@@ -1200,57 +1327,58 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   itemCard: {
-    backgroundColor: theme.colors.card,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.xl,
+    backgroundColor: '#FFFDF8',
+    borderColor: 'rgba(92, 111, 82, 0.14)',
+    borderRadius: 26,
     borderWidth: 1,
-    padding: 14,
-    shadowColor: theme.colors.text,
+    padding: 16,
+    shadowColor: theme.colors.greenDark,
     shadowOffset: {
-      height: 10,
+      height: 14,
       width: 0,
     },
-    shadowOpacity: 0.045,
-    shadowRadius: 18,
+    shadowOpacity: 0.07,
+    shadowRadius: 24,
+    elevation: 2,
   },
   cardTapArea: {
-    borderRadius: theme.radius.lg,
+    borderRadius: 22,
   },
   cardTapAreaPressed: {
     opacity: 0.78,
   },
   keptItemCard: {
-    borderColor: '#DCE5CC',
+    borderColor: '#E0E6D0',
   },
   pendingItemCard: {
-    borderColor: '#EDDEDA',
+    borderColor: '#EFDCD8',
   },
   returnedItemCard: {
-    borderColor: '#DBE5D4',
+    borderColor: '#DEE8D7',
   },
   itemTopRow: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: 11,
+    gap: 13,
   },
   productIcon: {
     alignItems: 'center',
-    backgroundColor: '#E6EEDF',
-    borderColor: '#D8E3D0',
-    borderRadius: theme.radius.lg,
+    backgroundColor: '#EAF1E4',
+    borderColor: '#DCE8D5',
+    borderRadius: 18,
     borderWidth: 1,
-    height: 48,
+    height: 54,
     justifyContent: 'center',
-    width: 48,
+    width: 54,
   },
   productThumbnail: {
-    backgroundColor: theme.colors.sage,
-    borderColor: '#D8E3D0',
-    borderRadius: theme.radius.lg,
+    backgroundColor: '#EEF4EA',
+    borderColor: '#DCE8D5',
+    borderRadius: 18,
     borderWidth: 1,
-    height: 48,
+    height: 54,
     overflow: 'hidden',
-    width: 48,
+    width: 54,
   },
   productThumbnailImage: {
     height: '100%',
@@ -1262,10 +1390,10 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 9,
     borderTopRightRadius: 9,
     borderWidth: 1.5,
-    height: 9,
+    height: 10,
     marginBottom: -2,
     opacity: 0.84,
-    width: 17,
+    width: 18,
     zIndex: 1,
   },
   bagBody: {
@@ -1274,11 +1402,11 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.greenDark,
     borderRadius: 8,
     borderWidth: 1.5,
-    height: 23,
+    height: 24,
     justifyContent: 'center',
     overflow: 'hidden',
     position: 'relative',
-    width: 28,
+    width: 30,
   },
   bagFold: {
     backgroundColor: '#DDE7D4',
@@ -1291,7 +1419,7 @@ const styles = StyleSheet.create({
   },
   itemCopy: {
     flex: 1,
-    gap: 4,
+    gap: 5,
   },
   itemNameRow: {
     alignItems: 'center',
@@ -1300,22 +1428,22 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   itemName: {
-    color: theme.colors.text,
+    color: '#111A14',
     flex: 1,
-    fontSize: theme.fontSize.md,
+    fontSize: 17,
     fontWeight: theme.fontWeight.semibold,
     lineHeight: 22,
   },
   storeName: {
-    color: theme.colors.muted,
+    color: '#73786E',
     fontSize: 13,
     fontWeight: theme.fontWeight.regular,
     lineHeight: 18,
   },
   statusPill: {
     borderRadius: theme.radius.pill,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
   },
   statusPillText: {
     fontSize: 11,
@@ -1354,18 +1482,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 12,
+    marginTop: 14,
   },
   returnByText: {
     color: theme.colors.greenDark,
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: theme.fontWeight.semibold,
-    lineHeight: 17,
+    lineHeight: 18,
   },
   daysText: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: theme.fontWeight.semibold,
-    lineHeight: 17,
+    lineHeight: 18,
   },
   alertDaysText: {
     color: theme.colors.pending,
@@ -1390,32 +1518,40 @@ const styles = StyleSheet.create({
   },
   cardActions: {
     flexDirection: 'row',
-    gap: theme.spacing.sm,
-    marginTop: 10,
+    gap: 10,
+    marginTop: 12,
   },
   cardActionButton: {
     alignItems: 'center',
-    borderColor: theme.colors.border,
+    borderColor: 'rgba(92, 111, 82, 0.16)',
     borderRadius: theme.radius.pill,
     borderWidth: 1,
     flex: 1,
     justifyContent: 'center',
-    minHeight: 38,
+    minHeight: 42,
   },
   returnedActionButton: {
-    backgroundColor: theme.colors.green,
-    borderColor: theme.colors.green,
+    backgroundColor: '#536A4E',
+    borderColor: '#536A4E',
+    shadowColor: theme.colors.greenDark,
+    shadowOffset: {
+      height: 6,
+      width: 0,
+    },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
   },
   keepActionButton: {
-    backgroundColor: theme.colors.sage,
+    backgroundColor: '#F0F2EA',
+    borderColor: '#E1E4D9',
   },
   cardActionText: {
     color: theme.colors.greenDark,
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: theme.fontWeight.semibold,
-    lineHeight: 18,
+    lineHeight: 19,
   },
   returnedActionText: {
-    color: theme.colors.card,
+    color: '#FFFDF7',
   },
 });
