@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { AppBottomNav } from '../../../components/AppBottomNav';
 import { AppScreen } from '../../../components/AppScreen';
@@ -97,11 +98,38 @@ function getResolvedStatusText(purchase: MockPurchase) {
   return purchase.completedText;
 }
 
-function HistoryMarker({ status }: { status: MockPurchase['status'] }) {
+function HistoryMarker({
+  photoUri,
+  status,
+}: {
+  photoUri?: string;
+  status: MockPurchase['status'];
+}) {
   const isReturned = status === 'returned';
+  const resolvedPhotoUri = photoUri?.trim();
+
+  if (resolvedPhotoUri) {
+    return (
+      <View
+        accessibilityElementsHidden
+        style={[
+          styles.thumbnailFrame,
+          isReturned ? styles.returnedThumbnailFrame : styles.keptThumbnailFrame,
+        ]}
+      >
+        <Image
+          accessibilityIgnoresInvertColors
+          resizeMode="cover"
+          source={{ uri: resolvedPhotoUri }}
+          style={styles.thumbnailImage}
+        />
+      </View>
+    );
+  }
 
   return (
     <View
+      accessibilityElementsHidden
       style={[
         styles.marker,
         isReturned ? styles.returnedMarker : styles.keptMarker,
@@ -139,6 +167,19 @@ export function HistoryScreen() {
 
   return (
     <AppScreen style={styles.screen}>
+      <LinearGradient
+        colors={['#FBFAF3', '#F3F7EF', '#FFF8EC']}
+        end={{ x: 1, y: 1 }}
+        pointerEvents="none"
+        start={{ x: 0, y: 0 }}
+        style={styles.backgroundBase}
+      />
+      <View pointerEvents="none" style={styles.backgroundTopSageGlow} />
+      <View pointerEvents="none" style={styles.backgroundArchiveWash} />
+      <View pointerEvents="none" style={styles.backgroundPaperVeil} />
+      <View pointerEvents="none" style={styles.backgroundLowerWarmGlow} />
+      <View pointerEvents="none" style={styles.backgroundLowerSageVeil} />
+
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
@@ -174,6 +215,7 @@ export function HistoryScreen() {
                 <View style={styles.monthItems}>
                   {group.items.map((purchase, index) => {
                     const resolvedStatusText = getResolvedStatusText(purchase);
+                    const isReturned = purchase.status === 'returned';
 
                     return (
                       <Pressable
@@ -192,7 +234,10 @@ export function HistoryScreen() {
                           pressed && styles.historyCardPressed,
                         ]}
                       >
-                        <HistoryMarker status={purchase.status} />
+                        <HistoryMarker
+                          photoUri={purchase.photoUris?.[0]}
+                          status={purchase.status}
+                        />
 
                         <View style={styles.rowCopy}>
                           <View style={styles.rowTitleLine}>
@@ -203,9 +248,26 @@ export function HistoryScreen() {
                             >
                               {purchase.itemName}
                             </AppText>
-                            <AppText style={styles.statusText} variant="caption">
-                              {purchaseStatusLabels[purchase.status]}
-                            </AppText>
+                            <View
+                              style={[
+                                styles.statusPill,
+                                isReturned
+                                  ? styles.returnedStatusPill
+                                  : styles.keptStatusPill,
+                              ]}
+                            >
+                              <AppText
+                                style={[
+                                  styles.statusText,
+                                  isReturned
+                                    ? styles.returnedStatusText
+                                    : styles.keptStatusText,
+                                ]}
+                                variant="caption"
+                              >
+                                {purchaseStatusLabels[purchase.status]}
+                              </AppText>
+                            </View>
                           </View>
 
                           <AppText style={styles.storeName} variant="caption">
@@ -214,7 +276,12 @@ export function HistoryScreen() {
 
                           {resolvedStatusText ? (
                             <AppText
-                              style={styles.completedText}
+                              style={[
+                                styles.completedText,
+                                isReturned
+                                  ? styles.returnedCompletedText
+                                  : styles.keptCompletedText,
+                              ]}
                               variant="caption"
                             >
                               {resolvedStatusText}
@@ -240,45 +307,116 @@ export function HistoryScreen() {
 
 const styles = StyleSheet.create({
   completedText: {
-    color: theme.colors.greenDark,
     fontSize: 12,
     fontWeight: theme.fontWeight.medium,
     lineHeight: 17,
-    marginTop: 5,
+    marginTop: 6,
+  },
+  backgroundArchiveWash: {
+    backgroundColor: 'rgba(239, 244, 233, 0.34)',
+    borderRadius: 260,
+    height: 420,
+    left: -250,
+    position: 'absolute',
+    top: 168,
+    transform: [{ rotate: '-12deg' }],
+    width: 760,
+  },
+  backgroundBase: {
+    ...StyleSheet.absoluteFillObject,
+    bottom: -48,
+    left: -theme.spacing.md,
+    right: -theme.spacing.md,
+    top: -48,
+  },
+  backgroundLowerSageVeil: {
+    backgroundColor: 'rgba(226, 234, 217, 0.2)',
+    borderRadius: 360,
+    bottom: -70,
+    height: 440,
+    position: 'absolute',
+    right: -320,
+    transform: [{ rotate: '-8deg' }],
+    width: 760,
+  },
+  backgroundLowerWarmGlow: {
+    backgroundColor: 'rgba(242, 226, 198, 0.2)',
+    borderRadius: 420,
+    bottom: -190,
+    height: 640,
+    left: -480,
+    position: 'absolute',
+    transform: [{ rotate: '-4deg' }],
+    width: 920,
+  },
+  backgroundPaperVeil: {
+    backgroundColor: 'rgba(255, 253, 248, 0.54)',
+    borderRadius: 260,
+    height: 430,
+    left: -200,
+    position: 'absolute',
+    top: 275,
+    transform: [{ rotate: '-10deg' }],
+    width: 730,
+  },
+  backgroundTopSageGlow: {
+    backgroundColor: 'rgba(216, 231, 207, 0.34)',
+    borderRadius: 360,
+    height: 610,
+    position: 'absolute',
+    right: -440,
+    top: -275,
+    width: 720,
   },
   content: {
     flexGrow: 1,
-    paddingBottom: 160,
-    paddingTop: theme.spacing.xs,
+    paddingBottom: 128,
+    paddingTop: theme.spacing.sm,
   },
   emptyBody: {
-    color: theme.colors.muted,
-    fontSize: 13,
-    lineHeight: 19,
-    marginTop: 6,
+    color: '#747A70',
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: 7,
     maxWidth: 250,
     textAlign: 'center',
   },
   emptyCard: {
     alignItems: 'center',
-    backgroundColor: theme.colors.card,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.xl,
+    backgroundColor: '#FFFDF8',
+    borderColor: 'rgba(92, 111, 82, 0.16)',
+    borderRadius: 28,
     borderWidth: 1,
-    marginTop: 22,
-    paddingHorizontal: 18,
-    paddingVertical: 26,
+    marginTop: 24,
+    paddingHorizontal: 22,
+    paddingVertical: 30,
+    shadowColor: theme.colors.greenDark,
+    shadowOffset: {
+      height: 16,
+      width: 0,
+    },
+    shadowOpacity: 0.055,
+    shadowRadius: 24,
+    elevation: 3,
   },
   emptyIcon: {
     alignItems: 'center',
-    backgroundColor: '#E6EEDF',
-    borderColor: '#D8E3D0',
-    borderRadius: theme.radius.lg,
+    backgroundColor: '#EEF4EA',
+    borderColor: '#DCE8D4',
+    borderRadius: 20,
     borderWidth: 1,
-    height: 44,
+    height: 54,
     justifyContent: 'center',
-    marginBottom: 13,
-    width: 44,
+    marginBottom: 15,
+    shadowColor: theme.colors.greenDark,
+    shadowOffset: {
+      height: 7,
+      width: 0,
+    },
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    width: 54,
+    elevation: 1,
   },
   emptyIconHandLong: {
     backgroundColor: theme.colors.greenDark,
@@ -311,77 +449,113 @@ const styles = StyleSheet.create({
   },
   emptyTitle: {
     color: theme.colors.text,
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: theme.fontWeight.semibold,
-    lineHeight: 22,
+    lineHeight: 23,
     textAlign: 'center',
   },
   header: {
-    gap: 6,
+    gap: 7,
+    marginTop: 2,
   },
   historyCard: {
     alignItems: 'center',
-    backgroundColor: theme.colors.card,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.xl,
+    backgroundColor: '#FFFDF8',
+    borderColor: 'rgba(92, 111, 82, 0.16)',
+    borderRadius: 24,
     borderWidth: 1,
     flexDirection: 'row',
-    gap: 11,
+    gap: 12,
     minHeight: 82,
-    paddingHorizontal: 15,
-    paddingVertical: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    shadowColor: theme.colors.greenDark,
+    shadowOffset: {
+      height: 10,
+      width: 0,
+    },
+    shadowOpacity: 0.045,
+    shadowRadius: 18,
+    elevation: 2,
   },
   historyCardPressed: {
-    backgroundColor: theme.colors.paper,
+    backgroundColor: '#F8FAF4',
   },
   itemName: {
     color: theme.colors.text,
     flex: 1,
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: theme.fontWeight.semibold,
-    lineHeight: 20,
+    lineHeight: 21,
   },
   keptMarker: {
-    backgroundColor: '#F4F2E8',
-    borderColor: '#E3DEC9',
+    backgroundColor: '#FBF4E8',
+    borderColor: '#E8DDC4',
   },
   keptMarkerDot: {
-    backgroundColor: '#7B815F',
+    backgroundColor: '#9A743D',
+  },
+  keptCompletedText: {
+    color: '#7B6237',
+  },
+  keptStatusPill: {
+    backgroundColor: '#F8EFE0',
+    borderColor: '#EADBBE',
+  },
+  keptStatusText: {
+    color: '#7B6237',
+  },
+  keptThumbnailFrame: {
+    borderColor: '#E8DDC4',
   },
   marker: {
     alignItems: 'center',
-    borderRadius: theme.radius.md,
+    borderRadius: 18,
     borderWidth: 1,
-    height: 22,
+    height: 42,
     justifyContent: 'center',
-    opacity: 0.68,
-    width: 22,
+    width: 42,
   },
   markerDot: {
     borderRadius: theme.radius.pill,
-    height: 6,
-    opacity: 0.72,
-    width: 6,
+    height: 8,
+    opacity: 0.74,
+    width: 8,
   },
   monthGroup: {
-    gap: 9,
+    gap: 10,
   },
   monthItems: {
-    gap: 13,
+    gap: 12,
   },
   monthLabel: {
-    color: '#50574E',
+    color: '#596654',
     fontSize: 11,
     fontWeight: theme.fontWeight.semibold,
+    letterSpacing: 1.2,
     lineHeight: 15,
+    marginLeft: 2,
     textTransform: 'uppercase',
   },
   returnedMarker: {
-    backgroundColor: theme.colors.sage,
-    borderColor: '#E0E8D9',
+    backgroundColor: '#EEF4EA',
+    borderColor: '#D8E5CF',
   },
   returnedMarkerDot: {
     backgroundColor: theme.colors.greenDark,
+  },
+  returnedCompletedText: {
+    color: theme.colors.greenDark,
+  },
+  returnedStatusPill: {
+    backgroundColor: '#EEF4EA',
+    borderColor: '#D8E5CF',
+  },
+  returnedStatusText: {
+    color: theme.colors.greenDark,
+  },
+  returnedThumbnailFrame: {
+    borderColor: '#D8E5CF',
   },
   rowCopy: {
     flex: 1,
@@ -399,43 +573,64 @@ const styles = StyleSheet.create({
     width: 7,
   },
   rowTitleLine: {
-    alignItems: 'flex-start',
+    alignItems: 'center',
     flexDirection: 'row',
     gap: 10,
   },
   screen: {
+    backgroundColor: '#FBFAF3',
     paddingBottom: 0,
     paddingTop: theme.spacing.xl,
+    position: 'relative',
   },
   scroll: {
     flex: 1,
+    position: 'relative',
   },
   statusText: {
-    color: theme.colors.greenDark,
-    flexShrink: 0,
     fontSize: 11,
     fontWeight: theme.fontWeight.semibold,
     lineHeight: 16,
   },
+  statusPill: {
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    flexShrink: 0,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+  },
   storeName: {
-    color: theme.colors.muted,
-    fontSize: 13,
-    lineHeight: 18,
-    marginTop: 3,
+    color: '#73796F',
+    fontSize: 14,
+    lineHeight: 19,
+    marginTop: 4,
   },
   subtitle: {
     ...theme.typography.screenSubtitle,
     color: theme.colors.muted,
-    lineHeight: 21,
+    fontSize: 15,
+    lineHeight: 22,
   },
   timeline: {
     gap: 18,
-    marginTop: 22,
+    marginTop: 26,
+  },
+  thumbnailFrame: {
+    backgroundColor: '#EEF4EA',
+    borderRadius: 18,
+    borderWidth: 1,
+    height: 42,
+    overflow: 'hidden',
+    width: 42,
+  },
+  thumbnailImage: {
+    height: '100%',
+    width: '100%',
   },
   title: {
     ...theme.typography.screenTitle,
-    color: theme.colors.text,
-    fontSize: 29,
-    lineHeight: 36,
+    color: '#12322D',
+    fontSize: 32,
+    lineHeight: 39,
   },
 });
