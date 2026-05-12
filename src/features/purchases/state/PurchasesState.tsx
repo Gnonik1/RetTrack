@@ -278,6 +278,13 @@ function findPurchaseBySharedIdentity(
   );
 }
 
+function findMatchingAccountPurchaseForGuestMigration(
+  guestPurchase: MockPurchase,
+  accountPurchases: MockPurchase[],
+) {
+  return findPurchaseBySharedIdentity(guestPurchase, accountPurchases);
+}
+
 function getPurchaseWithLocalDeviceData(
   purchase: MockPurchase,
   localPurchases: MockPurchase[],
@@ -318,22 +325,175 @@ function mergeRemotePurchasesWithLocalUnsynced(
   return [...preservedLocalPurchases, ...remotePurchasesWithoutPreservedLocal];
 }
 
-function getGuestPurchasesForAccountMigration(
+function getGuestPurchaseForNewAccountInsert(purchase: MockPurchase) {
+  return {
+    ...purchase,
+    lastSyncedAt: undefined,
+    remoteId: undefined,
+    syncStatus: 'local' as const,
+  };
+}
+
+function isResolvedPurchaseStatus(
+  status: PurchaseStatus,
+): status is ResolvedPurchaseStatus {
+  return status === 'returned' || status === 'kept';
+}
+
+function getPurchaseDecisionTime(purchase: MockPurchase) {
+  if (isResolvedPurchaseStatus(purchase.status)) {
+    return purchase.resolvedAt;
+  }
+
+  if (purchase.status === 'pending') {
+    return purchase.pendingAt ?? purchase.createdAt;
+  }
+
+  return undefined;
+}
+
+function isRepresentablePendingDecision(purchase: MockPurchase) {
+  return (
+    purchase.status === 'pending' &&
+    getReturnDateUrgency(purchase).state === 'expired'
+  );
+}
+
+function shouldGuestDecisionUpdateAccountPurchase(
+  guestPurchase: MockPurchase,
+  accountPurchase: MockPurchase,
+) {
+  if (guestPurchase.status === 'active') {
+    return false;
+  }
+
+  if (isResolvedPurchaseStatus(guestPurchase.status)) {
+    if (
+      accountPurchase.status === 'active' ||
+      accountPurchase.status === 'pending'
+    ) {
+      return true;
+    }
+
+    if (isResolvedPurchaseStatus(accountPurchase.status)) {
+      const guestDecisionTime = getPurchaseDecisionTime(guestPurchase);
+      const accountDecisionTime = getPurchaseDecisionTime(accountPurchase);
+
+      if (guestDecisionTime && !accountDecisionTime) {
+        return true;
+      }
+
+      return Boolean(
+        guestDecisionTime &&
+          accountDecisionTime &&
+          guestDecisionTime > accountDecisionTime,
+      );
+    }
+  }
+
+  return (
+    isRepresentablePendingDecision(guestPurchase) &&
+    accountPurchase.status === 'active'
+  );
+}
+
+function getResolvedPurchaseCompletedText(
+  purchase: MockPurchase & { status: ResolvedPurchaseStatus },
+) {
+  if (purchase.resolvedAt) {
+    return getResolvedStatusText(purchase.status, new Date(purchase.resolvedAt));
+  }
+
+  return purchase.completedText ?? purchase.days;
+}
+
+function reconcileGuestPurchaseIntoAccountPurchase(
+  guestPurchase: MockPurchase,
+  accountPurchase: MockPurchase,
+) {
+  if (isResolvedPurchaseStatus(guestPurchase.status)) {
+    const completedText = getResolvedPurchaseCompletedText({
+      ...guestPurchase,
+      status: guestPurchase.status,
+    });
+
+    return {
+      ...accountPurchase,
+      completedText,
+      days: completedText,
+      pendingAt: undefined,
+      resolvedAt: guestPurchase.resolvedAt ?? accountPurchase.resolvedAt,
+      status: guestPurchase.status,
+      syncStatus: 'local' as const,
+    };
+  }
+
+  return {
+    ...accountPurchase,
+    completedText: undefined,
+    days: 'Needs decision',
+    pendingAt: guestPurchase.pendingAt ?? accountPurchase.pendingAt,
+    resolvedAt: undefined,
+    returnBy: guestPurchase.returnBy,
+    returnByDetail: guestPurchase.returnByDetail,
+    returnDateISO: guestPurchase.returnDateISO,
+    status: 'pending' as const,
+    syncStatus: 'local' as const,
+  };
+}
+
+function getGuestPurchaseMigrationPlan(
   guestPurchases: MockPurchase[],
   accountPurchases: MockPurchase[],
 ) {
-  const accountIdentityValues = getPurchaseIdentitySet(accountPurchases);
+  const guestPurchasesForInsert: MockPurchase[] = [];
+  const accountPurchaseReconciliations: MockPurchase[] = [];
+  let nextAccountPurchases = accountPurchases;
 
-  return guestPurchases
-    .filter(
-      (purchase) => !hasSharedPurchaseIdentity(purchase, accountIdentityValues),
-    )
-    .map((purchase) => ({
-      ...purchase,
-      lastSyncedAt: undefined,
-      remoteId: undefined,
-      syncStatus: 'local' as const,
-    }));
+  guestPurchases.forEach((guestPurchase) => {
+    const matchingAccountPurchase =
+      findMatchingAccountPurchaseForGuestMigration(
+        guestPurchase,
+        nextAccountPurchases,
+      );
+
+    if (!matchingAccountPurchase) {
+      guestPurchasesForInsert.push(
+        getGuestPurchaseForNewAccountInsert(guestPurchase),
+      );
+      return;
+    }
+
+    if (
+      !shouldGuestDecisionUpdateAccountPurchase(
+        guestPurchase,
+        matchingAccountPurchase,
+      )
+    ) {
+      return;
+    }
+
+    const reconciledPurchase = reconcileGuestPurchaseIntoAccountPurchase(
+      guestPurchase,
+      matchingAccountPurchase,
+    );
+
+    accountPurchaseReconciliations.push(reconciledPurchase);
+    nextAccountPurchases = nextAccountPurchases.map((accountPurchase) =>
+      hasSharedPurchaseIdentity(
+        accountPurchase,
+        new Set(getPurchaseIdentityValues(reconciledPurchase)),
+      )
+        ? reconciledPurchase
+        : accountPurchase,
+    );
+  });
+
+  return {
+    accountPurchaseReconciliations,
+    accountPurchases: nextAccountPurchases,
+    guestPurchasesForInsert,
+  };
 }
 
 function getReconciledAccountPurchaseEntriesUsed({
@@ -798,6 +958,36 @@ async function syncGuestMigrationPurchases(
   );
 }
 
+async function syncGuestAccountPurchaseReconciliations(
+  userId: string,
+  accountPurchaseReconciliations: MockPurchase[],
+) {
+  return Promise.all(
+    accountPurchaseReconciliations.map(async (purchase) => {
+      try {
+        const { data, error } = await updateRemotePurchase(userId, purchase);
+
+        if (error) {
+          return {
+            ...purchase,
+            ...getSyncErrorMetadata(),
+          };
+        }
+
+        return {
+          ...purchase,
+          ...getSyncedPurchaseMetadata(data.id),
+        };
+      } catch {
+        return {
+          ...purchase,
+          ...getSyncErrorMetadata(),
+        };
+      }
+    }),
+  );
+}
+
 async function syncAccountLocalPurchasePhotos(
   userId: string,
   accountPurchases: MockPurchase[],
@@ -922,21 +1112,33 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
           const guestPurchaseSnapshot = await hydratePurchaseStorageScope(
             GUEST_PURCHASE_SCOPE_KEY,
           );
-          const guestPurchasesForMigration =
-            getGuestPurchasesForAccountMigration(
-              guestPurchaseSnapshot.purchases,
-              mergedPurchases,
-            );
+          const guestPurchaseMigrationPlan = getGuestPurchaseMigrationPlan(
+            guestPurchaseSnapshot.purchases,
+            mergedPurchases,
+          );
+          const reconciledAccountPurchases =
+            guestPurchaseMigrationPlan.accountPurchaseReconciliations.length > 0
+              ? await syncGuestAccountPurchaseReconciliations(
+                  signedInUserId,
+                  guestPurchaseMigrationPlan.accountPurchaseReconciliations,
+                )
+              : [];
           const migratedGuestPurchases =
-            guestPurchasesForMigration.length > 0
+            guestPurchaseMigrationPlan.guestPurchasesForInsert.length > 0
               ? await syncGuestMigrationPurchases(
                   signedInUserId,
-                  guestPurchasesForMigration,
+                  guestPurchaseMigrationPlan.guestPurchasesForInsert,
                 )
               : [];
           const accountPurchases = [
             ...migratedGuestPurchases,
-            ...mergedPurchases,
+            ...guestPurchaseMigrationPlan.accountPurchases.map(
+              (accountPurchase) =>
+                findPurchaseBySharedIdentity(
+                  accountPurchase,
+                  reconciledAccountPurchases,
+                ) ?? accountPurchase,
+            ),
           ];
           const accountPurchasesWithSyncedPhotos =
             await syncAccountLocalPurchasePhotos(
