@@ -184,8 +184,8 @@ function formatDate(date: Date) {
   return `${monthLabels[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
 }
 
-function getDefaultReturnDate() {
-  return addDays(new Date(), 14);
+function getDefaultReturnDate(purchaseDate?: Date | null) {
+  return addDays(purchaseDate ?? new Date(), 14);
 }
 
 function getMonthLabel(date: Date) {
@@ -232,13 +232,16 @@ function isSameDate(firstDate: Date, secondDate: Date) {
   );
 }
 
-function getInitialReturnDate(initialValues?: PurchaseFormInitialValues) {
+function getInitialReturnDate(
+  initialValues?: PurchaseFormInitialValues,
+  defaultPurchaseDate?: Date | null,
+) {
   return (
     parsePurchaseDate({
       dateISO: initialValues?.returnDateISO,
       displayDate: initialValues?.returnByDetail ?? initialValues?.returnBy,
     }) ??
-    getDefaultReturnDate()
+    getDefaultReturnDate(defaultPurchaseDate)
   );
 }
 
@@ -361,10 +364,19 @@ export function AddFirstPurchaseScreen({
   onSkip,
 }: AddFirstPurchaseScreenProps) {
   const { defaultCurrency } = useAppSettings();
+  const isEditMode = mode === 'editPurchase';
   const hasInitialPrice = Boolean(initialValues?.price?.trim());
+  const hasInitialReturnDate = Boolean(
+    initialValues?.returnDateISO ||
+      initialValues?.returnByDetail ||
+      initialValues?.returnBy,
+  );
   const initialPrice = getInitialPriceParts(initialValues, defaultCurrency);
-  const initialReturnDate = getInitialReturnDate(initialValues);
   const initialPurchaseDate = getInitialPurchaseDate(initialValues);
+  const initialReturnDate = getInitialReturnDate(
+    initialValues,
+    isEditMode ? null : initialPurchaseDate,
+  );
   const photoLimit = isSignedIn ? ACCOUNT_PHOTO_LIMIT : GUEST_PHOTO_LIMIT;
   const initialPhotoUris = (initialValues?.photoUris ?? []).slice(
     0,
@@ -377,6 +389,9 @@ export function AddFirstPurchaseScreen({
   );
   const [returnDate, setReturnDate] = useState<Date | null>(() =>
     initialReturnDate,
+  );
+  const [hasUserEditedReturnDate, setHasUserEditedReturnDate] = useState(
+    isEditMode || hasInitialReturnDate,
   );
   const [priceAmount, setPriceAmount] = useState(initialPrice.amount);
   const [selectedCurrency, setSelectedCurrency] =
@@ -720,6 +735,7 @@ export function AddFirstPurchaseScreen({
     setStore('');
     setProductLink('');
     setReturnDate(nextReturnDate);
+    setHasUserEditedReturnDate(false);
     setPriceAmount('');
     setSelectedCurrency(defaultCurrency);
     setPurchaseDate(null);
@@ -849,12 +865,22 @@ export function AddFirstPurchaseScreen({
 
   const confirmDatePicker = () => {
     if (activeDatePicker === 'return') {
+      setHasUserEditedReturnDate(
+        (currentHasUserEditedReturnDate) =>
+          currentHasUserEditedReturnDate ||
+          !returnDate ||
+          !isSameDate(returnDate, draftDate),
+      );
       setReturnDate(draftDate);
       clearFormError('returnDate');
     }
 
     if (activeDatePicker === 'purchase') {
       setPurchaseDate(draftDate);
+
+      if (!isEditMode && !hasUserEditedReturnDate) {
+        setReturnDate(getDefaultReturnDate(draftDate));
+      }
     }
 
     clearSaveSuccess();
