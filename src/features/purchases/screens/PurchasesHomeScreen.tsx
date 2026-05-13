@@ -29,6 +29,7 @@ import {
   type ResolvedPurchaseStatus,
 } from '../state/PurchasesState';
 import {
+  formatCompactDate,
   getCompactReturnDate,
   getDateSortValue,
   getReturnDateUrgency,
@@ -286,6 +287,50 @@ function getResolvedSortValue(item: MockPurchase) {
   return item.resolvedAt ?? 0;
 }
 
+function getResolvedDateFromValue(value?: number) {
+  if (!value) {
+    return null;
+  }
+
+  if (value > 100000000000) {
+    const date = new Date(value);
+
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  const valueText = String(value);
+
+  if (!/^\d{8}$/.test(valueText)) {
+    return null;
+  }
+
+  const year = Number(valueText.slice(0, 4));
+  const month = Number(valueText.slice(4, 6)) - 1;
+  const day = Number(valueText.slice(6, 8));
+  const date = new Date(year, month, day);
+
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function getResolvedPurchaseSubtitle(item: MockPurchase) {
+  const statusLabel = purchaseStatusLabels[item.status];
+  const resolvedDate = getResolvedDateFromValue(item.resolvedAt);
+
+  if (resolvedDate) {
+    return `${statusLabel} on ${formatCompactDate(resolvedDate)}`;
+  }
+
+  return item.completedText ?? statusLabel;
+}
+
+function getCardSubtitleText(item: MockPurchase) {
+  if (item.status === 'returned' || item.status === 'kept') {
+    return getResolvedPurchaseSubtitle(item);
+  }
+
+  return `Return by ${getCompactReturnDate(item)}`;
+}
+
 function getVisiblePurchaseItems(
   purchases: MockPurchase[],
   selectedFilter: FilterKey,
@@ -434,7 +479,7 @@ function getItemCardStyle(status: PurchaseStatus) {
   return null;
 }
 
-function getCardUrgencyText(item: MockPurchase) {
+function getCardTrailingText(item: MockPurchase) {
   if (item.status === 'pending') {
     return 'Needs decision';
   }
@@ -443,7 +488,7 @@ function getCardUrgencyText(item: MockPurchase) {
     return getReturnDateUrgency(item).label;
   }
 
-  return item.days;
+  return null;
 }
 
 function getUrgencyTextStyle(item: MockPurchase, urgencyText: string) {
@@ -505,11 +550,19 @@ function PurchaseCard({
   onResolveItem?: (itemId: string, status: ResolvedPurchaseStatus) => void;
 }) {
   const canResolveItem = item.status === 'active' || item.status === 'pending';
+  const isResolvedCard = item.status === 'returned' || item.status === 'kept';
   const showActions = canResolveItem && onResolveItem;
-  const urgencyText = getCardUrgencyText(item);
+  const subtitleText = getCardSubtitleText(item);
+  const trailingText = getCardTrailingText(item);
 
   return (
-    <View style={[styles.itemCard, getItemCardStyle(item.status)]}>
+    <View
+      style={[
+        styles.itemCard,
+        isResolvedCard && styles.resolvedItemCard,
+        getItemCardStyle(item.status),
+      ]}
+    >
       <Pressable
         accessibilityRole="button"
         disabled={!onPress}
@@ -544,20 +597,38 @@ function PurchaseCard({
             <AppText style={styles.storeName} variant="caption">
               {item.store}
             </AppText>
+
+            {isResolvedCard ? (
+              <AppText
+                style={[
+                  styles.resolvedLineText,
+                  item.status === 'kept'
+                    ? styles.keptResolvedLineText
+                    : styles.returnedResolvedLineText,
+                ]}
+                variant="caption"
+              >
+                {subtitleText}
+              </AppText>
+            ) : null}
           </View>
         </View>
 
-        <View style={styles.returnInfoRow}>
-          <AppText style={styles.returnByText} variant="caption">
-            Return by {getCompactReturnDate(item)}
-          </AppText>
-          <AppText
-            style={[styles.daysText, getUrgencyTextStyle(item, urgencyText)]}
-            variant="caption"
-          >
-            {urgencyText}
-          </AppText>
-        </View>
+        {!isResolvedCard ? (
+          <View style={styles.returnInfoRow}>
+            <AppText style={styles.returnByText} variant="caption">
+              {subtitleText}
+            </AppText>
+            {trailingText ? (
+              <AppText
+                style={[styles.daysText, getUrgencyTextStyle(item, trailingText)]}
+                variant="caption"
+              >
+                {trailingText}
+              </AppText>
+            ) : null}
+          </View>
+        ) : null}
       </Pressable>
 
       {showActions ? (
@@ -1341,6 +1412,12 @@ const styles = StyleSheet.create({
     shadowRadius: 24,
     elevation: 2,
   },
+  resolvedItemCard: {
+    paddingHorizontal: 15,
+    paddingVertical: 14,
+    shadowOpacity: 0.08,
+    shadowRadius: 20,
+  },
   cardTapArea: {
     borderRadius: 22,
   },
@@ -1348,13 +1425,16 @@ const styles = StyleSheet.create({
     opacity: 0.78,
   },
   keptItemCard: {
-    borderColor: '#E0E6D0',
+    backgroundColor: '#FFF9EE',
+    borderColor: '#E7D8BA',
+    shadowColor: '#7B6237',
   },
   pendingItemCard: {
     borderColor: '#EFDCD8',
   },
   returnedItemCard: {
-    borderColor: '#DEE8D7',
+    backgroundColor: '#FFFDF8',
+    borderColor: '#D8E5CF',
   },
   itemTopRow: {
     alignItems: 'center',
@@ -1471,12 +1551,12 @@ const styles = StyleSheet.create({
     color: theme.colors.greenDark,
   },
   keptPill: {
-    backgroundColor: '#EEF1DF',
-    borderColor: '#DCE4C9',
+    backgroundColor: '#F8EFE0',
+    borderColor: '#EADBBE',
     borderWidth: 1,
   },
   keptPillText: {
-    color: '#536346',
+    color: '#7B6237',
   },
   returnInfoRow: {
     alignItems: 'center',
@@ -1489,6 +1569,18 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: theme.fontWeight.semibold,
     lineHeight: 18,
+  },
+  resolvedLineText: {
+    fontSize: 12,
+    fontWeight: theme.fontWeight.semibold,
+    lineHeight: 17,
+    marginTop: 1,
+  },
+  returnedResolvedLineText: {
+    color: theme.colors.greenDark,
+  },
+  keptResolvedLineText: {
+    color: '#7B6237',
   },
   daysText: {
     fontSize: 13,
