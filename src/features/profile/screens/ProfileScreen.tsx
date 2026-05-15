@@ -281,7 +281,7 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
   };
 
   return (
-    <AppScreen style={styles.screen}>
+    <AppScreen stableTopInset style={styles.screen}>
       <LinearGradient
         colors={['#FBFAF3', '#F0F5E9', '#FFF8EC']}
         end={{ x: 0.94, y: 1 }}
@@ -529,13 +529,13 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
 const styles = StyleSheet.create({
   accountMeta: {
     ...theme.typography.meta,
-    color: '#7A8075',
+    color: theme.colors.muted,
     fontWeight: theme.fontWeight.regular,
     lineHeight: 20,
     marginTop: 3,
   },
   accountName: {
-    color: theme.colors.text,
+    color: theme.colors.greenDark,
     fontSize: 22,
     fontWeight: theme.fontWeight.semibold,
     lineHeight: 28,
@@ -786,7 +786,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   ratingBody: {
-    color: '#74796F',
+    color: theme.colors.muted,
     fontSize: 12,
     lineHeight: 17,
     marginTop: 3,
@@ -829,7 +829,7 @@ const styles = StyleSheet.create({
     opacity: 0.78,
   },
   ratingTitle: {
-    color: theme.colors.text,
+    color: theme.colors.greenDark,
     fontSize: 16,
     fontWeight: theme.fontWeight.medium,
     lineHeight: 21,
@@ -978,7 +978,7 @@ const styles = StyleSheet.create({
     borderColor: '#DCE8D4',
   },
   snapshotLabel: {
-    color: '#74796F',
+    color: theme.colors.muted,
     fontSize: 11,
     lineHeight: 15,
     marginTop: 2,
@@ -1002,7 +1002,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   snapshotValue: {
-    color: theme.colors.text,
+    color: theme.colors.greenDark,
     fontSize: 18,
     fontWeight: theme.fontWeight.semibold,
     lineHeight: 22,
@@ -1059,7 +1059,7 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     ...theme.typography.screenSubtitle,
-    color: '#74796F',
+    color: theme.colors.muted,
     fontSize: 15,
     lineHeight: 22,
   },
@@ -1086,7 +1086,7 @@ const styles = StyleSheet.create({
   },
   title: {
     ...theme.typography.accountTitle,
-    color: theme.colors.text,
+    color: '#12322D',
     fontWeight: theme.fontWeight.bold,
     lineHeight: 38,
   },
@@ -1121,7 +1121,7 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   usageTitle: {
-    color: theme.colors.text,
+    color: theme.colors.greenDark,
     fontSize: 18,
     fontWeight: theme.fontWeight.semibold,
     lineHeight: 24,

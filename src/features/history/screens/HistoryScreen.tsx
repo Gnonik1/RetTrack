@@ -187,7 +187,7 @@ export function HistoryScreen() {
   const historyGroups = useMemo(() => getHistoryGroups(purchases), [purchases]);
 
   return (
-    <AppScreen style={styles.screen}>
+    <AppScreen stableTopInset style={styles.screen}>
       <LinearGradient
         colors={['#FCFAF3', '#F4F7EF', '#FAF5E9']}
         end={{ x: 0.82, y: 1 }}

@@ -169,7 +169,7 @@ export function AppBottomNav({ activeTab, onAddPress }: AppBottomNavProps) {
         key={item.key}
         onPress={() => {
           if (!isActive) {
-            router.navigate(item.route);
+            router.replace(item.route);
           }
         }}
         style={({ pressed }) => [
