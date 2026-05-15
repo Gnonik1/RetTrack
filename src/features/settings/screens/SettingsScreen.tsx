@@ -423,6 +423,7 @@ export function SettingsScreen() {
         colors={['#FBFAF3', '#F1F5EC', '#FFF8EC']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
+        pointerEvents="none"
         style={styles.backgroundBase}
       />
       <View pointerEvents="none" style={styles.backgroundSageGlow} />
@@ -697,8 +698,8 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
   },
   appMetadataText: {
+    ...theme.typography.footerText,
     color: '#7E8477',
-    fontSize: 11,
     lineHeight: 15,
     textAlign: 'center',
   },
@@ -774,7 +775,7 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingBottom: 116,
-    paddingTop: theme.spacing.xl,
+    paddingTop: theme.spacing.sm,
   },
   currencyIcon: {
     alignItems: 'center',
@@ -884,10 +885,11 @@ const styles = StyleSheet.create({
   },
   footerWordmarkText: {
     color: theme.colors.greenDark,
-    fontSize: 17,
-    fontWeight: theme.fontWeight.semibold,
+    fontSize: 16,
+    fontWeight: theme.fontWeight.medium,
     lineHeight: 22,
     marginLeft: -2,
+    opacity: 0.82,
     textAlign: 'center',
   },
   giftBow: {
@@ -951,7 +953,7 @@ const styles = StyleSheet.create({
   },
   header: {
     gap: 6,
-    paddingTop: theme.spacing.xs,
+    paddingTop: 0,
   },
   legalIcon: {
     alignItems: 'center',
@@ -1117,6 +1119,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   rowDetail: {
+    ...theme.typography.meta,
     color: theme.colors.muted,
     fontSize: 13,
     lineHeight: 18,
@@ -1145,7 +1148,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#E7EEDF',
   },
   rowPressed: {
-    backgroundColor: 'rgba(244, 240, 230, 0.72)',
+    backgroundColor: theme.press.pressedSurfaceTint,
   },
   rowRight: {
     alignItems: 'center',
@@ -1167,7 +1170,7 @@ const styles = StyleSheet.create({
   },
   screen: {
     paddingBottom: 0,
-    paddingTop: theme.spacing.lg,
+    paddingTop: theme.spacing.xl,
   },
   scroll: {
     flex: 1,
@@ -1206,6 +1209,7 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   sectionDetail: {
+    ...theme.typography.meta,
     color: theme.colors.muted,
     fontSize: 13,
     lineHeight: 18,
@@ -1256,8 +1260,8 @@ const styles = StyleSheet.create({
     marginTop: 24,
   },
   sectionTitle: {
+    ...theme.typography.sectionTitle,
     color: '#12322D',
-    fontSize: 18,
     fontWeight: theme.fontWeight.bold,
     lineHeight: 24,
   },

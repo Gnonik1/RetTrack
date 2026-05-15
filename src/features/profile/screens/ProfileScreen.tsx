@@ -528,10 +528,10 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
 
 const styles = StyleSheet.create({
   accountMeta: {
-    color: '#74796F',
-    fontSize: 14,
+    ...theme.typography.meta,
+    color: '#7A8075',
     fontWeight: theme.fontWeight.regular,
-    lineHeight: 21,
+    lineHeight: 20,
     marginTop: 3,
   },
   accountName: {
@@ -657,7 +657,7 @@ const styles = StyleSheet.create({
     color: theme.colors.muted,
     flex: 1,
     fontSize: 12,
-    lineHeight: 17,
+    lineHeight: 18,
   },
   benefitsCard: {
     alignSelf: 'stretch',
@@ -723,9 +723,9 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   featureText: {
+    ...theme.typography.meta,
     color: '#787D72',
     flex: 1,
-    fontSize: 14,
     lineHeight: 20,
   },
   guestActionButton: {
@@ -813,19 +813,20 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   ratingCta: {
-    backgroundColor: theme.colors.card,
-    borderColor: '#E1D7C8',
+    backgroundColor: 'rgba(255, 253, 248, 0.5)',
+    borderColor: 'rgba(225, 215, 200, 0.7)',
     borderRadius: theme.radius.pill,
     borderWidth: 1,
     marginTop: 7,
-    paddingHorizontal: 17,
-    paddingVertical: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 5,
   },
   ratingCtaText: {
     color: theme.colors.greenDark,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: theme.fontWeight.semibold,
-    lineHeight: 16,
+    lineHeight: 15,
+    opacity: 0.78,
   },
   ratingTitle: {
     color: theme.colors.text,
@@ -1028,9 +1029,8 @@ const styles = StyleSheet.create({
     borderColor: '#D9E5D3',
   },
   statusBadgeText: {
-    fontSize: 12,
-    fontWeight: theme.fontWeight.semibold,
-    lineHeight: 16,
+    ...theme.typography.chipText,
+    lineHeight: 15,
   },
   statusBadgeTextGuest: {
     color: theme.colors.amber,
@@ -1060,8 +1060,8 @@ const styles = StyleSheet.create({
   subtitle: {
     ...theme.typography.screenSubtitle,
     color: '#74796F',
-    fontSize: 16,
-    lineHeight: 23,
+    fontSize: 15,
+    lineHeight: 22,
   },
   syncDot: {
     backgroundColor: theme.colors.greenDark,
@@ -1085,9 +1085,8 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   title: {
-    ...theme.typography.screenTitle,
+    ...theme.typography.accountTitle,
     color: theme.colors.text,
-    fontSize: 30,
     fontWeight: theme.fontWeight.bold,
     lineHeight: 38,
   },
@@ -1117,9 +1116,9 @@ const styles = StyleSheet.create({
   },
   usageLabel: {
     color: theme.colors.greenDark,
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: theme.fontWeight.semibold,
-    lineHeight: 19,
+    lineHeight: 18,
   },
   usageTitle: {
     color: theme.colors.text,

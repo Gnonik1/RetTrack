@@ -59,13 +59,55 @@ const typography = {
     fontSize: 30,
     fontWeight: fontWeight.bold,
   },
+  accountTitle: {
+    fontSize: 30,
+    fontWeight: fontWeight.bold,
+  },
+  formTitle: {
+    fontSize: 26,
+    fontWeight: fontWeight.bold,
+  },
+  navTitle: {
+    fontSize: fontSize.md,
+    fontWeight: fontWeight.semibold,
+  },
+  productTitle: {
+    fontSize: 30,
+    fontWeight: fontWeight.bold,
+  },
   screenSubtitle: {
     fontSize: fontSize.sm,
     fontWeight: fontWeight.regular,
   },
+  sectionTitle: {
+    fontSize: 17,
+    fontWeight: fontWeight.semibold,
+  },
   fieldLabel: {
     fontSize: fontSize.xs,
     fontWeight: fontWeight.semibold,
+  },
+  meta: {
+    fontSize: 13,
+    fontWeight: fontWeight.regular,
+  },
+  capsMeta: {
+    fontSize: 11,
+    fontWeight: fontWeight.semibold,
+    letterSpacing: 0.7,
+    textTransform: 'uppercase',
+  },
+  chipText: {
+    fontSize: 11,
+    fontWeight: fontWeight.semibold,
+  },
+  helperText: {
+    fontSize: fontSize.xs,
+    fontWeight: fontWeight.medium,
+  },
+  footerText: {
+    fontSize: 11,
+    fontWeight: fontWeight.regular,
   },
   input: {
     fontSize: fontSize.md,
@@ -81,11 +123,53 @@ const typography = {
   },
 } as const;
 
+const depth = {
+  surfaceLevel1: {
+    elevation: 1,
+    shadowColor: colors.greenDark,
+    shadowOffset: {
+      height: 4,
+      width: 0,
+    },
+    shadowOpacity: 0.025,
+    shadowRadius: 10,
+  },
+  surfaceLevel2: {
+    elevation: 2,
+    shadowColor: colors.greenDark,
+    shadowOffset: {
+      height: 10,
+      width: 0,
+    },
+    shadowOpacity: 0.045,
+    shadowRadius: 20,
+  },
+  surfaceLevel3: {
+    elevation: 3,
+    shadowColor: colors.greenDark,
+    shadowOffset: {
+      height: 18,
+      width: 0,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 30,
+  },
+} as const;
+
+const press = {
+  pressedDangerTint: '#F7EFEC',
+  pressedOpacity: 0.82,
+  pressedPrimaryTint: '#4B6046',
+  pressedSurfaceTint: 'rgba(244, 240, 230, 0.72)',
+} as const;
+
 export const theme = {
   colors,
+  depth,
   spacing,
   radius,
   fontSize,
   fontWeight,
+  press,
   typography,
 } as const;

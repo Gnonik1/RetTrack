@@ -135,12 +135,33 @@ function HistoryMarker({
         isReturned ? styles.returnedMarker : styles.keptMarker,
       ]}
     >
-      <View
-        style={[
-          styles.markerDot,
-          isReturned ? styles.returnedMarkerDot : styles.keptMarkerDot,
-        ]}
-      />
+      <View style={styles.markerIconTile}>
+        <View
+          style={[
+            styles.markerBagHandle,
+            isReturned
+              ? styles.returnedMarkerBagStroke
+              : styles.keptMarkerBagStroke,
+          ]}
+        />
+        <View
+          style={[
+            styles.markerBagBody,
+            isReturned
+              ? styles.returnedMarkerBagBody
+              : styles.keptMarkerBagBody,
+          ]}
+        >
+          <View
+            style={[
+              styles.markerBagFold,
+              isReturned
+                ? styles.returnedMarkerBagFold
+                : styles.keptMarkerBagFold,
+            ]}
+          />
+        </View>
+      </View>
     </View>
   );
 }
@@ -168,8 +189,8 @@ export function HistoryScreen() {
   return (
     <AppScreen style={styles.screen}>
       <LinearGradient
-        colors={['#FBFAF3', '#F3F7EF', '#FFF8EC']}
-        end={{ x: 1, y: 1 }}
+        colors={['#FCFAF3', '#F4F7EF', '#FAF5E9']}
+        end={{ x: 0.82, y: 1 }}
         pointerEvents="none"
         start={{ x: 0, y: 0 }}
         style={styles.backgroundBase}
@@ -307,20 +328,21 @@ export function HistoryScreen() {
 
 const styles = StyleSheet.create({
   completedText: {
+    ...theme.typography.meta,
     fontSize: 12,
     fontWeight: theme.fontWeight.medium,
     lineHeight: 17,
     marginTop: 6,
   },
   backgroundArchiveWash: {
-    backgroundColor: 'rgba(239, 244, 233, 0.34)',
-    borderRadius: 260,
-    height: 420,
-    left: -250,
+    backgroundColor: 'rgba(230, 238, 222, 0.42)',
+    borderRadius: 340,
+    height: 500,
+    left: -330,
     position: 'absolute',
-    top: 168,
-    transform: [{ rotate: '-12deg' }],
-    width: 760,
+    top: 126,
+    transform: [{ rotate: '-10deg' }],
+    width: 860,
   },
   backgroundBase: {
     ...StyleSheet.absoluteFillObject,
@@ -330,43 +352,43 @@ const styles = StyleSheet.create({
     top: -48,
   },
   backgroundLowerSageVeil: {
-    backgroundColor: 'rgba(226, 234, 217, 0.2)',
-    borderRadius: 360,
-    bottom: -70,
-    height: 440,
+    backgroundColor: 'rgba(226, 234, 217, 0.13)',
+    borderRadius: 420,
+    bottom: -155,
+    height: 520,
     position: 'absolute',
-    right: -320,
-    transform: [{ rotate: '-8deg' }],
-    width: 760,
+    right: -370,
+    transform: [{ rotate: '-6deg' }],
+    width: 820,
   },
   backgroundLowerWarmGlow: {
-    backgroundColor: 'rgba(242, 226, 198, 0.2)',
-    borderRadius: 420,
-    bottom: -190,
-    height: 640,
-    left: -480,
+    backgroundColor: 'rgba(239, 219, 184, 0.3)',
+    borderRadius: 380,
+    height: 500,
+    left: -410,
     position: 'absolute',
-    transform: [{ rotate: '-4deg' }],
-    width: 920,
+    top: 230,
+    transform: [{ rotate: '-7deg' }],
+    width: 860,
   },
   backgroundPaperVeil: {
-    backgroundColor: 'rgba(255, 253, 248, 0.54)',
-    borderRadius: 260,
-    height: 430,
-    left: -200,
+    backgroundColor: 'rgba(255, 253, 248, 0.34)',
+    borderRadius: 320,
+    height: 480,
+    left: -260,
     position: 'absolute',
-    top: 275,
-    transform: [{ rotate: '-10deg' }],
-    width: 730,
+    top: 248,
+    transform: [{ rotate: '-7deg' }],
+    width: 820,
   },
   backgroundTopSageGlow: {
-    backgroundColor: 'rgba(216, 231, 207, 0.34)',
-    borderRadius: 360,
-    height: 610,
+    backgroundColor: 'rgba(218, 232, 209, 0.32)',
+    borderRadius: 420,
+    height: 560,
     position: 'absolute',
-    right: -440,
-    top: -275,
-    width: 720,
+    right: -360,
+    top: -255,
+    width: 780,
   },
   content: {
     flexGrow: 1,
@@ -480,6 +502,7 @@ const styles = StyleSheet.create({
   },
   historyCardPressed: {
     backgroundColor: '#F8FAF4',
+    opacity: theme.press.pressedOpacity,
   },
   itemName: {
     color: theme.colors.text,
@@ -492,8 +515,15 @@ const styles = StyleSheet.create({
     backgroundColor: '#FBF4E8',
     borderColor: '#E8DDC4',
   },
-  keptMarkerDot: {
-    backgroundColor: '#9A743D',
+  keptMarkerBagBody: {
+    backgroundColor: '#FFF9EE',
+    borderColor: '#8C6A2F',
+  },
+  keptMarkerBagFold: {
+    backgroundColor: '#E8DDC4',
+  },
+  keptMarkerBagStroke: {
+    borderColor: '#8C6A2F',
   },
   keptCompletedText: {
     color: '#7B6237',
@@ -516,11 +546,43 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     width: 42,
   },
-  markerDot: {
+  markerBagBody: {
+    alignItems: 'center',
+    borderRadius: 6,
+    borderWidth: 1.2,
+    height: 18,
+    justifyContent: 'center',
+    marginTop: -1,
+    overflow: 'hidden',
+    width: 22,
+  },
+  markerBagFold: {
     borderRadius: theme.radius.pill,
+    height: 1.4,
+    opacity: 0.86,
+    position: 'absolute',
+    top: 5,
+    width: 10,
+  },
+  markerBagHandle: {
+    borderBottomWidth: 0,
+    borderTopLeftRadius: 7,
+    borderTopRightRadius: 7,
+    borderWidth: 1.2,
     height: 8,
-    opacity: 0.74,
-    width: 8,
+    opacity: 0.78,
+    width: 13,
+    zIndex: 1,
+  },
+  markerIconTile: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 253, 248, 0.58)',
+    borderColor: 'rgba(255, 255, 255, 0.72)',
+    borderRadius: 13,
+    borderWidth: 1,
+    height: 30,
+    justifyContent: 'center',
+    width: 30,
   },
   monthGroup: {
     gap: 10,
@@ -529,20 +591,25 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   monthLabel: {
+    ...theme.typography.capsMeta,
     color: '#596654',
-    fontSize: 11,
-    fontWeight: theme.fontWeight.semibold,
     letterSpacing: 1.2,
     lineHeight: 15,
     marginLeft: 2,
-    textTransform: 'uppercase',
   },
   returnedMarker: {
     backgroundColor: '#EEF4EA',
     borderColor: '#D8E5CF',
   },
-  returnedMarkerDot: {
-    backgroundColor: theme.colors.greenDark,
+  returnedMarkerBagBody: {
+    backgroundColor: '#F6FAF2',
+    borderColor: theme.colors.greenDark,
+  },
+  returnedMarkerBagFold: {
+    backgroundColor: '#D8E5CF',
+  },
+  returnedMarkerBagStroke: {
+    borderColor: theme.colors.greenDark,
   },
   returnedCompletedText: {
     color: theme.colors.greenDark,
@@ -588,9 +655,8 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   statusText: {
-    fontSize: 11,
-    fontWeight: theme.fontWeight.semibold,
-    lineHeight: 16,
+    ...theme.typography.chipText,
+    lineHeight: 15,
   },
   statusPill: {
     borderRadius: theme.radius.pill,
@@ -600,9 +666,9 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
   },
   storeName: {
-    color: '#73796F',
-    fontSize: 14,
-    lineHeight: 19,
+    ...theme.typography.meta,
+    color: '#7D8278',
+    lineHeight: 18,
     marginTop: 4,
   },
   subtitle: {

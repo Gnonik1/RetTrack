@@ -467,6 +467,7 @@ export function PurchaseDetailsScreen({
             <View style={styles.infoGrid}>
               {infoItems.map((infoItem) => {
                 const isStatus = infoItem.label === 'Status';
+                const isEmptyValue = infoItem.value === 'Not added';
 
                 return (
                   <View style={styles.infoCell} key={infoItem.label}>
@@ -491,7 +492,13 @@ export function PurchaseDetailsScreen({
                         </AppText>
                       </View>
                     ) : (
-                      <AppText style={styles.infoValue} variant="body">
+                      <AppText
+                        style={[
+                          styles.infoValue,
+                          isEmptyValue && styles.infoValueMuted,
+                        ]}
+                        variant="body"
+                      >
                         {infoItem.value}
                       </AppText>
                     )}
@@ -700,10 +707,9 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   headerTitle: {
+    ...theme.typography.navTitle,
     color: '#172118',
     flex: 1,
-    fontSize: 16,
-    fontWeight: theme.fontWeight.semibold,
     lineHeight: 22,
     textAlign: 'center',
   },
@@ -766,7 +772,7 @@ const styles = StyleSheet.create({
     paddingTop: 18,
   },
   controlPressed: {
-    opacity: 0.78,
+    opacity: theme.press.pressedOpacity,
   },
   deleteAction: {
     alignItems: 'center',
@@ -1029,14 +1035,13 @@ const styles = StyleSheet.create({
     marginTop: 0,
   },
   itemTitle: {
+    ...theme.typography.productTitle,
     color: '#161816',
-    fontSize: 30,
-    fontWeight: theme.fontWeight.bold,
     lineHeight: 36,
   },
   metaLine: {
-    color: '#747A70',
-    fontSize: 14,
+    ...theme.typography.meta,
+    color: '#7D8278',
     fontWeight: theme.fontWeight.medium,
     lineHeight: 19,
     marginTop: 4,
@@ -1108,12 +1113,9 @@ const styles = StyleSheet.create({
     paddingVertical: 11,
   },
   infoLabel: {
+    ...theme.typography.capsMeta,
     color: theme.colors.muted,
-    fontSize: 11,
-    fontWeight: theme.fontWeight.semibold,
-    letterSpacing: 0.5,
     lineHeight: 15,
-    textTransform: 'uppercase',
   },
   infoValue: {
     color: theme.colors.text,
@@ -1121,6 +1123,10 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeight.semibold,
     lineHeight: 22,
     marginTop: 8,
+  },
+  infoValueMuted: {
+    color: '#8A8F84',
+    fontWeight: theme.fontWeight.medium,
   },
   statusPill: {
     alignItems: 'center',
@@ -1135,8 +1141,8 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   statusPillText: {
-    fontSize: 13,
-    fontWeight: theme.fontWeight.semibold,
+    ...theme.typography.chipText,
+    fontSize: 12,
     lineHeight: 17,
     textAlign: 'center',
   },
@@ -1145,8 +1151,8 @@ const styles = StyleSheet.create({
     borderColor: '#DCE8D4',
   },
   pendingStatusPill: {
-    backgroundColor: theme.colors.softPending,
-    borderColor: '#EBD5D0',
+    backgroundColor: '#F5EEE1',
+    borderColor: '#E7D7BF',
   },
   returnedStatusPill: {
     backgroundColor: '#ECF2E7',
@@ -1160,7 +1166,7 @@ const styles = StyleSheet.create({
     color: theme.colors.greenDark,
   },
   pendingStatusPillText: {
-    color: theme.colors.pending,
+    color: '#8C6A2F',
   },
   keptStatusPillText: {
     color: '#7B6237',
@@ -1174,11 +1180,9 @@ const styles = StyleSheet.create({
     padding: 13,
   },
   commentLabel: {
+    ...theme.typography.capsMeta,
     color: theme.colors.muted,
-    fontSize: 11,
-    fontWeight: theme.fontWeight.semibold,
     lineHeight: 15,
-    textTransform: 'uppercase',
   },
   commentText: {
     color: theme.colors.text,

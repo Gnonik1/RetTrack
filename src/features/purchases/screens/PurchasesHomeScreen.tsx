@@ -636,7 +636,11 @@ function PurchaseCard({
           <Pressable
             accessibilityRole="button"
             onPress={() => onResolveItem?.(item.id, 'returned')}
-            style={[styles.cardActionButton, styles.returnedActionButton]}
+            style={({ pressed }) => [
+              styles.cardActionButton,
+              styles.returnedActionButton,
+              pressed && styles.cardActionButtonPressed,
+            ]}
           >
             <AppText
               style={[styles.cardActionText, styles.returnedActionText]}
@@ -648,7 +652,11 @@ function PurchaseCard({
           <Pressable
             accessibilityRole="button"
             onPress={() => onResolveItem?.(item.id, 'kept')}
-            style={[styles.cardActionButton, styles.keepActionButton]}
+            style={({ pressed }) => [
+              styles.cardActionButton,
+              styles.keepActionButton,
+              pressed && styles.cardActionButtonPressed,
+            ]}
           >
             <AppText style={styles.cardActionText} variant="button">
               Keep
@@ -901,7 +909,10 @@ export function PurchasesHomeScreen({
             accessibilityLabel="Notifications"
             accessibilityRole="button"
             onPress={showNotificationStatus}
-            style={styles.notificationButton}
+            style={({ pressed }) => [
+              styles.notificationButton,
+              pressed && styles.notificationButtonPressed,
+            ]}
           >
             <NotificationBell />
           </Pressable>
@@ -946,9 +957,10 @@ export function PurchasesHomeScreen({
                 accessibilityRole="button"
                 key={filterItem.key}
                 onPress={() => selectFilter(filterItem.key)}
-                style={[
+                style={({ pressed }) => [
                   styles.filterItem,
                   isSelected && styles.filterItemSelected,
+                  pressed && styles.filterItemPressed,
                 ]}
               >
                 <AppText
@@ -1126,6 +1138,10 @@ const styles = StyleSheet.create({
     width: 48,
     elevation: 2,
   },
+  notificationButtonPressed: {
+    backgroundColor: '#F6F8F1',
+    opacity: theme.press.pressedOpacity,
+  },
   bellIcon: {
     alignItems: 'center',
     height: 24,
@@ -1207,8 +1223,8 @@ const styles = StyleSheet.create({
       height: 18,
       width: 0,
     },
-    shadowOpacity: 0.2,
-    shadowRadius: 28,
+    shadowOpacity: 0.14,
+    shadowRadius: 30,
     elevation: 4,
   },
   attentionCardGlow: {
@@ -1308,6 +1324,9 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 1,
   },
+  filterItemPressed: {
+    backgroundColor: 'rgba(255, 253, 248, 0.7)',
+  },
   filterText: {
     color: '#747A70',
     fontSize: 13,
@@ -1327,17 +1346,14 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   sectionTitle: {
+    ...theme.typography.sectionTitle,
     color: '#111A14',
-    fontSize: 17,
-    fontWeight: theme.fontWeight.semibold,
     lineHeight: 22,
   },
   sectionMeta: {
+    ...theme.typography.capsMeta,
     color: '#858B80',
-    fontSize: 11,
-    fontWeight: theme.fontWeight.medium,
     lineHeight: 15,
-    textTransform: 'uppercase',
   },
   itemList: {
     gap: 12,
@@ -1353,11 +1369,11 @@ const styles = StyleSheet.create({
     paddingVertical: 24,
     shadowColor: theme.colors.greenDark,
     shadowOffset: {
-      height: 12,
+      height: 10,
       width: 0,
     },
-    shadowOpacity: 0.055,
-    shadowRadius: 22,
+    shadowOpacity: 0.045,
+    shadowRadius: 20,
     elevation: 2,
   },
   emptyStateTitle: {
@@ -1405,11 +1421,11 @@ const styles = StyleSheet.create({
     padding: 16,
     shadowColor: theme.colors.greenDark,
     shadowOffset: {
-      height: 14,
+      height: 10,
       width: 0,
     },
-    shadowOpacity: 0.07,
-    shadowRadius: 24,
+    shadowOpacity: 0.045,
+    shadowRadius: 20,
     elevation: 2,
   },
   resolvedItemCard: {
@@ -1422,7 +1438,7 @@ const styles = StyleSheet.create({
     borderRadius: 22,
   },
   cardTapAreaPressed: {
-    opacity: 0.78,
+    opacity: theme.press.pressedOpacity,
   },
   keptItemCard: {
     backgroundColor: '#FFF9EE',
@@ -1430,7 +1446,7 @@ const styles = StyleSheet.create({
     shadowColor: '#7B6237',
   },
   pendingItemCard: {
-    borderColor: '#EFDCD8',
+    borderColor: '#E7D7BF',
   },
   returnedItemCard: {
     backgroundColor: '#FFFDF8',
@@ -1515,8 +1531,8 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   storeName: {
-    color: '#73786E',
-    fontSize: 13,
+    ...theme.typography.meta,
+    color: '#7D8278',
     fontWeight: theme.fontWeight.regular,
     lineHeight: 18,
   },
@@ -1526,8 +1542,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   statusPillText: {
-    fontSize: 11,
-    fontWeight: theme.fontWeight.semibold,
+    ...theme.typography.chipText,
     lineHeight: 14,
   },
   activePill: {
@@ -1537,10 +1552,12 @@ const styles = StyleSheet.create({
     color: theme.colors.greenDark,
   },
   pendingPill: {
-    backgroundColor: theme.colors.softPending,
+    backgroundColor: '#F5EEE1',
+    borderColor: '#E7D7BF',
+    borderWidth: 1,
   },
   pendingPillText: {
-    color: theme.colors.pending,
+    color: '#8C6A2F',
   },
   returnedPill: {
     backgroundColor: '#ECF2E7',
@@ -1565,9 +1582,9 @@ const styles = StyleSheet.create({
     marginTop: 14,
   },
   returnByText: {
-    color: theme.colors.greenDark,
-    fontSize: 13,
-    fontWeight: theme.fontWeight.semibold,
+    ...theme.typography.meta,
+    color: '#5F6E58',
+    fontWeight: theme.fontWeight.medium,
     lineHeight: 18,
   },
   resolvedLineText: {
@@ -1603,7 +1620,7 @@ const styles = StyleSheet.create({
     color: theme.colors.greenDark,
   },
   pendingDaysText: {
-    color: theme.colors.pending,
+    color: '#8C6A2F',
   },
   keptDaysText: {
     color: '#536346',
@@ -1621,6 +1638,9 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     minHeight: 42,
+  },
+  cardActionButtonPressed: {
+    opacity: theme.press.pressedOpacity,
   },
   returnedActionButton: {
     backgroundColor: '#536A4E',

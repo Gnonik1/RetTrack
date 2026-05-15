@@ -1163,7 +1163,10 @@ export function AddFirstPurchaseScreen({
           accessibilityLabel="Back"
           accessibilityRole="button"
           onPress={onBack}
-          style={styles.backButton}
+          style={({ pressed }) => [
+            styles.backButton,
+            pressed && styles.backButtonPressed,
+          ]}
         >
           <AppText style={styles.backButtonText} variant="body">
             {'\u2039'}
@@ -2089,6 +2092,10 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     width: 44,
   },
+  backButtonPressed: {
+    backgroundColor: '#F6F8F1',
+    opacity: theme.press.pressedOpacity,
+  },
   backButtonText: {
     color: theme.colors.greenDark,
     fontSize: 28,
@@ -2099,9 +2106,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   title: {
+    ...theme.typography.formTitle,
     color: theme.colors.text,
-    fontSize: 26,
-    fontWeight: theme.fontWeight.bold,
     lineHeight: 32,
   },
   subtitle: {
@@ -2144,7 +2150,7 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     fontSize: 13,
     fontWeight: theme.fontWeight.semibold,
-    letterSpacing: 0.3,
+    letterSpacing: 0.55,
     textTransform: 'uppercase',
   },
   inputCard: {
@@ -2157,13 +2163,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     height: 56,
     paddingHorizontal: theme.spacing.md,
-    shadowColor: theme.colors.text,
+    shadowColor: theme.colors.greenDark,
     shadowOffset: {
-      height: 6,
+      height: 4,
       width: 0,
     },
-    shadowOpacity: 0.035,
-    shadowRadius: 12,
+    shadowOpacity: 0.025,
+    shadowRadius: 10,
   },
   input: {
     ...theme.typography.input,
@@ -2188,7 +2194,7 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.lg,
   },
   tappableFieldPressed: {
-    opacity: 0.84,
+    opacity: theme.press.pressedOpacity,
   },
   returnDateField: {
     gap: 7,
@@ -2198,7 +2204,7 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     fontSize: 13,
     fontWeight: theme.fontWeight.semibold,
-    letterSpacing: 0.3,
+    letterSpacing: 0.55,
     textTransform: 'uppercase',
   },
   returnDateCard: {
@@ -2211,13 +2217,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     height: 52,
     paddingHorizontal: theme.spacing.md,
-    shadowColor: theme.colors.text,
+    shadowColor: theme.colors.greenDark,
     shadowOffset: {
-      height: 6,
+      height: 4,
       width: 0,
     },
-    shadowOpacity: 0.035,
-    shadowRadius: 12,
+    shadowOpacity: 0.025,
+    shadowRadius: 10,
   },
   returnDateCardError: {
     borderColor: theme.colors.pending,
@@ -2249,8 +2255,8 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.softPending,
   },
   helperText: {
-    color: theme.colors.greenDark,
-    fontSize: 12,
+    ...theme.typography.helperText,
+    color: '#6F766A',
     fontWeight: theme.fontWeight.medium,
     lineHeight: 18,
   },
@@ -2261,11 +2267,9 @@ const styles = StyleSheet.create({
     marginTop: theme.spacing.lg,
   },
   optionalHeading: {
+    ...theme.typography.capsMeta,
     color: theme.colors.muted,
-    fontSize: 12,
-    fontWeight: theme.fontWeight.semibold,
     lineHeight: 18,
-    textTransform: 'uppercase',
   },
   optionalRows: {
     backgroundColor: 'rgba(255, 253, 248, 0.48)',
@@ -2291,7 +2295,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.md,
   },
   optionalRowPressed: {
-    opacity: 0.82,
+    backgroundColor: '#F7FAF3',
   },
   optionalRowCopy: {
     flex: 1,
@@ -2303,10 +2307,10 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeight.semibold,
   },
   optionalRowValue: {
-    color: theme.colors.muted,
+    color: '#7E8478',
     flexShrink: 1,
     fontSize: 12,
-    fontWeight: theme.fontWeight.medium,
+    fontWeight: theme.fontWeight.regular,
     lineHeight: 16,
     maxWidth: 136,
     textAlign: 'right',
@@ -2617,7 +2621,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.md,
   },
   photoInlineActionPressed: {
-    opacity: 0.78,
+    opacity: theme.press.pressedOpacity,
   },
   photoInlineActions: {
     flexDirection: 'row',
@@ -2648,13 +2652,13 @@ const styles = StyleSheet.create({
     elevation: 1,
     paddingHorizontal: 13,
     paddingVertical: 12,
-    shadowColor: theme.colors.text,
+    shadowColor: theme.colors.greenDark,
     shadowOffset: {
-      height: 8,
+      height: 5,
       width: 0,
     },
-    shadowOpacity: 0.04,
-    shadowRadius: 14,
+    shadowOpacity: 0.025,
+    shadowRadius: 12,
   },
   photoInlinePreviewRow: {
     alignItems: 'center',
