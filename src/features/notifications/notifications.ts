@@ -12,6 +12,17 @@ const LAST_DAY_REMINDER_HOUR = 10;
 const NEAR_FUTURE_REMINDER_DELAY_MS = 60 * 1000;
 const PENDING_DIGEST_ANCHOR_STORAGE_KEY =
   'rettrack:pendingDigestAnchorAt:v1';
+const LOCAL_REMINDER_SOURCE = 'rettrack-local-reminder';
+const PENDING_DIGEST_IDENTIFIER_PREFIX = 'rettrack:pending-digest:';
+const PENDING_DIGEST_CATEGORY_IDENTIFIERS = [
+  'rettrack-pending-digest',
+  'rettrack:pending-digest',
+];
+const LEGACY_PENDING_DIGEST_TITLE = 'still pending';
+const LEGACY_PENDING_DIGEST_BODY_PATTERNS = [
+  'purchase needs a decision',
+  'purchases need a decision',
+];
 const QUIET_HOUR_END = 10;
 const QUIET_HOUR_START = 22;
 
@@ -132,6 +143,8 @@ export async function rescheduleAllPurchaseReminders(
   _options: RescheduleAllPurchaseRemindersOptions = {},
 ) {
   const now = new Date();
+  // Current pending counts must come only from the hydrated canonical purchases
+  // passed by PurchasesProvider, never from guest quota or stale storage counts.
   const pendingPurchases = purchases.filter(
     (purchase) => purchase.status === 'pending',
   );
@@ -140,6 +153,10 @@ export async function rescheduleAllPurchaseReminders(
     await clearPendingDigestAnchor();
   }
 
+  // Older app versions may have scheduled pending digest notifications with
+  // stale counts. Clean scheduled and delivered copies before the canonical
+  // rebuild creates fresh notifications from the hydrated purchases above.
+  await cancelScheduledPendingDigestNotifications();
   await cancelAllScheduledAppReminders();
   await dismissPresentedPendingDigestNotifications();
 
@@ -199,6 +216,24 @@ function cancelAllScheduledAppReminders() {
   });
 }
 
+async function cancelScheduledPendingDigestNotifications() {
+  try {
+    const scheduledNotifications =
+      await Notifications.getAllScheduledNotificationsAsync();
+    const pendingDigestNotifications = scheduledNotifications.filter(
+      isRetTrackPendingDigestNotificationRequest,
+    );
+
+    await Promise.all(
+      pendingDigestNotifications.map((notification) =>
+        cancelScheduledReminder(notification.identifier),
+      ),
+    );
+  } catch {
+    // Explicit legacy cleanup is best-effort; the broad rebuild clear follows.
+  }
+}
+
 async function dismissPresentedPendingDigestNotifications() {
   try {
     const presentedNotifications =
@@ -224,13 +259,59 @@ async function dismissPresentedPendingDigestNotifications() {
 function isPresentedPendingDigestNotification(
   notification: Notifications.Notification,
 ) {
-  const { content, identifier } = notification.request;
+  return isRetTrackPendingDigestNotificationRequest(notification.request);
+}
+
+function isRetTrackPendingDigestNotificationRequest(
+  request: Notifications.NotificationRequest,
+) {
+  const { content, identifier } = request;
 
   return (
-    identifier.startsWith('rettrack:pending-digest:') ||
-    (content.data?.source === 'rettrack-local-reminder' &&
-      isPendingDigestReminderKind(content.data.reminderKind))
+    identifier.startsWith(PENDING_DIGEST_IDENTIFIER_PREFIX) ||
+    isPendingDigestNotificationData(content.data) ||
+    isPendingDigestCategoryIdentifier(content.categoryIdentifier) ||
+    isLegacyPendingDigestNotificationContent(content)
   );
+}
+
+function isPendingDigestNotificationData(
+  data: Notifications.NotificationContent['data'] | undefined,
+) {
+  if (!data) {
+    return false;
+  }
+
+  const pendingDigestDataValues = [
+    data.reminderKind,
+    data.type,
+    data.category,
+    data.categoryIdentifier,
+  ];
+
+  return (
+    pendingDigestDataValues.some(isPendingDigestReminderKind) ||
+    (data.source === LOCAL_REMINDER_SOURCE &&
+      pendingDigestDataValues.some(isPendingDigestDataIdentifier))
+  );
+}
+
+function isLegacyPendingDigestNotificationContent(
+  content: Notifications.NotificationContent,
+) {
+  const title = normalizeNotificationText(content.title);
+  const body = normalizeNotificationText(content.body);
+
+  return (
+    title.includes(LEGACY_PENDING_DIGEST_TITLE) &&
+    LEGACY_PENDING_DIGEST_BODY_PATTERNS.some((pattern) =>
+      body.includes(pattern),
+    )
+  );
+}
+
+function normalizeNotificationText(value: string | null | undefined) {
+  return value?.toLowerCase() ?? '';
 }
 
 function isPendingDigestReminderKind(reminderKind: unknown) {
@@ -238,6 +319,21 @@ function isPendingDigestReminderKind(reminderKind: unknown) {
     reminderKind === 'pending-digest-initial' ||
     reminderKind === 'pending-digest-three-days' ||
     reminderKind === 'pending-digest-seven-days'
+  );
+}
+
+function isPendingDigestDataIdentifier(identifier: unknown) {
+  return (
+    isPendingDigestReminderKind(identifier) ||
+    identifier === 'pending-digest' ||
+    isPendingDigestCategoryIdentifier(identifier)
+  );
+}
+
+function isPendingDigestCategoryIdentifier(identifier: unknown) {
+  return (
+    typeof identifier === 'string' &&
+    PENDING_DIGEST_CATEGORY_IDENTIFIERS.includes(identifier)
   );
 }
 
@@ -390,21 +486,21 @@ function getPendingDigestReminderPlans(
       date: anchorDate,
       identifier: getPendingDigestReminderIdentifier('initial'),
       kind: 'pending-digest-initial',
-      title: 'Still pending',
+      title: 'Pending review',
     },
     {
       body: pendingDigestBody,
       date: getPendingFollowUpDate(anchorDate, 3),
       identifier: getPendingDigestReminderIdentifier('3d'),
       kind: 'pending-digest-three-days',
-      title: 'Still pending',
+      title: 'Pending review',
     },
     {
       body: pendingDigestBody,
       date: getPendingFollowUpDate(anchorDate, 7),
       identifier: getPendingDigestReminderIdentifier('7d'),
       kind: 'pending-digest-seven-days',
-      title: 'Still pending',
+      title: 'Pending review',
     },
   ];
 
@@ -413,10 +509,10 @@ function getPendingDigestReminderPlans(
 
 function getPendingDigestReminderBody(pendingCount: number) {
   if (pendingCount === 1) {
-    return '1 purchase needs a decision.';
+    return '1 purchase is ready for your decision in RetTrack';
   }
 
-  return `${pendingCount} purchases need a decision.`;
+  return `${pendingCount} purchases are ready for your decision in RetTrack`;
 }
 
 function getPendingDigestReminderIdentifier(timing: 'initial' | '3d' | '7d') {
@@ -622,7 +718,7 @@ async function scheduleReminder(reminderPlan: ReminderPlan) {
         data: {
           ...(purchaseId ? { purchaseId } : {}),
           reminderKind: reminderPlan.kind,
-          source: 'rettrack-local-reminder',
+          source: LOCAL_REMINDER_SOURCE,
         },
         title: reminderPlan.title,
       },
