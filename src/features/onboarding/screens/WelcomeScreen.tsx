@@ -7,6 +7,7 @@ import { theme } from '../../../constants/theme';
 
 type WelcomeScreenProps = {
   googleError?: string;
+  isContinuingAsGuest?: boolean;
   isContinuingWithGoogle?: boolean;
   onContinueAsGuest?: () => void;
   onContinueWithEmail?: () => void;
@@ -16,12 +17,15 @@ type WelcomeScreenProps = {
 
 export function WelcomeScreen({
   googleError,
+  isContinuingAsGuest = false,
   isContinuingWithGoogle = false,
   onContinueAsGuest,
   onContinueWithEmail,
   onContinueWithGoogle,
   onSignIn,
 }: WelcomeScreenProps) {
+  const isContinuing = isContinuingAsGuest || isContinuingWithGoogle;
+
   return (
     <AppScreen style={styles.screen}>
       <View style={styles.hero}>
@@ -49,7 +53,7 @@ export function WelcomeScreen({
       <View style={styles.actions}>
         <AppButton title="Continue with Apple" variant="outline" />
         <AppButton
-          disabled={isContinuingWithGoogle}
+          disabled={isContinuing}
           onPress={onContinueWithGoogle}
           title={
             isContinuingWithGoogle
@@ -66,25 +70,27 @@ export function WelcomeScreen({
           </View>
         ) : null}
         <AppButton
-          disabled={isContinuingWithGoogle}
+          disabled={isContinuing}
           onPress={onContinueWithEmail}
           title="Continue with Email"
           variant="outline"
         />
         <AppButton
-          disabled={isContinuingWithGoogle}
+          disabled={isContinuing}
           onPress={onContinueAsGuest}
-          title="Continue as guest"
+          title={
+            isContinuingAsGuest ? 'Continuing as guest...' : 'Continue as guest'
+          }
           variant="secondary"
         />
 
         <Pressable
           accessibilityRole="button"
-          disabled={isContinuingWithGoogle}
+          disabled={isContinuing}
           onPress={onSignIn}
           style={[
             styles.signInButton,
-            isContinuingWithGoogle ? styles.signInButtonDisabled : null,
+            isContinuing ? styles.signInButtonDisabled : null,
           ]}
         >
           <View style={styles.signInRow}>
