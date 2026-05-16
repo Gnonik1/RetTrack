@@ -73,7 +73,7 @@ export default function WelcomeRoute() {
     <WelcomeScreen
       googleError={googleError}
       isContinuingWithGoogle={isContinuingWithGoogle}
-      onContinueAsGuest={() => router.push('/notifications')}
+      onContinueAsGuest={() => router.push('/notifications?source=guest')}
       onContinueWithEmail={() => router.push('/sign-up?source=onboarding')}
       onContinueWithGoogle={handleContinueWithGoogle}
       onSignIn={() => router.push('/sign-in?source=onboarding')}

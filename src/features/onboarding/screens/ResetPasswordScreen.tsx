@@ -224,7 +224,10 @@ export function ResetPasswordScreen({ onBack }: ResetPasswordScreenProps) {
             accessibilityLabel="Back"
             accessibilityRole="button"
             onPress={handleBackPress}
-            style={styles.backButton}
+            style={({ pressed }) => [
+              styles.backButton,
+              pressed && styles.backButtonPressed,
+            ]}
           >
             <AppText style={styles.backButtonText} variant="body">
               {'\u2039'}
@@ -300,6 +303,7 @@ export function ResetPasswordScreen({ onBack }: ResetPasswordScreenProps) {
             <AppButton
               disabled={isAuthLoading}
               onPress={handleContinuePress}
+              style={styles.primaryActionButton}
               title={continueTitle}
               variant="primary"
             />
@@ -307,6 +311,7 @@ export function ResetPasswordScreen({ onBack }: ResetPasswordScreenProps) {
             <AppButton
               disabled={isBusy}
               onPress={handleUpdatePasswordPress}
+              style={styles.primaryActionButton}
               title={isSubmitting ? 'Updating password...' : 'Update password'}
               variant="primary"
             />
@@ -334,13 +339,25 @@ const styles = StyleSheet.create({
   },
   backButton: {
     alignItems: 'center',
-    backgroundColor: theme.colors.card,
-    borderColor: theme.colors.border,
+    backgroundColor: 'rgba(255, 253, 248, 0.94)',
+    borderColor: 'rgba(222, 227, 216, 0.9)',
     borderRadius: theme.radius.lg,
     borderWidth: 1,
+    elevation: 3,
     height: 44,
     justifyContent: 'center',
+    shadowColor: theme.colors.text,
+    shadowOffset: {
+      height: 8,
+      width: 0,
+    },
+    shadowOpacity: 0.07,
+    shadowRadius: 16,
     width: 44,
+  },
+  backButtonPressed: {
+    backgroundColor: '#F6F8F1',
+    opacity: theme.press.pressedOpacity,
   },
   backButtonText: {
     color: theme.colors.greenDark,
@@ -353,9 +370,12 @@ const styles = StyleSheet.create({
   },
   title: {
     ...theme.typography.screenTitle,
+    color: theme.colors.text,
+    lineHeight: 36,
   },
   subtitle: {
     ...theme.typography.screenSubtitle,
+    color: theme.colors.muted,
     lineHeight: 20,
     marginTop: 6,
   },
@@ -411,5 +431,15 @@ const styles = StyleSheet.create({
   actions: {
     gap: 12,
     width: '100%',
+  },
+  primaryActionButton: {
+    elevation: 3,
+    shadowColor: theme.colors.greenDark,
+    shadowOffset: {
+      height: 8,
+      width: 0,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 16,
   },
 });

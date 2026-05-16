@@ -26,7 +26,10 @@ export function NotificationPermissionScreen({
         accessibilityLabel="Back"
         accessibilityRole="button"
         onPress={onBack}
-        style={styles.backButton}
+        style={({ pressed }) => [
+          styles.backButton,
+          pressed && styles.backButtonPressed,
+        ]}
       >
         <AppText style={styles.backButtonText} variant="body">
           {'\u2039'}
@@ -98,11 +101,17 @@ export function NotificationPermissionScreen({
 
       <View style={styles.actions}>
         {isNotificationsEnabled ? (
-          <AppButton onPress={onDone} title="Done" variant="primary" />
+          <AppButton
+            onPress={onDone}
+            style={styles.primaryActionButton}
+            title="Done"
+            variant="primary"
+          />
         ) : (
           <>
             <AppButton
               onPress={onEnableNotifications}
+              style={styles.primaryActionButton}
               title="Enable notifications"
               variant="primary"
             />
@@ -140,13 +149,25 @@ const styles = StyleSheet.create({
   },
   backButton: {
     alignItems: 'center',
-    backgroundColor: theme.colors.card,
-    borderColor: theme.colors.border,
+    backgroundColor: 'rgba(255, 253, 248, 0.94)',
+    borderColor: 'rgba(222, 227, 216, 0.9)',
     borderRadius: theme.radius.lg,
     borderWidth: 1,
+    elevation: 3,
     height: 44,
     justifyContent: 'center',
+    shadowColor: theme.colors.text,
+    shadowOffset: {
+      height: 8,
+      width: 0,
+    },
+    shadowOpacity: 0.07,
+    shadowRadius: 16,
     width: 44,
+  },
+  backButtonPressed: {
+    backgroundColor: '#F6F8F1',
+    opacity: theme.press.pressedOpacity,
   },
   backButtonText: {
     color: theme.colors.greenDark,
@@ -156,10 +177,11 @@ const styles = StyleSheet.create({
   },
   iconCard: {
     alignItems: 'center',
-    backgroundColor: theme.colors.card,
-    borderColor: theme.colors.border,
+    backgroundColor: 'rgba(255, 253, 248, 0.96)',
+    borderColor: 'rgba(222, 227, 216, 0.92)',
     borderRadius: 36,
     borderWidth: 1,
+    elevation: 3,
     height: 118,
     justifyContent: 'center',
     marginBottom: theme.spacing.lg + theme.spacing.xs,
@@ -221,25 +243,25 @@ const styles = StyleSheet.create({
     width: 19,
   },
   title: {
+    ...theme.typography.screenTitle,
     color: theme.colors.text,
-    fontSize: 30,
-    fontWeight: theme.fontWeight.bold,
-    lineHeight: 38,
+    lineHeight: 37,
     textAlign: 'center',
   },
   subtitle: {
+    ...theme.typography.screenSubtitle,
     color: theme.colors.muted,
-    fontSize: theme.fontSize.sm,
     lineHeight: 23,
     marginTop: theme.spacing.md,
     maxWidth: 254,
     textAlign: 'center',
   },
   enabledCard: {
-    backgroundColor: theme.colors.card,
-    borderColor: theme.colors.border,
+    backgroundColor: 'rgba(255, 253, 248, 0.94)',
+    borderColor: 'rgba(222, 227, 216, 0.92)',
     borderRadius: theme.radius.xl,
     borderWidth: 1,
+    elevation: 2,
     marginTop: theme.spacing.lg,
     paddingHorizontal: 16,
     paddingVertical: 14,
@@ -275,6 +297,16 @@ const styles = StyleSheet.create({
   actions: {
     gap: 12,
     width: '100%',
+  },
+  primaryActionButton: {
+    elevation: 3,
+    shadowColor: theme.colors.greenDark,
+    shadowOffset: {
+      height: 8,
+      width: 0,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 16,
   },
   notNowButton: {
     alignItems: 'center',

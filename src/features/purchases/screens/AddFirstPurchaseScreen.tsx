@@ -61,6 +61,7 @@ type AddFirstPurchaseScreenProps = {
   onLimitSignUp?: () => void;
   onSaveItem?: (input: AddPurchaseInput) => boolean | void;
   onSkip?: () => void;
+  photoLimitOverride?: number;
 };
 
 type AddPurchaseMode = 'addPurchase' | 'editPurchase' | 'firstPurchase';
@@ -362,6 +363,7 @@ export function AddFirstPurchaseScreen({
   onLimitSignUp,
   onSaveItem,
   onSkip,
+  photoLimitOverride,
 }: AddFirstPurchaseScreenProps) {
   const { defaultCurrency } = useAppSettings();
   const isEditMode = mode === 'editPurchase';
@@ -377,7 +379,8 @@ export function AddFirstPurchaseScreen({
     initialValues,
     isEditMode ? null : initialPurchaseDate,
   );
-  const photoLimit = isSignedIn ? ACCOUNT_PHOTO_LIMIT : GUEST_PHOTO_LIMIT;
+  const photoLimit =
+    photoLimitOverride ?? (isSignedIn ? ACCOUNT_PHOTO_LIMIT : GUEST_PHOTO_LIMIT);
   const initialPhotoUris = (initialValues?.photoUris ?? []).slice(
     0,
     photoLimit,
@@ -485,8 +488,8 @@ export function AddFirstPurchaseScreen({
   const draftPhotoCount = draftPhotos.length;
   const draftPhotoUri = draftPhotos[0]?.uri;
   const remainingPhotoSlots = Math.max(photoLimit - photoUris.length, 0);
-  const photoLimitCaption = isSignedIn
-    ? `Account purchases support up to ${ACCOUNT_PHOTO_LIMIT} photos per item.`
+  const photoLimitCaption = photoLimit === ACCOUNT_PHOTO_LIMIT
+    ? `You can attach up to ${ACCOUNT_PHOTO_LIMIT} photos per item.`
     : 'Guest mode supports 1 photo per item.';
   const photoCountLabel =
     photoUris.length === 1 ? '1 photo' : `${photoUris.length} photos`;
@@ -501,12 +504,10 @@ export function AddFirstPurchaseScreen({
       : photoPickerMode === 'replace' && selectedPhotoUri
         ? `Replace photo ${selectedPhotoIndex + 1} of ${photoUris.length}`
         : 'Add a receipt or product photo';
-  const photoConfirmTitle =
-    draftPhotoCount > 1 ? `Add ${draftPhotoCount} photos` : 'Done';
   const photoChooseTitle =
     photoPickerMode === 'replace' && selectedPhotoUri
       ? 'Choose replacement'
-      : isSignedIn && photoPickerMode === 'add' && remainingPhotoSlots > 1
+      : photoPickerMode === 'add' && remainingPhotoSlots > 1
         ? 'Choose photos'
         : 'Choose photo';
 
@@ -999,6 +1000,14 @@ export function AddFirstPurchaseScreen({
     setIsPhotosModalOpen(false);
   };
 
+  const getAvailablePhotoSlotsForCurrentPicker = () => {
+    if (photoPickerMode === 'replace' && photoUris.length) {
+      return 1;
+    }
+
+    return Math.max(photoLimit - photoUris.length, 0);
+  };
+
   const handlePickPhoto = async () => {
     if (isPickingPhoto) {
       return;
@@ -1012,17 +1021,16 @@ export function AddFirstPurchaseScreen({
     setIsPickingPhoto(true);
 
     try {
-      const allowsMultipleSelection =
-        isSignedIn && photoPickerMode === 'add';
-      const multiSelectLimit = photoLimit - photoUris.length;
+      const availablePhotoSlots = getAvailablePhotoSlotsForCurrentPicker();
 
-      if (allowsMultipleSelection && multiSelectLimit <= 0) {
+      if (availablePhotoSlots <= 0) {
+        setPhotoMessage(photoLimitCaption);
         return;
       }
 
-      const selectionLimit = allowsMultipleSelection
-        ? multiSelectLimit
-        : undefined;
+      const allowsMultipleSelection =
+        photoPickerMode === 'add' && availablePhotoSlots > 1;
+      const selectionLimit = availablePhotoSlots;
       const result = await pickPurchasePhotoDraft({
         allowsMultipleSelection,
         selectionLimit,
@@ -1033,9 +1041,14 @@ export function AddFirstPurchaseScreen({
       }
 
       if (result.status === 'selected') {
-        setDraftPhotos(
-          result.assets.slice(0, allowsMultipleSelection ? selectionLimit : 1),
-        );
+        const limitedAssets = result.assets.slice(0, selectionLimit);
+
+        setDraftPhotos(limitedAssets);
+
+        if (result.assets.length > limitedAssets.length) {
+          setPhotoMessage(photoLimitCaption);
+        }
+
         return;
       }
 
@@ -1059,13 +1072,23 @@ export function AddFirstPurchaseScreen({
       return;
     }
 
+    const availablePhotoSlots = getAvailablePhotoSlotsForCurrentPicker();
+
+    if (availablePhotoSlots <= 0) {
+      setPhotoMessage(photoLimitCaption);
+      return;
+    }
+
     const requestId = photoPickRequestIdRef.current;
+    const photosToStore = draftPhotos.slice(0, availablePhotoSlots);
     setIsSavingPhoto(true);
-    setPhotoMessage('');
+    setPhotoMessage(
+      draftPhotos.length > photosToStore.length ? photoLimitCaption : '',
+    );
 
     try {
       const storedPhotoUris = await Promise.all(
-        draftPhotos.map((draftPhoto) => storePurchasePhoto(draftPhoto)),
+        photosToStore.map((draftPhoto) => storePurchasePhoto(draftPhoto)),
       );
 
       if (photoPickRequestIdRef.current !== requestId) {
@@ -1076,7 +1099,7 @@ export function AddFirstPurchaseScreen({
         (photoUri): photoUri is string => Boolean(photoUri),
       );
 
-      if (validStoredPhotoUris.length !== draftPhotos.length) {
+      if (validStoredPhotoUris.length !== photosToStore.length) {
         setPhotoMessage("We couldn't attach that photo. Please try another image.");
         return;
       }
@@ -1310,9 +1333,9 @@ export function AddFirstPurchaseScreen({
                     ? formatDate(purchaseDate)
                     : key === 'photos' && selectedPhotoUri
                       ? photoCountLabel
-                    : key === 'comment' && comment.trim()
-                      ? 'Added'
-                      : '';
+                      : key === 'comment' && comment.trim()
+                        ? 'Added'
+                        : '';
 
               return (
                 <View key={key} style={styles.optionalItem}>
@@ -1685,7 +1708,7 @@ export function AddFirstPurchaseScreen({
                   ]}
                 >
                   <AppText style={styles.modalDoneText} variant="button">
-                    {photoConfirmTitle}
+                    Done
                   </AppText>
                 </Pressable>
               </View>

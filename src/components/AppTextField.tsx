@@ -130,13 +130,21 @@ const styles = StyleSheet.create({
   },
   inputCard: {
     alignItems: 'center',
-    backgroundColor: theme.colors.card,
-    borderColor: theme.colors.border,
+    backgroundColor: 'rgba(255, 253, 248, 0.96)',
+    borderColor: 'rgba(222, 227, 216, 0.92)',
     borderRadius: theme.radius.lg,
     borderWidth: 1,
+    elevation: 1,
     flexDirection: 'row',
     height: 56,
     paddingHorizontal: theme.spacing.md,
+    shadowColor: theme.colors.greenDark,
+    shadowOffset: {
+      height: 4,
+      width: 0,
+    },
+    shadowOpacity: 0.025,
+    shadowRadius: 10,
   },
   inputCardWithIcon: {
     gap: 10,
