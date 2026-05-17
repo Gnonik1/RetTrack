@@ -7,6 +7,8 @@ export type MockPurchase = {
   completedText?: string;
   createdAt?: number;
   days: string;
+  deletedFromGuestAt?: string;
+  deletedFromLinkedAccountAt?: string;
   id: string;
   itemName: string;
   lastPhotoSyncedAt?: string;
@@ -14,6 +16,7 @@ export type MockPurchase = {
   linkedClientLocalId?: string;
   linkedRemoteId?: string;
   pendingAt?: number;
+  pendingLinkedAccountDeleteAt?: string;
   photoRemotePaths?: Array<string | null>;
   photoSyncStatus?: PurchaseSyncStatus;
   photoUris?: string[];

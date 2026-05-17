@@ -168,6 +168,8 @@ function isStoredPurchase(value: unknown): value is MockPurchase {
     isPurchaseStatus(value.status) &&
     isOptionalString(value.comment) &&
     isOptionalString(value.completedText) &&
+    isOptionalString(value.deletedFromGuestAt) &&
+    isOptionalString(value.deletedFromLinkedAccountAt) &&
     isOptionalNullableStringArray(value.photoRemotePaths) &&
     isOptionalPurchaseSyncStatus(value.photoSyncStatus) &&
     isOptionalStringArray(value.photoUris) &&
@@ -177,6 +179,7 @@ function isStoredPurchase(value: unknown): value is MockPurchase {
     isOptionalNumber(value.pendingAt) &&
     isOptionalString(value.purchaseDateISO) &&
     isOptionalString(value.purchased) &&
+    isOptionalString(value.pendingLinkedAccountDeleteAt) &&
     isOptionalString(value.returnByDetail) &&
     isOptionalString(value.returnDateISO) &&
     isOptionalString(value.remoteId) &&
@@ -257,6 +260,16 @@ function getPurchaseStorageSnapshot(
 
 function isUnsyncedLocalPurchase(purchase: MockPurchase) {
   return purchase.syncStatus === 'local' || purchase.syncStatus === 'error';
+}
+
+function isTombstonedPurchase(purchase: MockPurchase) {
+  return Boolean(
+    purchase.deletedFromGuestAt || purchase.deletedFromLinkedAccountAt,
+  );
+}
+
+function getVisiblePurchases(purchases: MockPurchase[]) {
+  return purchases.filter((purchase) => !isTombstonedPurchase(purchase));
 }
 
 function getPurchaseIdentityValues(purchase: MockPurchase) {
@@ -341,6 +354,18 @@ type GuestPurchaseMigrationSyncResult = {
   accountPurchase: MockPurchase;
   guestPurchase: MockPurchase;
   link: GuestPurchaseAccountLink | null;
+};
+
+type GuestLinkedAccountDelete = {
+  deletedAt: string;
+  guestPurchase: MockPurchase;
+  purchaseId: string;
+};
+
+type PendingLinkedGuestDeleteFromAccount = {
+  accountPurchase: MockPurchase;
+  deletedAt: string;
+  userId: string;
 };
 
 function getExistingGuestPurchaseAccountLink(
@@ -465,6 +490,194 @@ function getGuestPurchasesWithAccountLinks(
   });
 
   return didChangePurchase ? nextGuestPurchases : guestPurchases;
+}
+
+function getGuestPurchaseDeletedFromGuest(
+  guestPurchase: MockPurchase,
+  deletedAt: string,
+) {
+  const hasLinkedAccountIdentity = Boolean(
+    guestPurchase.linkedAccountUserId &&
+      (guestPurchase.linkedRemoteId ||
+        guestPurchase.remoteId ||
+        guestPurchase.linkedClientLocalId),
+  );
+
+  return {
+    ...guestPurchase,
+    deletedFromGuestAt: guestPurchase.deletedFromGuestAt ?? deletedAt,
+    pendingLinkedAccountDeleteAt:
+      hasLinkedAccountIdentity
+        ? (guestPurchase.pendingLinkedAccountDeleteAt ?? deletedAt)
+        : guestPurchase.pendingLinkedAccountDeleteAt,
+  };
+}
+
+function getGuestPurchaseDeletedFromLinkedAccount(
+  guestPurchase: MockPurchase,
+  deletedAt: string,
+) {
+  return {
+    ...guestPurchase,
+    deletedFromLinkedAccountAt:
+      guestPurchase.deletedFromLinkedAccountAt ?? deletedAt,
+    pendingLinkedAccountDeleteAt: undefined,
+  };
+}
+
+function getGuestLinkedAccountDelete(
+  userId: string,
+  guestPurchase: MockPurchase,
+) {
+  const purchaseId =
+    guestPurchase.linkedRemoteId ??
+    guestPurchase.remoteId ??
+    guestPurchase.linkedClientLocalId ??
+    guestPurchase.id;
+
+  if (
+    guestPurchase.linkedAccountUserId !== userId ||
+    !purchaseId ||
+    !guestPurchase.pendingLinkedAccountDeleteAt
+  ) {
+    return null;
+  }
+
+  return {
+    deletedAt: guestPurchase.pendingLinkedAccountDeleteAt,
+    guestPurchase,
+    purchaseId,
+  };
+}
+
+function getPurchasesWithoutSharedIdentity(
+  purchases: MockPurchase[],
+  purchaseToRemove: MockPurchase,
+) {
+  const identityValues = new Set(getPurchaseIdentityValues(purchaseToRemove));
+
+  return purchases.filter(
+    (purchase) => !hasSharedPurchaseIdentity(purchase, identityValues),
+  );
+}
+
+function isGuestPurchaseLinkedToAccountPurchase(
+  userId: string,
+  guestPurchase: MockPurchase,
+  accountPurchase: MockPurchase,
+) {
+  if (
+    guestPurchase.linkedAccountUserId &&
+    guestPurchase.linkedAccountUserId !== userId
+  ) {
+    return false;
+  }
+
+  const accountRemoteId =
+    accountPurchase.remoteId ?? accountPurchase.linkedRemoteId;
+  const accountClientLocalId =
+    accountPurchase.linkedClientLocalId ?? accountPurchase.id;
+
+  if (
+    accountRemoteId &&
+    (guestPurchase.linkedRemoteId === accountRemoteId ||
+      guestPurchase.remoteId === accountRemoteId)
+  ) {
+    return true;
+  }
+
+  if (
+    accountClientLocalId &&
+    (guestPurchase.linkedClientLocalId === accountClientLocalId ||
+      guestPurchase.id === accountClientLocalId)
+  ) {
+    return true;
+  }
+
+  return hasSharedPurchaseIdentity(
+    guestPurchase,
+    new Set(getPurchaseIdentityValues(accountPurchase)),
+  );
+}
+
+function getAccountPurchasesWithoutLinkedGuestTombstones(
+  userId: string,
+  accountPurchases: MockPurchase[],
+  guestPurchases: MockPurchase[],
+) {
+  return guestPurchases
+    .filter(
+      (guestPurchase) =>
+        guestPurchase.linkedAccountUserId === userId &&
+        isTombstonedPurchase(guestPurchase),
+    )
+    .reduce(
+      (nextAccountPurchases, guestPurchase) =>
+        getPurchasesWithoutSharedIdentity(nextAccountPurchases, guestPurchase),
+      accountPurchases,
+    );
+}
+
+function getGuestPurchasesWithoutPendingLinkedAccountDeletes(
+  guestPurchases: MockPurchase[],
+  pendingDeletes: PendingLinkedGuestDeleteFromAccount[],
+) {
+  return pendingDeletes.reduce(
+    (nextGuestPurchases, pendingDelete) =>
+      nextGuestPurchases.filter(
+        (guestPurchase) =>
+          !isGuestPurchaseLinkedToAccountPurchase(
+            pendingDelete.userId,
+            guestPurchase,
+            pendingDelete.accountPurchase,
+          ),
+      ),
+    guestPurchases,
+  );
+}
+
+function getPurchasesWithUpdatedPurchases(
+  purchases: MockPurchase[],
+  updatedPurchases: MockPurchase[],
+) {
+  if (!updatedPurchases.length) {
+    return purchases;
+  }
+
+  let didChangePurchase = false;
+  const unmatchedPurchases = [...updatedPurchases];
+  const nextPurchases = purchases.map((purchase) => {
+    const matchingPurchaseIndex = unmatchedPurchases.findIndex(
+      (updatedPurchase) =>
+        hasSharedPurchaseIdentity(
+          purchase,
+          new Set(getPurchaseIdentityValues(updatedPurchase)),
+        ),
+    );
+
+    if (matchingPurchaseIndex === -1) {
+      return purchase;
+    }
+
+    const [updatedPurchase] = unmatchedPurchases.splice(
+      matchingPurchaseIndex,
+      1,
+    );
+
+    if (updatedPurchase !== purchase) {
+      didChangePurchase = true;
+    }
+
+    return updatedPurchase;
+  });
+
+  if (unmatchedPurchases.length) {
+    didChangePurchase = true;
+  }
+
+  return didChangePurchase
+    ? [...unmatchedPurchases, ...nextPurchases]
+    : purchases;
 }
 
 function getPurchaseWithLocalDeviceData(
@@ -634,9 +847,48 @@ function getGuestPurchaseMigrationPlan(
   const accountPurchaseReconciliations: GuestAccountPurchaseReconciliation[] =
     [];
   const guestPurchaseAccountLinks: GuestPurchaseAccountLink[] = [];
+  const guestPurchaseTombstoneUpdates: MockPurchase[] = [];
+  const pendingLinkedAccountDeletes: GuestLinkedAccountDelete[] = [];
   let nextAccountPurchases = accountPurchases;
 
   guestPurchases.forEach((guestPurchase) => {
+    const matchingRemotePurchaseIdentity =
+      findMatchingRemotePurchaseIdentityForGuestMigration(
+        guestPurchase,
+        remotePurchaseIdentities,
+      );
+    const pendingLinkedAccountDelete = getGuestLinkedAccountDelete(
+      userId,
+      guestPurchase,
+    );
+
+    if (isTombstonedPurchase(guestPurchase)) {
+      if (
+        pendingLinkedAccountDelete ||
+        guestPurchase.linkedAccountUserId === userId
+      ) {
+        nextAccountPurchases = getPurchasesWithoutSharedIdentity(
+          nextAccountPurchases,
+          guestPurchase,
+        );
+      }
+
+      if (pendingLinkedAccountDelete) {
+        if (matchingRemotePurchaseIdentity?.deleted_at) {
+          guestPurchaseTombstoneUpdates.push(
+            getGuestPurchaseDeletedFromLinkedAccount(
+              guestPurchase,
+              matchingRemotePurchaseIdentity.deleted_at,
+            ),
+          );
+        } else {
+          pendingLinkedAccountDeletes.push(pendingLinkedAccountDelete);
+        }
+      }
+
+      return;
+    }
+
     const matchingAccountPurchase =
       findMatchingAccountPurchaseForGuestMigration(
         guestPurchase,
@@ -683,13 +935,21 @@ function getGuestPurchaseMigrationPlan(
       return;
     }
 
-    const matchingRemotePurchaseIdentity =
-      findMatchingRemotePurchaseIdentityForGuestMigration(
-        guestPurchase,
-        remotePurchaseIdentities,
-      );
-
     if (matchingRemotePurchaseIdentity) {
+      if (matchingRemotePurchaseIdentity.deleted_at) {
+        guestPurchaseTombstoneUpdates.push(
+          getGuestPurchaseDeletedFromLinkedAccount(
+            guestPurchase,
+            matchingRemotePurchaseIdentity.deleted_at,
+          ),
+        );
+        nextAccountPurchases = getPurchasesWithoutSharedIdentity(
+          nextAccountPurchases,
+          guestPurchase,
+        );
+        return;
+      }
+
       guestPurchaseAccountLinks.push(
         getGuestPurchaseAccountLinkFromRemoteIdentity(
           userId,
@@ -719,7 +979,9 @@ function getGuestPurchaseMigrationPlan(
     accountPurchaseReconciliations,
     accountPurchases: nextAccountPurchases,
     guestPurchaseAccountLinks,
+    guestPurchaseTombstoneUpdates,
     guestPurchasesForInsert,
+    pendingLinkedAccountDeletes,
   };
 }
 
@@ -728,7 +990,9 @@ function getEmptyGuestPurchaseMigrationPlan(accountPurchases: MockPurchase[]) {
     accountPurchaseReconciliations: [] as GuestAccountPurchaseReconciliation[],
     accountPurchases,
     guestPurchaseAccountLinks: [] as GuestPurchaseAccountLink[],
+    guestPurchaseTombstoneUpdates: [] as MockPurchase[],
     guestPurchasesForInsert: [] as MockPurchase[],
+    pendingLinkedAccountDeletes: [] as GuestLinkedAccountDelete[],
   };
 }
 
@@ -764,6 +1028,32 @@ async function persistPurchaseStorageSnapshot(
       String(snapshot.guestPurchaseEntriesUsed),
     ).catch(() => undefined),
   ]);
+}
+
+async function persistVisiblePurchases(
+  scopeKey: string,
+  purchases: MockPurchase[],
+  pendingTombstonedPurchases: MockPurchase[] = [],
+) {
+  const storageKeys = getScopedPurchaseStorageKeys(scopeKey);
+  const storedPurchases = await AsyncStorage.getItem(
+    storageKeys.purchasesKey,
+  ).catch(() => null);
+  const hiddenStoredPurchases =
+    parseStoredPurchases(storedPurchases)?.filter(isTombstonedPurchase) ?? [];
+  const hiddenPurchases = getPurchasesWithUpdatedPurchases(
+    hiddenStoredPurchases,
+    pendingTombstonedPurchases.filter(isTombstonedPurchase),
+  );
+  const visiblePurchaseIdentities = getPurchaseIdentitySet(purchases);
+  const preservedHiddenPurchases = hiddenPurchases.filter(
+    (purchase) => !hasSharedPurchaseIdentity(purchase, visiblePurchaseIdentities),
+  );
+
+  await AsyncStorage.setItem(
+    storageKeys.purchasesKey,
+    JSON.stringify([...purchases, ...preservedHiddenPurchases]),
+  );
 }
 
 function compactText(value?: string) {
@@ -1080,6 +1370,92 @@ async function hydratePurchaseStorageScope(scopeKey: string) {
   };
 }
 
+async function persistGuestPurchaseTombstone(tombstonedPurchase: MockPurchase) {
+  const guestPurchaseSnapshot = await hydratePurchaseStorageScope(
+    GUEST_PURCHASE_SCOPE_KEY,
+  );
+  const nextGuestPurchases = getPurchasesWithUpdatedPurchases(
+    guestPurchaseSnapshot.purchases,
+    [tombstonedPurchase],
+  );
+
+  if (nextGuestPurchases === guestPurchaseSnapshot.purchases) {
+    return;
+  }
+
+  await persistPurchaseStorageSnapshot(GUEST_PURCHASE_SCOPE_KEY, {
+    ...guestPurchaseSnapshot,
+    purchases: nextGuestPurchases,
+  });
+}
+
+async function markLinkedGuestPurchaseDeletedFromAccount(
+  userId: string,
+  accountPurchase: MockPurchase,
+  deletedAt: string,
+) {
+  const guestPurchaseSnapshot = await hydratePurchaseStorageScope(
+    GUEST_PURCHASE_SCOPE_KEY,
+  );
+  const updatedGuestPurchases = guestPurchaseSnapshot.purchases
+    .filter(
+      (guestPurchase) =>
+        isGuestPurchaseLinkedToAccountPurchase(
+          userId,
+          guestPurchase,
+          accountPurchase,
+        ),
+    )
+    .map((guestPurchase) =>
+      getGuestPurchaseDeletedFromLinkedAccount(guestPurchase, deletedAt),
+    );
+
+  if (!updatedGuestPurchases.length) {
+    return;
+  }
+
+  const nextGuestPurchases = getPurchasesWithUpdatedPurchases(
+    guestPurchaseSnapshot.purchases,
+    updatedGuestPurchases,
+  );
+
+  if (nextGuestPurchases === guestPurchaseSnapshot.purchases) {
+    return;
+  }
+
+  await persistPurchaseStorageSnapshot(GUEST_PURCHASE_SCOPE_KEY, {
+    ...guestPurchaseSnapshot,
+    purchases: nextGuestPurchases,
+  });
+}
+
+async function syncPendingLinkedAccountDeletes(
+  userId: string,
+  pendingLinkedAccountDeletes: GuestLinkedAccountDelete[],
+) {
+  return Promise.all(
+    pendingLinkedAccountDeletes.map(async (linkedAccountDelete) => {
+      try {
+        const { data, error } = await softDeleteRemotePurchase(
+          userId,
+          linkedAccountDelete.purchaseId,
+        );
+
+        if (error) {
+          return linkedAccountDelete.guestPurchase;
+        }
+
+        return getGuestPurchaseDeletedFromLinkedAccount(
+          linkedAccountDelete.guestPurchase,
+          data.deleted_at ?? linkedAccountDelete.deletedAt,
+        );
+      } catch {
+        return linkedAccountDelete.guestPurchase;
+      }
+    }),
+  );
+}
+
 function getActiveToPendingPurchaseIds(
   previousPurchases: MockPurchase[],
   nextPurchases: MockPurchase[],
@@ -1327,6 +1703,10 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
   >(null);
   const hasSkippedInitialPersistRef = useRef(false);
   const lastReminderPurchasesRef = useRef<MockPurchase[] | null>(null);
+  const pendingLocalTombstonesRef = useRef<MockPurchase[]>([]);
+  const pendingLinkedGuestDeletesFromAccountRef = useRef<
+    PendingLinkedGuestDeleteFromAccount[]
+  >([]);
   const reminderSyncQueueRef = useRef(Promise.resolve());
   const signedInUserId = user?.id;
 
@@ -1346,17 +1726,37 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
     setGuestPurchaseEntriesUsed(fallbackPurchases.length);
     hasSkippedInitialPersistRef.current = false;
     lastReminderPurchasesRef.current = null;
+    pendingLocalTombstonesRef.current = [];
 
     const hydratePurchases = async () => {
       try {
         const scopedPurchaseSnapshot =
           await hydratePurchaseStorageScope(purchaseScopeKey);
+        let linkedGuestPurchaseSnapshot: Awaited<
+          ReturnType<typeof hydratePurchaseStorageScope>
+        > | null = null;
+
+        if (signedInUserId) {
+          linkedGuestPurchaseSnapshot = await hydratePurchaseStorageScope(
+            GUEST_PURCHASE_SCOPE_KEY,
+          ).catch(() => null);
+        }
+        const visibleScopedPurchases = signedInUserId
+          ? getAccountPurchasesWithoutLinkedGuestTombstones(
+              signedInUserId,
+              getVisiblePurchases(scopedPurchaseSnapshot.purchases),
+              linkedGuestPurchaseSnapshot?.purchases ?? [],
+            )
+          : getGuestPurchasesWithoutPendingLinkedAccountDeletes(
+              getVisiblePurchases(scopedPurchaseSnapshot.purchases),
+              pendingLinkedGuestDeletesFromAccountRef.current,
+            );
 
         if (!isMounted) {
           return;
         }
 
-        setPurchases(scopedPurchaseSnapshot.purchases);
+        setPurchases(visibleScopedPurchases);
         setGuestPurchaseEntriesUsed(
           scopedPurchaseSnapshot.guestPurchaseEntriesUsed,
         );
@@ -1395,9 +1795,9 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
             remotePurchases,
             scopedPurchaseSnapshot.purchases,
           );
-          const guestPurchaseSnapshot = await hydratePurchaseStorageScope(
-            GUEST_PURCHASE_SCOPE_KEY,
-          );
+          const guestPurchaseSnapshot =
+            linkedGuestPurchaseSnapshot ??
+            (await hydratePurchaseStorageScope(GUEST_PURCHASE_SCOPE_KEY));
           const {
             data: remotePurchaseMigrationIdentities,
             error: remotePurchaseMigrationIdentitiesError,
@@ -1425,7 +1825,14 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
                   guestPurchaseMigrationPlan.guestPurchasesForInsert,
                 )
               : [];
-          const nextGuestPurchases = getGuestPurchasesWithAccountLinks(
+          const linkedAccountDeleteUpdates =
+            guestPurchaseMigrationPlan.pendingLinkedAccountDeletes.length > 0
+              ? await syncPendingLinkedAccountDeletes(
+                  signedInUserId,
+                  guestPurchaseMigrationPlan.pendingLinkedAccountDeletes,
+                )
+              : [];
+          const linkedGuestPurchases = getGuestPurchasesWithAccountLinks(
             guestPurchaseSnapshot.purchases,
             [
               ...guestPurchaseMigrationPlan.guestPurchaseAccountLinks,
@@ -1439,6 +1846,13 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
                 .filter(
                   (link): link is GuestPurchaseAccountLink => link !== null,
                 ),
+            ],
+          );
+          const nextGuestPurchases = getPurchasesWithUpdatedPurchases(
+            linkedGuestPurchases,
+            [
+              ...guestPurchaseMigrationPlan.guestPurchaseTombstoneUpdates,
+              ...linkedAccountDeleteUpdates,
             ],
           );
           const accountPurchases = [
@@ -1460,18 +1874,21 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
               signedInUserId,
               accountPurchases,
             );
+          const visibleAccountPurchasesWithSyncedPhotos = getVisiblePurchases(
+            accountPurchasesWithSyncedPhotos,
+          );
           const { data: remoteTotalEntryCount } =
             await fetchRemotePurchaseEntryCount(signedInUserId);
           const remoteHydratedSnapshot = {
             guestPurchaseEntriesUsed: getReconciledAccountPurchaseEntriesUsed({
               localKnownEntriesUsed: Math.max(
                 scopedPurchaseSnapshot.purchases.length,
-                accountPurchasesWithSyncedPhotos.length,
+                visibleAccountPurchasesWithSyncedPhotos.length,
               ),
               remoteTotalEntryCount: remoteTotalEntryCount ?? remoteRows.length,
               storedEntriesUsed: scopedPurchaseSnapshot.guestPurchaseEntriesUsed,
             }),
-            purchases: accountPurchasesWithSyncedPhotos,
+            purchases: visibleAccountPurchasesWithSyncedPhotos,
           };
 
           setPurchases(remoteHydratedSnapshot.purchases);
@@ -1527,11 +1944,12 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    const storageKeys = getScopedPurchaseStorageKeys(purchaseScopeKey);
-
-    AsyncStorage.setItem(
-      storageKeys.purchasesKey,
-      JSON.stringify(purchases),
+    persistVisiblePurchases(
+      purchaseScopeKey,
+      purchases,
+      purchaseScopeKey === GUEST_PURCHASE_SCOPE_KEY
+        ? pendingLocalTombstonesRef.current
+        : [],
     ).catch(() => {
       // Local persistence is best-effort for the frontend-only purchase state.
     });
@@ -1698,9 +2116,38 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
   );
 
   const syncDeletedPurchase = useCallback(
-    async (localPurchase: MockPurchase) => {
+    async (localPurchase: MockPurchase, deletedAt: string) => {
       if (!signedInUserId) {
         return;
+      }
+
+      const pendingLinkedGuestDelete = {
+        accountPurchase: localPurchase,
+        deletedAt,
+        userId: signedInUserId,
+      };
+      pendingLinkedGuestDeletesFromAccountRef.current = [
+        ...pendingLinkedGuestDeletesFromAccountRef.current,
+        pendingLinkedGuestDelete,
+      ];
+
+      try {
+        await markLinkedGuestPurchaseDeletedFromAccount(
+          signedInUserId,
+          localPurchase,
+          deletedAt,
+        );
+        pendingLinkedGuestDeletesFromAccountRef.current =
+          pendingLinkedGuestDeletesFromAccountRef.current.filter(
+            (pendingDelete) =>
+              pendingDelete !== pendingLinkedGuestDelete &&
+              !hasSharedPurchaseIdentity(
+                pendingDelete.accountPurchase,
+                new Set(getPurchaseIdentityValues(localPurchase)),
+              ),
+          );
+      } catch {
+        // Guest-side linked tombstones are best-effort local persistence.
       }
 
       try {
@@ -1831,6 +2278,8 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
       return false;
     }
 
+    const deletedAt = new Date().toISOString();
+
     setPurchases((currentPurchases) => {
       if (!currentPurchases.some((purchase) => purchase.id === itemId)) {
         return currentPurchases;
@@ -1839,10 +2288,38 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
       return currentPurchases.filter((purchase) => purchase.id !== itemId);
     });
 
-    void syncDeletedPurchase(purchaseToDelete);
+    if (!signedInUserId) {
+      if (
+        purchaseToDelete.linkedAccountUserId &&
+        purchaseToDelete.linkedRemoteId
+      ) {
+        const tombstonedPurchase = getGuestPurchaseDeletedFromGuest(
+          purchaseToDelete,
+          deletedAt,
+        );
+
+        pendingLocalTombstonesRef.current = getPurchasesWithUpdatedPurchases(
+          pendingLocalTombstonesRef.current,
+          [tombstonedPurchase],
+        );
+
+        void persistGuestPurchaseTombstone(tombstonedPurchase)
+          .then(() => {
+            pendingLocalTombstonesRef.current = getPurchasesWithoutSharedIdentity(
+              pendingLocalTombstonesRef.current,
+              tombstonedPurchase,
+            );
+          })
+          .catch(() => undefined);
+      }
+
+      return true;
+    }
+
+    void syncDeletedPurchase(purchaseToDelete, deletedAt);
 
     return true;
-  }, [purchases, syncDeletedPurchase]);
+  }, [purchases, signedInUserId, syncDeletedPurchase]);
 
   const resolvePurchase = useCallback(
     (itemId: string, status: ResolvedPurchaseStatus) => {
