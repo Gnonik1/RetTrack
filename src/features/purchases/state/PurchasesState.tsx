@@ -341,7 +341,7 @@ type GuestPurchaseAccountLink = {
   clientLocalId: string;
   guestPurchaseId: string;
   lastSyncedAt?: string;
-  remoteId: string;
+  remoteId?: string;
   userId: string;
 };
 
@@ -372,9 +372,11 @@ function getExistingGuestPurchaseAccountLink(
   userId: string,
   guestPurchase: MockPurchase,
 ) {
+  const remoteId = guestPurchase.linkedRemoteId ?? guestPurchase.remoteId;
+
   if (
     guestPurchase.linkedAccountUserId !== userId ||
-    !guestPurchase.linkedRemoteId
+    (!remoteId && !guestPurchase.linkedClientLocalId)
   ) {
     return null;
   }
@@ -383,7 +385,7 @@ function getExistingGuestPurchaseAccountLink(
     clientLocalId: guestPurchase.linkedClientLocalId ?? guestPurchase.id,
     guestPurchaseId: guestPurchase.id,
     lastSyncedAt: guestPurchase.lastSyncedAt,
-    remoteId: guestPurchase.linkedRemoteId,
+    remoteId,
     userId,
   };
 }
@@ -394,17 +396,48 @@ function getGuestPurchaseAccountLinkFromAccountPurchase(
   accountPurchase: MockPurchase,
 ) {
   const remoteId = accountPurchase.remoteId ?? accountPurchase.linkedRemoteId;
+  const clientLocalId =
+    accountPurchase.linkedClientLocalId ?? accountPurchase.id;
 
-  if (!remoteId) {
+  if (!remoteId && accountPurchase.origin !== 'guest') {
     return null;
   }
 
   return {
-    clientLocalId: accountPurchase.linkedClientLocalId ?? accountPurchase.id,
+    clientLocalId,
     guestPurchaseId: guestPurchase.id,
     lastSyncedAt: accountPurchase.lastSyncedAt,
     remoteId,
     userId,
+  };
+}
+
+function getGuestPurchaseLocalAccountLink(
+  userId: string,
+  guestPurchase: MockPurchase,
+): GuestPurchaseAccountLink {
+  return {
+    clientLocalId: guestPurchase.id,
+    guestPurchaseId: guestPurchase.id,
+    userId,
+  };
+}
+
+function getAccountPurchaseWithGuestLink(
+  accountPurchase: MockPurchase,
+  link: GuestPurchaseAccountLink,
+) {
+  return {
+    ...accountPurchase,
+    linkedAccountUserId: link.userId,
+    linkedClientLocalId: link.clientLocalId,
+    ...(link.remoteId
+      ? {
+          linkedRemoteId: link.remoteId,
+          remoteId: link.remoteId,
+        }
+      : {}),
+    origin: 'guest' as const,
   };
 }
 
@@ -431,28 +464,34 @@ function getGuestPurchaseWithAccountLink(
 ) {
   const lastSyncedAt =
     link.lastSyncedAt ?? guestPurchase.lastSyncedAt ?? syncedAt.toISOString();
+  const remoteMetadata = link.remoteId
+    ? {
+        lastSyncedAt,
+        linkedRemoteId: link.remoteId,
+        remoteId: link.remoteId,
+        syncStatus: 'synced' as const,
+      }
+    : {};
 
   if (
     guestPurchase.origin === 'guest' &&
     guestPurchase.linkedAccountUserId === link.userId &&
     guestPurchase.linkedClientLocalId === link.clientLocalId &&
-    guestPurchase.linkedRemoteId === link.remoteId &&
-    guestPurchase.remoteId === link.remoteId &&
-    guestPurchase.syncStatus === 'synced' &&
-    guestPurchase.lastSyncedAt === lastSyncedAt
+    (!link.remoteId ||
+      (guestPurchase.linkedRemoteId === link.remoteId &&
+        guestPurchase.remoteId === link.remoteId &&
+        guestPurchase.syncStatus === 'synced' &&
+        guestPurchase.lastSyncedAt === lastSyncedAt))
   ) {
     return guestPurchase;
   }
 
   return {
     ...guestPurchase,
-    lastSyncedAt,
     linkedAccountUserId: link.userId,
     linkedClientLocalId: link.clientLocalId,
-    linkedRemoteId: link.remoteId,
     origin: 'guest' as const,
-    remoteId: link.remoteId,
-    syncStatus: 'synced' as const,
+    ...remoteMetadata,
   };
 }
 
@@ -558,6 +597,43 @@ function getPurchasesWithoutSharedIdentity(
 
   return purchases.filter(
     (purchase) => !hasSharedPurchaseIdentity(purchase, identityValues),
+  );
+}
+
+function isLocalGuestAccountPurchaseForLinkedDelete(
+  accountPurchase: MockPurchase,
+  linkedAccountDelete: GuestLinkedAccountDelete,
+) {
+  const linkedClientLocalId =
+    linkedAccountDelete.guestPurchase.linkedClientLocalId;
+  const originalGuestId = linkedAccountDelete.guestPurchase.id;
+
+  if (accountPurchase.origin !== 'guest') {
+    return false;
+  }
+
+  return Boolean(
+    accountPurchase.id === originalGuestId ||
+      (linkedClientLocalId &&
+        (accountPurchase.id === linkedClientLocalId ||
+          accountPurchase.linkedClientLocalId === linkedClientLocalId)),
+  );
+}
+
+function getAccountPurchasesWithoutLinkedAccountDelete(
+  accountPurchases: MockPurchase[],
+  linkedAccountDelete: GuestLinkedAccountDelete,
+) {
+  const identityValues = new Set(
+    getPurchaseIdentityValues(linkedAccountDelete.guestPurchase),
+  );
+
+  return accountPurchases.filter(
+    (accountPurchase) =>
+      !isLocalGuestAccountPurchaseForLinkedDelete(
+        accountPurchase,
+        linkedAccountDelete,
+      ) && !hasSharedPurchaseIdentity(accountPurchase, identityValues),
   );
 }
 
@@ -863,10 +939,12 @@ function getGuestPurchaseMigrationPlan(
     );
 
     if (isTombstonedPurchase(guestPurchase)) {
-      if (
-        pendingLinkedAccountDelete ||
-        guestPurchase.linkedAccountUserId === userId
-      ) {
+      if (pendingLinkedAccountDelete) {
+        nextAccountPurchases = getAccountPurchasesWithoutLinkedAccountDelete(
+          nextAccountPurchases,
+          pendingLinkedAccountDelete,
+        );
+      } else if (guestPurchase.linkedAccountUserId === userId) {
         nextAccountPurchases = getPurchasesWithoutSharedIdentity(
           nextAccountPurchases,
           guestPurchase,
@@ -1389,6 +1467,36 @@ async function persistGuestPurchaseTombstone(tombstonedPurchase: MockPurchase) {
   });
 }
 
+async function persistGuestPurchaseLinkAndTombstoneUpdates(
+  links: GuestPurchaseAccountLink[],
+  updatedPurchases: MockPurchase[],
+) {
+  if (!links.length && !updatedPurchases.length) {
+    return;
+  }
+
+  const guestPurchaseSnapshot = await hydratePurchaseStorageScope(
+    GUEST_PURCHASE_SCOPE_KEY,
+  );
+  const linkedGuestPurchases = getGuestPurchasesWithAccountLinks(
+    guestPurchaseSnapshot.purchases,
+    links,
+  );
+  const nextGuestPurchases = getPurchasesWithUpdatedPurchases(
+    linkedGuestPurchases,
+    updatedPurchases,
+  );
+
+  if (nextGuestPurchases === guestPurchaseSnapshot.purchases) {
+    return;
+  }
+
+  await persistPurchaseStorageSnapshot(GUEST_PURCHASE_SCOPE_KEY, {
+    ...guestPurchaseSnapshot,
+    purchases: nextGuestPurchases,
+  });
+}
+
 async function markLinkedGuestPurchaseDeletedFromAccount(
   userId: string,
   accountPurchase: MockPurchase,
@@ -1536,17 +1644,19 @@ async function syncGuestMigrationPurchases(
 ): Promise<GuestPurchaseMigrationSyncResult[]> {
   return Promise.all(
     guestPurchases.map(async (purchase) => {
+      const localLink = getGuestPurchaseLocalAccountLink(userId, purchase);
+
       try {
         const { data, error } = await createRemotePurchase(userId, purchase);
 
         if (error) {
           return {
             accountPurchase: {
-              ...purchase,
+              ...getAccountPurchaseWithGuestLink(purchase, localLink),
               ...getSyncErrorMetadata(),
             },
             guestPurchase: purchase,
-            link: null,
+            link: localLink,
           };
         }
 
@@ -1582,11 +1692,11 @@ async function syncGuestMigrationPurchases(
       } catch {
         return {
           accountPurchase: {
-            ...purchase,
+            ...getAccountPurchaseWithGuestLink(purchase, localLink),
             ...getSyncErrorMetadata(),
           },
           guestPurchase: purchase,
-          link: null,
+          link: localLink,
         };
       }
     }),
@@ -1599,6 +1709,17 @@ async function syncGuestAccountPurchaseReconciliations(
 ): Promise<GuestPurchaseMigrationSyncResult[]> {
   return Promise.all(
     accountPurchaseReconciliations.map(async ({ accountPurchase, guestPurchase }) => {
+      const fallbackLink = getGuestPurchaseLocalAccountLink(
+        userId,
+        guestPurchase,
+      );
+      const accountLink =
+        getGuestPurchaseAccountLinkFromAccountPurchase(
+          userId,
+          guestPurchase,
+          accountPurchase,
+        ) ?? fallbackLink;
+
       try {
         const { data, error } = await updateRemotePurchase(
           userId,
@@ -1608,11 +1729,11 @@ async function syncGuestAccountPurchaseReconciliations(
         if (error) {
           return {
             accountPurchase: {
-              ...accountPurchase,
+              ...getAccountPurchaseWithGuestLink(accountPurchase, accountLink),
               ...getSyncErrorMetadata(),
             },
             guestPurchase,
-            link: null,
+            link: accountLink,
           };
         }
         const link = getGuestPurchaseAccountLinkFromRemoteIdentity(
@@ -1639,11 +1760,11 @@ async function syncGuestAccountPurchaseReconciliations(
       } catch {
         return {
           accountPurchase: {
-            ...accountPurchase,
+            ...getAccountPurchaseWithGuestLink(accountPurchase, accountLink),
             ...getSyncErrorMetadata(),
           },
           guestPurchase,
-          link: null,
+          link: accountLink,
         };
       }
     }),
@@ -1726,7 +1847,9 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
     setGuestPurchaseEntriesUsed(fallbackPurchases.length);
     hasSkippedInitialPersistRef.current = false;
     lastReminderPurchasesRef.current = null;
-    pendingLocalTombstonesRef.current = [];
+    if (purchaseScopeKey === GUEST_PURCHASE_SCOPE_KEY) {
+      pendingLocalTombstonesRef.current = [];
+    }
 
     const hydratePurchases = async () => {
       try {
@@ -1741,11 +1864,17 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
             GUEST_PURCHASE_SCOPE_KEY,
           ).catch(() => null);
         }
+        const linkedGuestPurchasesForScope = signedInUserId
+          ? getPurchasesWithUpdatedPurchases(
+              linkedGuestPurchaseSnapshot?.purchases ?? [],
+              pendingLocalTombstonesRef.current,
+            )
+          : [];
         const visibleScopedPurchases = signedInUserId
           ? getAccountPurchasesWithoutLinkedGuestTombstones(
               signedInUserId,
               getVisiblePurchases(scopedPurchaseSnapshot.purchases),
-              linkedGuestPurchaseSnapshot?.purchases ?? [],
+              linkedGuestPurchasesForScope,
             )
           : getGuestPurchasesWithoutPendingLinkedAccountDeletes(
               getVisiblePurchases(scopedPurchaseSnapshot.purchases),
@@ -1798,6 +1927,13 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
           const guestPurchaseSnapshot =
             linkedGuestPurchaseSnapshot ??
             (await hydratePurchaseStorageScope(GUEST_PURCHASE_SCOPE_KEY));
+          const pendingLocalTombstones = pendingLocalTombstonesRef.current;
+          const guestPurchasesForMigration = pendingLocalTombstones.length
+            ? getPurchasesWithUpdatedPurchases(
+                guestPurchaseSnapshot.purchases,
+                pendingLocalTombstones,
+              )
+            : guestPurchaseSnapshot.purchases;
           const {
             data: remotePurchaseMigrationIdentities,
             error: remotePurchaseMigrationIdentitiesError,
@@ -1807,7 +1943,7 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
               ? getEmptyGuestPurchaseMigrationPlan(mergedPurchases)
               : getGuestPurchaseMigrationPlan(
                   signedInUserId,
-                  guestPurchaseSnapshot.purchases,
+                  guestPurchasesForMigration,
                   mergedPurchases,
                   remotePurchaseMigrationIdentities ?? [],
                 );
@@ -1832,29 +1968,24 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
                   guestPurchaseMigrationPlan.pendingLinkedAccountDeletes,
                 )
               : [];
-          const linkedGuestPurchases = getGuestPurchasesWithAccountLinks(
-            guestPurchaseSnapshot.purchases,
-            [
-              ...guestPurchaseMigrationPlan.guestPurchaseAccountLinks,
-              ...reconciledAccountPurchases
-                .map((migrationResult) => migrationResult.link)
-                .filter(
-                  (link): link is GuestPurchaseAccountLink => link !== null,
-                ),
-              ...migratedGuestPurchases
-                .map((migrationResult) => migrationResult.link)
-                .filter(
-                  (link): link is GuestPurchaseAccountLink => link !== null,
-                ),
-            ],
-          );
-          const nextGuestPurchases = getPurchasesWithUpdatedPurchases(
-            linkedGuestPurchases,
-            [
-              ...guestPurchaseMigrationPlan.guestPurchaseTombstoneUpdates,
-              ...linkedAccountDeleteUpdates,
-            ],
-          );
+          const guestPurchaseAccountLinks = [
+            ...guestPurchaseMigrationPlan.guestPurchaseAccountLinks,
+            ...reconciledAccountPurchases
+              .map((migrationResult) => migrationResult.link)
+              .filter(
+                (link): link is GuestPurchaseAccountLink => link !== null,
+              ),
+            ...migratedGuestPurchases
+              .map((migrationResult) => migrationResult.link)
+              .filter(
+                (link): link is GuestPurchaseAccountLink => link !== null,
+              ),
+          ];
+          const guestPurchaseUpdates = [
+            ...pendingLocalTombstones,
+            ...guestPurchaseMigrationPlan.guestPurchaseTombstoneUpdates,
+            ...linkedAccountDeleteUpdates,
+          ];
           const accountPurchases = [
             ...migratedGuestPurchases.map(
               (migrationResult) => migrationResult.accountPurchase,
@@ -1899,12 +2030,11 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
             purchaseScopeKey,
             remoteHydratedSnapshot,
           );
-          if (nextGuestPurchases !== guestPurchaseSnapshot.purchases) {
-            await persistPurchaseStorageSnapshot(GUEST_PURCHASE_SCOPE_KEY, {
-              ...guestPurchaseSnapshot,
-              purchases: nextGuestPurchases,
-            });
-          }
+          await persistGuestPurchaseLinkAndTombstoneUpdates(
+            guestPurchaseAccountLinks,
+            guestPurchaseUpdates,
+          );
+          pendingLocalTombstonesRef.current = [];
         } catch {
           // Keep the scoped local cache visible if remote hydration fails.
         }
@@ -2291,7 +2421,9 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
     if (!signedInUserId) {
       if (
         purchaseToDelete.linkedAccountUserId &&
-        purchaseToDelete.linkedRemoteId
+        (purchaseToDelete.linkedRemoteId ||
+          purchaseToDelete.remoteId ||
+          purchaseToDelete.linkedClientLocalId)
       ) {
         const tombstonedPurchase = getGuestPurchaseDeletedFromGuest(
           purchaseToDelete,
