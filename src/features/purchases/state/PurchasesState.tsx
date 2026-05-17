@@ -14,11 +14,13 @@ import { rescheduleAllPurchaseReminders } from '../../notifications/notification
 import {
   createRemotePurchase,
   fetchRemotePurchaseEntryCount,
+  fetchRemotePurchaseMigrationIdentities,
   fetchRemotePurchases,
   mapRemotePurchaseRowToLocalPurchase,
   resolveRemotePurchase,
   softDeleteRemotePurchase,
   updateRemotePurchase,
+  type SupabasePurchaseMigrationIdentityRow,
 } from '../../../services/purchaseSyncService';
 import {
   fetchPurchasePhotos,
@@ -32,6 +34,7 @@ import {
   getMockPurchaseById,
   mockPurchases,
   type MockPurchase,
+  type PurchaseOrigin,
   type PurchaseStatus,
   type PurchaseSyncStatus,
 } from '../data/mockPurchases';
@@ -122,6 +125,12 @@ function isOptionalPurchaseSyncStatus(
   );
 }
 
+function isOptionalPurchaseOrigin(
+  value: unknown,
+): value is PurchaseOrigin | undefined {
+  return value === undefined || value === 'account' || value === 'guest';
+}
+
 function isOptionalNumber(value: unknown) {
   return value === undefined || typeof value === 'number';
 }
@@ -175,7 +184,11 @@ function isStoredPurchase(value: unknown): value is MockPurchase {
     isOptionalNumber(value.resolvedAt) &&
     isOptionalPurchaseSyncStatus(value.syncStatus) &&
     isOptionalString(value.lastPhotoSyncedAt) &&
-    isOptionalString(value.lastSyncedAt)
+    isOptionalString(value.lastSyncedAt) &&
+    isOptionalString(value.linkedAccountUserId) &&
+    isOptionalString(value.linkedClientLocalId) &&
+    isOptionalString(value.linkedRemoteId) &&
+    isOptionalPurchaseOrigin(value.origin)
   );
 }
 
@@ -247,7 +260,18 @@ function isUnsyncedLocalPurchase(purchase: MockPurchase) {
 }
 
 function getPurchaseIdentityValues(purchase: MockPurchase) {
-  return [purchase.id, purchase.remoteId].filter(
+  return [
+    purchase.id,
+    purchase.remoteId,
+    purchase.linkedRemoteId,
+    purchase.linkedClientLocalId,
+  ].filter((value): value is string => Boolean(value));
+}
+
+function getRemotePurchaseMigrationIdentityValues(
+  remotePurchase: SupabasePurchaseMigrationIdentityRow,
+) {
+  return [remotePurchase.id, remotePurchase.client_local_id].filter(
     (value): value is string => Boolean(value),
   );
 }
@@ -283,6 +307,164 @@ function findMatchingAccountPurchaseForGuestMigration(
   accountPurchases: MockPurchase[],
 ) {
   return findPurchaseBySharedIdentity(guestPurchase, accountPurchases);
+}
+
+function findMatchingRemotePurchaseIdentityForGuestMigration(
+  guestPurchase: MockPurchase,
+  remotePurchaseIdentities: SupabasePurchaseMigrationIdentityRow[],
+) {
+  const guestIdentityValues = new Set(getPurchaseIdentityValues(guestPurchase));
+
+  return (
+    remotePurchaseIdentities.find((remotePurchaseIdentity) =>
+      getRemotePurchaseMigrationIdentityValues(remotePurchaseIdentity).some(
+        (value) => guestIdentityValues.has(value),
+      ),
+    ) ?? null
+  );
+}
+
+type GuestPurchaseAccountLink = {
+  clientLocalId: string;
+  guestPurchaseId: string;
+  lastSyncedAt?: string;
+  remoteId: string;
+  userId: string;
+};
+
+type GuestAccountPurchaseReconciliation = {
+  accountPurchase: MockPurchase;
+  guestPurchase: MockPurchase;
+};
+
+type GuestPurchaseMigrationSyncResult = {
+  accountPurchase: MockPurchase;
+  guestPurchase: MockPurchase;
+  link: GuestPurchaseAccountLink | null;
+};
+
+function getExistingGuestPurchaseAccountLink(
+  userId: string,
+  guestPurchase: MockPurchase,
+) {
+  if (
+    guestPurchase.linkedAccountUserId !== userId ||
+    !guestPurchase.linkedRemoteId
+  ) {
+    return null;
+  }
+
+  return {
+    clientLocalId: guestPurchase.linkedClientLocalId ?? guestPurchase.id,
+    guestPurchaseId: guestPurchase.id,
+    lastSyncedAt: guestPurchase.lastSyncedAt,
+    remoteId: guestPurchase.linkedRemoteId,
+    userId,
+  };
+}
+
+function getGuestPurchaseAccountLinkFromAccountPurchase(
+  userId: string,
+  guestPurchase: MockPurchase,
+  accountPurchase: MockPurchase,
+) {
+  const remoteId = accountPurchase.remoteId ?? accountPurchase.linkedRemoteId;
+
+  if (!remoteId) {
+    return null;
+  }
+
+  return {
+    clientLocalId: accountPurchase.linkedClientLocalId ?? accountPurchase.id,
+    guestPurchaseId: guestPurchase.id,
+    lastSyncedAt: accountPurchase.lastSyncedAt,
+    remoteId,
+    userId,
+  };
+}
+
+function getGuestPurchaseAccountLinkFromRemoteIdentity(
+  userId: string,
+  guestPurchase: MockPurchase,
+  remotePurchaseIdentity: SupabasePurchaseMigrationIdentityRow,
+) {
+  return {
+    clientLocalId:
+      remotePurchaseIdentity.client_local_id ??
+      guestPurchase.linkedClientLocalId ??
+      guestPurchase.id,
+    guestPurchaseId: guestPurchase.id,
+    remoteId: remotePurchaseIdentity.id,
+    userId,
+  };
+}
+
+function getGuestPurchaseWithAccountLink(
+  guestPurchase: MockPurchase,
+  link: GuestPurchaseAccountLink,
+  syncedAt = new Date(),
+) {
+  const lastSyncedAt =
+    link.lastSyncedAt ?? guestPurchase.lastSyncedAt ?? syncedAt.toISOString();
+
+  if (
+    guestPurchase.origin === 'guest' &&
+    guestPurchase.linkedAccountUserId === link.userId &&
+    guestPurchase.linkedClientLocalId === link.clientLocalId &&
+    guestPurchase.linkedRemoteId === link.remoteId &&
+    guestPurchase.remoteId === link.remoteId &&
+    guestPurchase.syncStatus === 'synced' &&
+    guestPurchase.lastSyncedAt === lastSyncedAt
+  ) {
+    return guestPurchase;
+  }
+
+  return {
+    ...guestPurchase,
+    lastSyncedAt,
+    linkedAccountUserId: link.userId,
+    linkedClientLocalId: link.clientLocalId,
+    linkedRemoteId: link.remoteId,
+    origin: 'guest' as const,
+    remoteId: link.remoteId,
+    syncStatus: 'synced' as const,
+  };
+}
+
+function getGuestPurchasesWithAccountLinks(
+  guestPurchases: MockPurchase[],
+  links: GuestPurchaseAccountLink[],
+) {
+  if (!links.length) {
+    return guestPurchases;
+  }
+
+  const linkByGuestPurchaseId = new Map(
+    links.map((link) => [link.guestPurchaseId, link]),
+  );
+  const syncedAt = new Date();
+  let didChangePurchase = false;
+  const nextGuestPurchases = guestPurchases.map((guestPurchase) => {
+    const link = linkByGuestPurchaseId.get(guestPurchase.id);
+
+    if (!link) {
+      return guestPurchase;
+    }
+
+    const nextGuestPurchase = getGuestPurchaseWithAccountLink(
+      guestPurchase,
+      link,
+      syncedAt,
+    );
+
+    if (nextGuestPurchase !== guestPurchase) {
+      didChangePurchase = true;
+    }
+
+    return nextGuestPurchase;
+  });
+
+  return didChangePurchase ? nextGuestPurchases : guestPurchases;
 }
 
 function getPurchaseWithLocalDeviceData(
@@ -443,11 +625,15 @@ function reconcileGuestPurchaseIntoAccountPurchase(
 }
 
 function getGuestPurchaseMigrationPlan(
+  userId: string,
   guestPurchases: MockPurchase[],
   accountPurchases: MockPurchase[],
+  remotePurchaseIdentities: SupabasePurchaseMigrationIdentityRow[],
 ) {
   const guestPurchasesForInsert: MockPurchase[] = [];
-  const accountPurchaseReconciliations: MockPurchase[] = [];
+  const accountPurchaseReconciliations: GuestAccountPurchaseReconciliation[] =
+    [];
+  const guestPurchaseAccountLinks: GuestPurchaseAccountLink[] = [];
   let nextAccountPurchases = accountPurchases;
 
   guestPurchases.forEach((guestPurchase) => {
@@ -457,42 +643,92 @@ function getGuestPurchaseMigrationPlan(
         nextAccountPurchases,
       );
 
-    if (!matchingAccountPurchase) {
-      guestPurchasesForInsert.push(
-        getGuestPurchaseForNewAccountInsert(guestPurchase),
+    if (matchingAccountPurchase) {
+      const accountLink = getGuestPurchaseAccountLinkFromAccountPurchase(
+        userId,
+        guestPurchase,
+        matchingAccountPurchase,
+      );
+
+      if (accountLink) {
+        guestPurchaseAccountLinks.push(accountLink);
+      }
+
+      if (
+        !shouldGuestDecisionUpdateAccountPurchase(
+          guestPurchase,
+          matchingAccountPurchase,
+        )
+      ) {
+        return;
+      }
+
+      const reconciledPurchase = reconcileGuestPurchaseIntoAccountPurchase(
+        guestPurchase,
+        matchingAccountPurchase,
+      );
+
+      accountPurchaseReconciliations.push({
+        accountPurchase: reconciledPurchase,
+        guestPurchase,
+      });
+      nextAccountPurchases = nextAccountPurchases.map((accountPurchase) =>
+        hasSharedPurchaseIdentity(
+          accountPurchase,
+          new Set(getPurchaseIdentityValues(reconciledPurchase)),
+        )
+          ? reconciledPurchase
+          : accountPurchase,
       );
       return;
     }
 
-    if (
-      !shouldGuestDecisionUpdateAccountPurchase(
+    const matchingRemotePurchaseIdentity =
+      findMatchingRemotePurchaseIdentityForGuestMigration(
         guestPurchase,
-        matchingAccountPurchase,
-      )
-    ) {
+        remotePurchaseIdentities,
+      );
+
+    if (matchingRemotePurchaseIdentity) {
+      guestPurchaseAccountLinks.push(
+        getGuestPurchaseAccountLinkFromRemoteIdentity(
+          userId,
+          guestPurchase,
+          matchingRemotePurchaseIdentity,
+        ),
+      );
       return;
     }
 
-    const reconciledPurchase = reconcileGuestPurchaseIntoAccountPurchase(
+    const existingGuestAccountLink = getExistingGuestPurchaseAccountLink(
+      userId,
       guestPurchase,
-      matchingAccountPurchase,
     );
 
-    accountPurchaseReconciliations.push(reconciledPurchase);
-    nextAccountPurchases = nextAccountPurchases.map((accountPurchase) =>
-      hasSharedPurchaseIdentity(
-        accountPurchase,
-        new Set(getPurchaseIdentityValues(reconciledPurchase)),
-      )
-        ? reconciledPurchase
-        : accountPurchase,
+    if (existingGuestAccountLink) {
+      guestPurchaseAccountLinks.push(existingGuestAccountLink);
+      return;
+    }
+
+    guestPurchasesForInsert.push(
+      getGuestPurchaseForNewAccountInsert(guestPurchase),
     );
   });
 
   return {
     accountPurchaseReconciliations,
     accountPurchases: nextAccountPurchases,
+    guestPurchaseAccountLinks,
     guestPurchasesForInsert,
+  };
+}
+
+function getEmptyGuestPurchaseMigrationPlan(accountPurchases: MockPurchase[]) {
+  return {
+    accountPurchaseReconciliations: [] as GuestAccountPurchaseReconciliation[],
+    accountPurchases,
+    guestPurchaseAccountLinks: [] as GuestPurchaseAccountLink[],
+    guestPurchasesForInsert: [] as MockPurchase[],
   };
 }
 
@@ -921,7 +1157,7 @@ function shouldSyncLocalPurchasePhotos(purchase: MockPurchase) {
 async function syncGuestMigrationPurchases(
   userId: string,
   guestPurchases: MockPurchase[],
-) {
+): Promise<GuestPurchaseMigrationSyncResult[]> {
   return Promise.all(
     guestPurchases.map(async (purchase) => {
       try {
@@ -929,8 +1165,12 @@ async function syncGuestMigrationPurchases(
 
         if (error) {
           return {
-            ...purchase,
-            ...getSyncErrorMetadata(),
+            accountPurchase: {
+              ...purchase,
+              ...getSyncErrorMetadata(),
+            },
+            guestPurchase: purchase,
+            link: null,
           };
         }
 
@@ -939,19 +1179,38 @@ async function syncGuestMigrationPurchases(
           purchaseId: data.id,
           userId,
         });
+        const link = getGuestPurchaseAccountLinkFromRemoteIdentity(
+          userId,
+          purchase,
+          data,
+        );
 
         return {
-          ...purchase,
-          ...getSyncedPurchaseMetadata(data.id),
-          ...getPhotoSyncMetadata(
-            photoSyncSummary.rows,
-            photoSyncSummary.didError,
-          ),
+          accountPurchase: {
+            ...purchase,
+            ...getGuestPurchaseWithAccountLink(purchase, {
+              ...link,
+              lastSyncedAt: data.updated_at,
+            }),
+            ...getPhotoSyncMetadata(
+              photoSyncSummary.rows,
+              photoSyncSummary.didError,
+            ),
+          },
+          guestPurchase: purchase,
+          link: {
+            ...link,
+            lastSyncedAt: data.updated_at,
+          },
         };
       } catch {
         return {
-          ...purchase,
-          ...getSyncErrorMetadata(),
+          accountPurchase: {
+            ...purchase,
+            ...getSyncErrorMetadata(),
+          },
+          guestPurchase: purchase,
+          link: null,
         };
       }
     }),
@@ -960,28 +1219,55 @@ async function syncGuestMigrationPurchases(
 
 async function syncGuestAccountPurchaseReconciliations(
   userId: string,
-  accountPurchaseReconciliations: MockPurchase[],
-) {
+  accountPurchaseReconciliations: GuestAccountPurchaseReconciliation[],
+): Promise<GuestPurchaseMigrationSyncResult[]> {
   return Promise.all(
-    accountPurchaseReconciliations.map(async (purchase) => {
+    accountPurchaseReconciliations.map(async ({ accountPurchase, guestPurchase }) => {
       try {
-        const { data, error } = await updateRemotePurchase(userId, purchase);
+        const { data, error } = await updateRemotePurchase(
+          userId,
+          accountPurchase,
+        );
 
         if (error) {
           return {
-            ...purchase,
-            ...getSyncErrorMetadata(),
+            accountPurchase: {
+              ...accountPurchase,
+              ...getSyncErrorMetadata(),
+            },
+            guestPurchase,
+            link: null,
           };
         }
+        const link = getGuestPurchaseAccountLinkFromRemoteIdentity(
+          userId,
+          guestPurchase,
+          data,
+        );
 
         return {
-          ...purchase,
-          ...getSyncedPurchaseMetadata(data.id),
+          accountPurchase: {
+            ...accountPurchase,
+            ...getSyncedPurchaseMetadata(data.id),
+            linkedAccountUserId: userId,
+            linkedClientLocalId: data.client_local_id ?? guestPurchase.id,
+            linkedRemoteId: data.id,
+            origin: 'guest' as const,
+          },
+          guestPurchase,
+          link: {
+            ...link,
+            lastSyncedAt: data.updated_at,
+          },
         };
       } catch {
         return {
-          ...purchase,
-          ...getSyncErrorMetadata(),
+          accountPurchase: {
+            ...accountPurchase,
+            ...getSyncErrorMetadata(),
+          },
+          guestPurchase,
+          link: null,
         };
       }
     }),
@@ -1112,10 +1398,19 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
           const guestPurchaseSnapshot = await hydratePurchaseStorageScope(
             GUEST_PURCHASE_SCOPE_KEY,
           );
-          const guestPurchaseMigrationPlan = getGuestPurchaseMigrationPlan(
-            guestPurchaseSnapshot.purchases,
-            mergedPurchases,
-          );
+          const {
+            data: remotePurchaseMigrationIdentities,
+            error: remotePurchaseMigrationIdentitiesError,
+          } = await fetchRemotePurchaseMigrationIdentities(signedInUserId);
+          const guestPurchaseMigrationPlan =
+            remotePurchaseMigrationIdentitiesError
+              ? getEmptyGuestPurchaseMigrationPlan(mergedPurchases)
+              : getGuestPurchaseMigrationPlan(
+                  signedInUserId,
+                  guestPurchaseSnapshot.purchases,
+                  mergedPurchases,
+                  remotePurchaseMigrationIdentities ?? [],
+                );
           const reconciledAccountPurchases =
             guestPurchaseMigrationPlan.accountPurchaseReconciliations.length > 0
               ? await syncGuestAccountPurchaseReconciliations(
@@ -1130,13 +1425,33 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
                   guestPurchaseMigrationPlan.guestPurchasesForInsert,
                 )
               : [];
+          const nextGuestPurchases = getGuestPurchasesWithAccountLinks(
+            guestPurchaseSnapshot.purchases,
+            [
+              ...guestPurchaseMigrationPlan.guestPurchaseAccountLinks,
+              ...reconciledAccountPurchases
+                .map((migrationResult) => migrationResult.link)
+                .filter(
+                  (link): link is GuestPurchaseAccountLink => link !== null,
+                ),
+              ...migratedGuestPurchases
+                .map((migrationResult) => migrationResult.link)
+                .filter(
+                  (link): link is GuestPurchaseAccountLink => link !== null,
+                ),
+            ],
+          );
           const accountPurchases = [
-            ...migratedGuestPurchases,
+            ...migratedGuestPurchases.map(
+              (migrationResult) => migrationResult.accountPurchase,
+            ),
             ...guestPurchaseMigrationPlan.accountPurchases.map(
               (accountPurchase) =>
                 findPurchaseBySharedIdentity(
                   accountPurchase,
-                  reconciledAccountPurchases,
+                  reconciledAccountPurchases.map(
+                    (migrationResult) => migrationResult.accountPurchase,
+                  ),
                 ) ?? accountPurchase,
             ),
           ];
@@ -1167,6 +1482,12 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
             purchaseScopeKey,
             remoteHydratedSnapshot,
           );
+          if (nextGuestPurchases !== guestPurchaseSnapshot.purchases) {
+            await persistPurchaseStorageSnapshot(GUEST_PURCHASE_SCOPE_KEY, {
+              ...guestPurchaseSnapshot,
+              purchases: nextGuestPurchases,
+            });
+          }
         } catch {
           // Keep the scoped local cache visible if remote hydration fails.
         }
@@ -1445,6 +1766,7 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
       days: 'Due later',
       id: getLocalPurchaseId(itemName, createdAt),
       itemName,
+      origin: signedInUserId ? 'account' : 'guest',
       photoRemotePaths,
       photoUris,
       price: compactText(input.price),

@@ -31,6 +31,11 @@ export type SupabasePurchaseRow = {
   user_id: string;
 };
 
+export type SupabasePurchaseMigrationIdentityRow = Pick<
+  SupabasePurchaseRow,
+  'client_local_id' | 'deleted_at' | 'id' | 'user_id'
+>;
+
 export type SupabasePurchaseInsertPayload = {
   client_local_id: string;
   comments: string | null;
@@ -333,6 +338,24 @@ export async function fetchRemotePurchases(
 
   return {
     data: (data ?? []) as SupabasePurchaseRow[],
+    error: null,
+  };
+}
+
+export async function fetchRemotePurchaseMigrationIdentities(
+  userId: string,
+): Promise<PurchaseSyncResult<SupabasePurchaseMigrationIdentityRow[]>> {
+  const { data, error } = await supabase
+    .from('purchases')
+    .select('id, client_local_id, deleted_at, user_id')
+    .eq('user_id', userId);
+
+  if (error) {
+    return { data: null, error };
+  }
+
+  return {
+    data: (data ?? []) as SupabasePurchaseMigrationIdentityRow[],
     error: null,
   };
 }

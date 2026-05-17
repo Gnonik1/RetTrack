@@ -1,4 +1,5 @@
 export type PurchaseStatus = 'active' | 'returned' | 'kept' | 'pending';
+export type PurchaseOrigin = 'account' | 'guest';
 export type PurchaseSyncStatus = 'error' | 'local' | 'synced';
 
 export type MockPurchase = {
@@ -9,10 +10,14 @@ export type MockPurchase = {
   id: string;
   itemName: string;
   lastPhotoSyncedAt?: string;
+  linkedAccountUserId?: string;
+  linkedClientLocalId?: string;
+  linkedRemoteId?: string;
   pendingAt?: number;
   photoRemotePaths?: Array<string | null>;
   photoSyncStatus?: PurchaseSyncStatus;
   photoUris?: string[];
+  origin?: PurchaseOrigin;
   price?: string;
   productDomain?: string;
   productLink?: string;
