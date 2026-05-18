@@ -15,6 +15,17 @@
 
 - Add disabled/enabled Save item behavior.
 
+## Purchases / Account Capacity QA
+
+- Controlled Stage 3 edge-case QA:
+  - Account 18/20 + guest below limit -> guest can add only 2 more purchases.
+  - Account 20/20 -> guest add is blocked with the existing limit-full UI.
+  - Raw guest/account counters must not be polluted.
+  - Delete / Returned / Kept / edit / photo must not reduce historical counts.
+  - Do not reset main data casually.
+  - Do not create temporary dev QA helper unless absolutely necessary.
+  - Do not commit temporary QA tooling.
+
 ## Purchases / Photos
 
 - Support up to 3 photos per item for backend account users later.
