@@ -320,6 +320,14 @@ function isUnsyncedLocalPurchase(purchase: MockPurchase) {
   return purchase.syncStatus === 'local' || purchase.syncStatus === 'error';
 }
 
+function isSignedInHydrationBackfillCandidate(purchase: MockPurchase) {
+  return (
+    isUnsyncedLocalPurchase(purchase) &&
+    !purchase.remoteId &&
+    !isTombstonedPurchase(purchase)
+  );
+}
+
 function isTombstonedPurchase(purchase: MockPurchase) {
   return Boolean(
     purchase.deletedFromGuestAt || purchase.deletedFromLinkedAccountAt,
@@ -412,6 +420,11 @@ type GuestPurchaseMigrationSyncResult = {
   accountPurchase: MockPurchase;
   guestPurchase: MockPurchase;
   link: GuestPurchaseAccountLink | null;
+};
+
+type SignedInLocalPurchaseBackfillMatch = {
+  lastSyncedAt?: string;
+  remoteId: string;
 };
 
 type GuestLinkedAccountDelete = {
@@ -852,6 +865,107 @@ function mergeRemotePurchasesWithLocalUnsynced(
     .map((purchase) => getPurchaseWithLocalDeviceData(purchase, localPurchases));
 
   return [...preservedLocalPurchases, ...remotePurchasesWithoutPreservedLocal];
+}
+
+function getSyncedLocalPurchaseFromRemoteMatch(
+  purchase: MockPurchase,
+  remoteMatch: SignedInLocalPurchaseBackfillMatch,
+) {
+  return {
+    ...purchase,
+    lastSyncedAt: remoteMatch.lastSyncedAt ?? new Date().toISOString(),
+    remoteId: remoteMatch.remoteId,
+    syncStatus: 'synced' as const,
+  };
+}
+
+function findSignedInLocalPurchaseBackfillMatch(
+  localPurchase: MockPurchase,
+  remotePurchases: MockPurchase[],
+  remotePurchaseIdentities: SupabasePurchaseMigrationIdentityRow[],
+): SignedInLocalPurchaseBackfillMatch | null {
+  const localIdentityValues = new Set(getPurchaseIdentityValues(localPurchase));
+  const matchingRemotePurchase = remotePurchases.find(
+    (remotePurchase) =>
+      remotePurchase.remoteId &&
+      hasSharedPurchaseIdentity(remotePurchase, localIdentityValues),
+  );
+
+  if (matchingRemotePurchase?.remoteId) {
+    return {
+      lastSyncedAt: matchingRemotePurchase.lastSyncedAt,
+      remoteId: matchingRemotePurchase.remoteId,
+    };
+  }
+
+  const matchingRemoteIdentity = remotePurchaseIdentities.find(
+    (remotePurchaseIdentity) =>
+      getRemotePurchaseMigrationIdentityValues(remotePurchaseIdentity).some(
+        (value) => localIdentityValues.has(value),
+      ),
+  );
+
+  return matchingRemoteIdentity
+    ? { remoteId: matchingRemoteIdentity.id }
+    : null;
+}
+
+async function backfillSignedInLocalPurchases(
+  userId: string,
+  accountPurchases: MockPurchase[],
+  remotePurchases: MockPurchase[],
+  remotePurchaseIdentities: SupabasePurchaseMigrationIdentityRow[],
+  options: { canCreateMissingRemotePurchases?: boolean } = {},
+) {
+  if (!accountPurchases.some(isSignedInHydrationBackfillCandidate)) {
+    return accountPurchases;
+  }
+
+  const canCreateMissingRemotePurchases =
+    options.canCreateMissingRemotePurchases ?? true;
+
+  return Promise.all(
+    accountPurchases.map(async (purchase) => {
+      if (!isSignedInHydrationBackfillCandidate(purchase)) {
+        return purchase;
+      }
+
+      const remoteMatch = findSignedInLocalPurchaseBackfillMatch(
+        purchase,
+        remotePurchases,
+        remotePurchaseIdentities,
+      );
+
+      if (remoteMatch) {
+        return getSyncedLocalPurchaseFromRemoteMatch(purchase, remoteMatch);
+      }
+
+      if (!canCreateMissingRemotePurchases) {
+        return purchase;
+      }
+
+      try {
+        const { data, error } = await createRemotePurchase(userId, purchase);
+
+        if (error) {
+          return {
+            ...purchase,
+            ...getSyncErrorMetadata(),
+          };
+        }
+
+        return getSyncedLocalPurchaseFromRemoteMatch(purchase, {
+          lastSyncedAt: data.updated_at,
+          remoteId: data.id,
+        });
+      } catch {
+        return {
+          ...purchase,
+          ...getSyncErrorMetadata(),
+        };
+      }
+    }),
+  );
 }
 
 function getGuestPurchaseForNewAccountInsert(purchase: MockPurchase) {
@@ -2073,13 +2187,24 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
             data: remotePurchaseMigrationIdentities,
             error: remotePurchaseMigrationIdentitiesError,
           } = await fetchRemotePurchaseMigrationIdentities(signedInUserId);
+          const backfilledAccountPurchases =
+            await backfillSignedInLocalPurchases(
+              signedInUserId,
+              mergedPurchases,
+              remotePurchases,
+              remotePurchaseMigrationIdentities ?? [],
+              {
+                canCreateMissingRemotePurchases:
+                  !remotePurchaseMigrationIdentitiesError,
+              },
+            );
           const guestPurchaseMigrationPlan =
             remotePurchaseMigrationIdentitiesError
-              ? getEmptyGuestPurchaseMigrationPlan(mergedPurchases)
+              ? getEmptyGuestPurchaseMigrationPlan(backfilledAccountPurchases)
               : getGuestPurchaseMigrationPlan(
                   signedInUserId,
                   guestPurchasesForMigration,
-                  mergedPurchases,
+                  backfilledAccountPurchases,
                   remotePurchaseMigrationIdentities ?? [],
                 );
           const reconciledAccountPurchases =
