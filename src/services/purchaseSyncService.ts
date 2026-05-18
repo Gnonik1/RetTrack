@@ -7,6 +7,7 @@ import {
   getReturnDateUrgency,
   parsePurchaseDate,
 } from '../features/purchases/utils/purchaseDates';
+import { DEFAULT_CURRENCY } from '../features/settings/state/AppSettingsState';
 import { supabase } from '../lib/supabase';
 
 export type RemoteDecisionStatus = 'open' | 'returned' | 'kept';
@@ -39,7 +40,7 @@ export type SupabasePurchaseMigrationIdentityRow = Pick<
 export type SupabasePurchaseInsertPayload = {
   client_local_id: string;
   comments: string | null;
-  currency: string | null;
+  currency: string;
   decision_status: RemoteDecisionStatus;
   item_name: string;
   last_modified_by_client_at: string;
@@ -133,7 +134,7 @@ function parsePrice(value?: string) {
 
   if (!trimmedValue) {
     return {
-      currency: null,
+      currency: DEFAULT_CURRENCY,
       priceAmount: null,
     };
   }
@@ -144,7 +145,7 @@ function parsePrice(value?: string) {
   const priceAmount = Number(normalizedAmount);
 
   return {
-    currency: match?.[1] ?? null,
+    currency: match?.[1] ?? DEFAULT_CURRENCY,
     priceAmount: Number.isFinite(priceAmount) ? priceAmount : null,
   };
 }
