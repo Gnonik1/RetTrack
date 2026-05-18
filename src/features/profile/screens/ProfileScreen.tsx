@@ -177,6 +177,7 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
   } = useAuth();
   const {
     accountPurchaseEntriesUsed,
+    effectiveGuestRemaining,
     guestPurchaseEntriesUsed,
     hasHydratedPurchases,
     purchases,
@@ -189,10 +190,7 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
   const shouldShowAvatarImage =
     isAuthenticated && Boolean(googleAvatarUrl) && !hasAvatarLoadError;
   const accountDisplayName = profileFullName ?? userEmail ?? 'Signed in';
-  const guestRemainingItems = Math.max(
-    GUEST_ITEM_LIMIT - guestPurchaseEntriesUsed,
-    0,
-  );
+  const guestRemainingItems = effectiveGuestRemaining;
   const usagePercent = Math.min(
     100,
     Math.round((guestPurchaseEntriesUsed / GUEST_ITEM_LIMIT) * 100),

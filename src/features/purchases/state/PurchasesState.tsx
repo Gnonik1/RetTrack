@@ -29,7 +29,12 @@ import {
   type SupabasePurchasePhotoRow,
 } from '../../../services/purchasePhotoSyncService';
 import { useAuth } from '../../../state/AuthState';
-import { ACCOUNT_PHOTO_LIMIT, GUEST_PHOTO_LIMIT } from '../constants';
+import {
+  ACCOUNT_ITEM_LIMIT,
+  ACCOUNT_PHOTO_LIMIT,
+  GUEST_ITEM_LIMIT,
+  GUEST_PHOTO_LIMIT,
+} from '../constants';
 import {
   getMockPurchaseById,
   mockPurchases,
@@ -69,13 +74,22 @@ type PurchasesStateValue = {
   accountPurchaseEntriesUsed: number;
   addPurchase: (input: AddPurchaseInput) => MockPurchase;
   deletePurchase: (itemId: string) => boolean;
+  effectiveGuestRemaining: number;
   findPurchaseById: (itemId?: string | string[]) => MockPurchase | null;
   getPurchaseById: (itemId?: string | string[]) => MockPurchase;
   guestPurchaseEntriesUsed: number;
   hasHydratedPurchases: boolean;
+  isGuestAddLimitReached: boolean;
   purchases: MockPurchase[];
   resolvePurchase: (itemId: string, status: ResolvedPurchaseStatus) => void;
   updatePurchase: (itemId: string, input: AddPurchaseInput) => void;
+};
+
+type LastKnownAccountCapacitySnapshot = {
+  accountEntriesUsed: number;
+  accountUserId: string;
+  guestEntriesUsedAtSnapshot: number;
+  updatedAt: string;
 };
 
 const PurchasesStateContext = createContext<PurchasesStateValue | undefined>(
@@ -86,6 +100,8 @@ const PURCHASES_STORAGE_KEY = 'rettrack:purchases:v1';
 const GUEST_PURCHASE_ENTRIES_USED_STORAGE_KEY =
   'rettrack:guestPurchaseEntriesUsed:v1';
 const GUEST_PURCHASE_SCOPE_KEY = 'guest';
+const LAST_KNOWN_ACCOUNT_CAPACITY_STORAGE_KEY =
+  'rettrack:lastKnownAccountCapacity:v1';
 const PURCHASES_STORAGE_KEY_PREFIX = PURCHASES_STORAGE_KEY;
 const GUEST_PURCHASE_ENTRIES_USED_STORAGE_KEY_PREFIX =
   GUEST_PURCHASE_ENTRIES_USED_STORAGE_KEY;
@@ -221,6 +237,48 @@ function parseStoredPurchases(value: string | null) {
 
     return isStoredPurchases(parsedPurchases)
       ? getPurchasesWithCurrentDateState(parsedPurchases)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function isLastKnownAccountCapacitySnapshot(
+  value: unknown,
+): value is LastKnownAccountCapacitySnapshot {
+  if (!isObjectRecord(value)) {
+    return false;
+  }
+
+  return (
+    typeof value.accountUserId === 'string' &&
+    typeof value.updatedAt === 'string' &&
+    typeof value.accountEntriesUsed === 'number' &&
+    Number.isFinite(value.accountEntriesUsed) &&
+    value.accountEntriesUsed >= 0 &&
+    typeof value.guestEntriesUsedAtSnapshot === 'number' &&
+    Number.isFinite(value.guestEntriesUsedAtSnapshot) &&
+    value.guestEntriesUsedAtSnapshot >= 0
+  );
+}
+
+function parseLastKnownAccountCapacitySnapshot(value: string | null) {
+  if (value === null) {
+    return null;
+  }
+
+  try {
+    const parsedValue: unknown = JSON.parse(value);
+
+    return isLastKnownAccountCapacitySnapshot(parsedValue)
+      ? {
+          accountEntriesUsed: Math.floor(parsedValue.accountEntriesUsed),
+          accountUserId: parsedValue.accountUserId,
+          guestEntriesUsedAtSnapshot: Math.floor(
+            parsedValue.guestEntriesUsedAtSnapshot,
+          ),
+          updatedAt: parsedValue.updatedAt,
+        }
       : null;
   } catch {
     return null;
@@ -1090,6 +1148,74 @@ function getReconciledAccountPurchaseEntriesUsed({
   );
 }
 
+function getLastKnownAccountCapacitySnapshot({
+  accountEntriesUsed,
+  accountUserId,
+  guestEntriesUsedAtSnapshot,
+}: {
+  accountEntriesUsed: number;
+  accountUserId: string;
+  guestEntriesUsedAtSnapshot: number;
+}): LastKnownAccountCapacitySnapshot {
+  return {
+    accountEntriesUsed: Math.max(0, Math.floor(accountEntriesUsed)),
+    accountUserId,
+    guestEntriesUsedAtSnapshot: Math.max(
+      0,
+      Math.floor(guestEntriesUsedAtSnapshot),
+    ),
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function getEffectiveGuestRemaining({
+  lastKnownAccountCapacitySnapshot,
+  rawGuestEntriesUsed,
+}: {
+  lastKnownAccountCapacitySnapshot: LastKnownAccountCapacitySnapshot | null;
+  rawGuestEntriesUsed: number;
+}) {
+  const guestTrialRemaining = Math.max(
+    GUEST_ITEM_LIMIT - rawGuestEntriesUsed,
+    0,
+  );
+
+  if (!lastKnownAccountCapacitySnapshot) {
+    return guestTrialRemaining;
+  }
+
+  const guestUsedSinceAccountSnapshot = Math.max(
+    rawGuestEntriesUsed -
+      lastKnownAccountCapacitySnapshot.guestEntriesUsedAtSnapshot,
+    0,
+  );
+  const accountRemainingForGuest = Math.max(
+    ACCOUNT_ITEM_LIMIT -
+      lastKnownAccountCapacitySnapshot.accountEntriesUsed -
+      guestUsedSinceAccountSnapshot,
+    0,
+  );
+
+  return Math.min(guestTrialRemaining, accountRemainingForGuest);
+}
+
+async function hydrateLastKnownAccountCapacitySnapshot() {
+  const storedSnapshot = await AsyncStorage.getItem(
+    LAST_KNOWN_ACCOUNT_CAPACITY_STORAGE_KEY,
+  ).catch(() => null);
+
+  return parseLastKnownAccountCapacitySnapshot(storedSnapshot);
+}
+
+async function persistLastKnownAccountCapacitySnapshot(
+  snapshot: LastKnownAccountCapacitySnapshot,
+) {
+  await AsyncStorage.setItem(
+    LAST_KNOWN_ACCOUNT_CAPACITY_STORAGE_KEY,
+    JSON.stringify(snapshot),
+  ).catch(() => undefined);
+}
+
 async function persistPurchaseStorageSnapshot(
   scopeKey: string,
   snapshot: ReturnType<typeof getPurchaseStorageSnapshot>,
@@ -1818,6 +1944,10 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
   const [guestPurchaseEntriesUsed, setGuestPurchaseEntriesUsed] = useState(
     () => getPurchasesForEmptyStorage().length,
   );
+  const [
+    lastKnownAccountCapacitySnapshot,
+    setLastKnownAccountCapacitySnapshot,
+  ] = useState<LastKnownAccountCapacitySnapshot | null>(null);
   const [hasHydratedPurchases, setHasHydratedPurchases] = useState(false);
   const [hydratedPurchaseScopeKey, setHydratedPurchaseScopeKey] = useState<
     string | null
@@ -1855,6 +1985,8 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
       try {
         const scopedPurchaseSnapshot =
           await hydratePurchaseStorageScope(purchaseScopeKey);
+        const storedLastKnownAccountCapacitySnapshot =
+          await hydrateLastKnownAccountCapacitySnapshot();
         let linkedGuestPurchaseSnapshot: Awaited<
           ReturnType<typeof hydratePurchaseStorageScope>
         > | null = null;
@@ -1885,6 +2017,9 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
           return;
         }
 
+        setLastKnownAccountCapacitySnapshot(
+          storedLastKnownAccountCapacitySnapshot,
+        );
         setPurchases(visibleScopedPurchases);
         setGuestPurchaseEntriesUsed(
           scopedPurchaseSnapshot.guestPurchaseEntriesUsed,
@@ -2010,25 +2145,40 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
           );
           const { data: remoteTotalEntryCount } =
             await fetchRemotePurchaseEntryCount(signedInUserId);
-          const remoteHydratedSnapshot = {
-            guestPurchaseEntriesUsed: getReconciledAccountPurchaseEntriesUsed({
+          const reconciledAccountPurchaseEntriesUsed =
+            getReconciledAccountPurchaseEntriesUsed({
               localKnownEntriesUsed: Math.max(
                 scopedPurchaseSnapshot.purchases.length,
                 visibleAccountPurchasesWithSyncedPhotos.length,
               ),
               remoteTotalEntryCount: remoteTotalEntryCount ?? remoteRows.length,
               storedEntriesUsed: scopedPurchaseSnapshot.guestPurchaseEntriesUsed,
-            }),
+            });
+          const remoteHydratedSnapshot = {
+            guestPurchaseEntriesUsed: reconciledAccountPurchaseEntriesUsed,
             purchases: visibleAccountPurchasesWithSyncedPhotos,
           };
+          const nextLastKnownAccountCapacitySnapshot =
+            getLastKnownAccountCapacitySnapshot({
+              accountEntriesUsed: reconciledAccountPurchaseEntriesUsed,
+              accountUserId: signedInUserId,
+              guestEntriesUsedAtSnapshot:
+                guestPurchaseSnapshot.guestPurchaseEntriesUsed,
+            });
 
           setPurchases(remoteHydratedSnapshot.purchases);
           setGuestPurchaseEntriesUsed(
             remoteHydratedSnapshot.guestPurchaseEntriesUsed,
           );
+          setLastKnownAccountCapacitySnapshot(
+            nextLastKnownAccountCapacitySnapshot,
+          );
           await persistPurchaseStorageSnapshot(
             purchaseScopeKey,
             remoteHydratedSnapshot,
+          );
+          await persistLastKnownAccountCapacitySnapshot(
+            nextLastKnownAccountCapacitySnapshot,
           );
           await persistGuestPurchaseLinkAndTombstoneUpdates(
             guestPurchaseAccountLinks,
@@ -2322,6 +2472,37 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
     [markPurchaseSyncMetadata, signedInUserId],
   );
 
+  const updateLastKnownAccountCapacityAfterAccountAdd = useCallback(
+    async (accountEntriesUsed: number) => {
+      if (!signedInUserId) {
+        return;
+      }
+
+      const existingGuestEntriesUsedAtSnapshot =
+        lastKnownAccountCapacitySnapshot?.accountUserId === signedInUserId
+          ? lastKnownAccountCapacitySnapshot.guestEntriesUsedAtSnapshot
+          : null;
+      const guestPurchaseSnapshot =
+        existingGuestEntriesUsedAtSnapshot === null
+          ? await hydratePurchaseStorageScope(GUEST_PURCHASE_SCOPE_KEY).catch(
+              () => null,
+            )
+          : null;
+      const nextSnapshot = getLastKnownAccountCapacitySnapshot({
+        accountEntriesUsed,
+        accountUserId: signedInUserId,
+        guestEntriesUsedAtSnapshot:
+          existingGuestEntriesUsedAtSnapshot ??
+          guestPurchaseSnapshot?.guestPurchaseEntriesUsed ??
+          0,
+      });
+
+      setLastKnownAccountCapacitySnapshot(nextSnapshot);
+      await persistLastKnownAccountCapacitySnapshot(nextSnapshot);
+    },
+    [lastKnownAccountCapacitySnapshot, signedInUserId],
+  );
+
   const addPurchase = useCallback((input: AddPurchaseInput) => {
     const createdAt = Date.now();
     const itemName = input.itemName.trim();
@@ -2364,10 +2545,21 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
     setPurchases((currentPurchases) => [datedPurchase, ...currentPurchases]);
     setGuestPurchaseEntriesUsed((currentEntriesUsed) => currentEntriesUsed + 1);
 
+    if (signedInUserId) {
+      void updateLastKnownAccountCapacityAfterAccountAdd(
+        guestPurchaseEntriesUsed + 1,
+      );
+    }
+
     void syncCreatedPurchase(datedPurchase);
 
     return datedPurchase;
-  }, [signedInUserId, syncCreatedPurchase]);
+  }, [
+    guestPurchaseEntriesUsed,
+    signedInUserId,
+    syncCreatedPurchase,
+    updateLastKnownAccountCapacityAfterAccountAdd,
+  ]);
 
   const findPurchaseById = useCallback(
     (itemId?: string | string[]) => {
@@ -2602,15 +2794,27 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
     purchases,
   ]);
 
+  const effectiveGuestRemaining = useMemo(
+    () =>
+      getEffectiveGuestRemaining({
+        lastKnownAccountCapacitySnapshot,
+        rawGuestEntriesUsed: guestPurchaseEntriesUsed,
+      }),
+    [guestPurchaseEntriesUsed, lastKnownAccountCapacitySnapshot],
+  );
+  const isGuestAddLimitReached = effectiveGuestRemaining <= 0;
+
   const value = useMemo(
     () => ({
       accountPurchaseEntriesUsed: guestPurchaseEntriesUsed,
       addPurchase,
       deletePurchase,
+      effectiveGuestRemaining,
       findPurchaseById,
       getPurchaseById,
       guestPurchaseEntriesUsed,
       hasHydratedPurchases,
+      isGuestAddLimitReached,
       purchases,
       resolvePurchase,
       updatePurchase,
@@ -2618,10 +2822,12 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
     [
       addPurchase,
       deletePurchase,
+      effectiveGuestRemaining,
       findPurchaseById,
       getPurchaseById,
       guestPurchaseEntriesUsed,
       hasHydratedPurchases,
+      isGuestAddLimitReached,
       purchases,
       resolvePurchase,
       updatePurchase,

@@ -2,7 +2,6 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 
 import {
   ACCOUNT_ITEM_LIMIT,
-  GUEST_ITEM_LIMIT,
   GUEST_PHOTO_LIMIT,
 } from '../src/features/purchases/constants';
 import { AddFirstPurchaseScreen } from '../src/features/purchases/screens/AddFirstPurchaseScreen';
@@ -15,12 +14,12 @@ export default function AddFirstPurchaseRoute() {
   const { source } = useLocalSearchParams<{ source?: string | string[] }>();
   const { isAuthenticated } = useAuth();
   const { completeOnboarding } = useAppSettings();
-  const { accountPurchaseEntriesUsed, addPurchase, guestPurchaseEntriesUsed } =
+  const { accountPurchaseEntriesUsed, addPurchase, isGuestAddLimitReached } =
     usePurchases();
   const resolvedSource = Array.isArray(source) ? source[0] : source;
   const isGuestSource = resolvedSource === 'guest';
   const isGuestItemLimitReached =
-    !isAuthenticated && guestPurchaseEntriesUsed >= GUEST_ITEM_LIMIT;
+    !isAuthenticated && isGuestAddLimitReached;
   const isAccountItemLimitReached =
     isAuthenticated && accountPurchaseEntriesUsed >= ACCOUNT_ITEM_LIMIT;
 
@@ -43,7 +42,7 @@ export default function AddFirstPurchaseRoute() {
       onLimitSignUp={() => router.push('/sign-up?source=limit')}
       photoLimitOverride={isGuestSource ? GUEST_PHOTO_LIMIT : undefined}
       onSaveItem={(input) => {
-        if (!isAuthenticated && guestPurchaseEntriesUsed >= GUEST_ITEM_LIMIT) {
+        if (!isAuthenticated && isGuestAddLimitReached) {
           return false;
         }
 
