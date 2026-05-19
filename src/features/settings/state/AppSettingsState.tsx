@@ -31,15 +31,21 @@ export const currencyOptions = [
 ] as const;
 
 export type CurrencyCode = (typeof currencyOptions)[number]['code'];
+export type NotificationPromptStatus = 'dismissed' | 'enabled' | 'undecided';
 
 export const DEFAULT_CURRENCY: CurrencyCode = 'USD';
+const DEFAULT_NOTIFICATION_PROMPT_STATUS: NotificationPromptStatus = 'undecided';
 
 type AppSettingsStateValue = {
   completeOnboarding: () => void;
   defaultCurrency: CurrencyCode;
   hasCompletedOnboarding: boolean;
   hasHydratedSettings: boolean;
+  notificationPromptStatus: NotificationPromptStatus;
+  remindersEnabled: boolean;
   setDefaultCurrency: (currency: CurrencyCode) => void;
+  setNotificationPromptStatus: (status: NotificationPromptStatus) => void;
+  setRemindersEnabled: (isEnabled: boolean) => void;
 };
 
 const APP_SETTINGS_STORAGE_KEY = 'rettrack:app-settings:v1';
@@ -47,6 +53,10 @@ const DEFAULT_CURRENCY_STORAGE_KEY = 'rettrack:defaultCurrency:v1';
 const GUEST_APP_SETTINGS_SCOPE_KEY = 'guest';
 const ONBOARDING_COMPLETION_STORAGE_KEY_PREFIX =
   `${APP_SETTINGS_STORAGE_KEY}:hasCompletedOnboarding`;
+const NOTIFICATION_PROMPT_STATUS_STORAGE_KEY_PREFIX =
+  `${APP_SETTINGS_STORAGE_KEY}:notificationPromptStatus`;
+const REMINDERS_ENABLED_STORAGE_KEY_PREFIX =
+  `${APP_SETTINGS_STORAGE_KEY}:remindersEnabled`;
 
 const AppSettingsStateContext = createContext<AppSettingsStateValue | undefined>(
   undefined,
@@ -58,6 +68,12 @@ function isObjectRecord(value: unknown): value is Record<string, unknown> {
 
 export function isCurrencyCode(value: unknown): value is CurrencyCode {
   return currencyOptions.some(({ code }) => code === value);
+}
+
+function isNotificationPromptStatus(
+  value: unknown,
+): value is NotificationPromptStatus {
+  return value === 'dismissed' || value === 'enabled' || value === 'undecided';
 }
 
 function parseStoredBoolean(value: string | null) {
@@ -100,6 +116,24 @@ function parseStoredCurrency(value: string | null) {
   }
 }
 
+function parseStoredNotificationPromptStatus(value: string | null) {
+  if (isNotificationPromptStatus(value)) {
+    return value;
+  }
+
+  if (value === null) {
+    return null;
+  }
+
+  try {
+    const parsedValue: unknown = JSON.parse(value);
+
+    return isNotificationPromptStatus(parsedValue) ? parsedValue : null;
+  } catch {
+    return null;
+  }
+}
+
 function parseStoredAppSettings(value: string | null) {
   if (value === null) {
     return null;
@@ -120,6 +154,15 @@ function parseStoredAppSettings(value: string | null) {
         typeof parsedSettings.hasCompletedOnboarding === 'boolean'
           ? parsedSettings.hasCompletedOnboarding
           : null,
+      notificationPromptStatus: isNotificationPromptStatus(
+        parsedSettings.notificationPromptStatus,
+      )
+        ? parsedSettings.notificationPromptStatus
+        : null,
+      remindersEnabled:
+        typeof parsedSettings.remindersEnabled === 'boolean'
+          ? parsedSettings.remindersEnabled
+          : null,
     };
   } catch {
     return null;
@@ -136,6 +179,14 @@ function getOnboardingCompletionStorageKey(scopeKey: string) {
   return `${ONBOARDING_COMPLETION_STORAGE_KEY_PREFIX}:${scopeKey}`;
 }
 
+function getNotificationPromptStatusStorageKey(scopeKey: string) {
+  return `${NOTIFICATION_PROMPT_STATUS_STORAGE_KEY_PREFIX}:${scopeKey}`;
+}
+
+function getRemindersEnabledStorageKey(scopeKey: string) {
+  return `${REMINDERS_ENABLED_STORAGE_KEY_PREFIX}:${scopeKey}`;
+}
+
 export async function getStoredHasCompletedOnboardingForUser(userId: string) {
   const storedValue = await AsyncStorage.getItem(
     getOnboardingCompletionStorageKey(getAppSettingsScopeKey(userId)),
@@ -147,12 +198,22 @@ export async function getStoredHasCompletedOnboardingForUser(userId: string) {
 async function hydrateAppSettingsScope(scopeKey: string) {
   const onboardingCompletionStorageKey =
     getOnboardingCompletionStorageKey(scopeKey);
-  const [storedDefaultCurrency, storedOnboardingCompletion, storedLegacySettings] =
-    await Promise.all([
-      AsyncStorage.getItem(DEFAULT_CURRENCY_STORAGE_KEY),
-      AsyncStorage.getItem(onboardingCompletionStorageKey),
-      AsyncStorage.getItem(APP_SETTINGS_STORAGE_KEY),
-    ]);
+  const notificationPromptStatusStorageKey =
+    getNotificationPromptStatusStorageKey(scopeKey);
+  const remindersEnabledStorageKey = getRemindersEnabledStorageKey(scopeKey);
+  const [
+    storedDefaultCurrency,
+    storedOnboardingCompletion,
+    storedNotificationPromptStatus,
+    storedRemindersEnabled,
+    storedLegacySettings,
+  ] = await Promise.all([
+    AsyncStorage.getItem(DEFAULT_CURRENCY_STORAGE_KEY),
+    AsyncStorage.getItem(onboardingCompletionStorageKey),
+    AsyncStorage.getItem(notificationPromptStatusStorageKey),
+    AsyncStorage.getItem(remindersEnabledStorageKey),
+    AsyncStorage.getItem(APP_SETTINGS_STORAGE_KEY),
+  ]);
   const legacySettings = parseStoredAppSettings(storedLegacySettings);
   const nextDefaultCurrency =
     parseStoredCurrency(storedDefaultCurrency) ??
@@ -184,6 +245,14 @@ async function hydrateAppSettingsScope(scopeKey: string) {
   return {
     defaultCurrency: nextDefaultCurrency,
     hasCompletedOnboarding: nextHasCompletedOnboarding ?? false,
+    notificationPromptStatus:
+      parseStoredNotificationPromptStatus(storedNotificationPromptStatus) ??
+      legacySettings?.notificationPromptStatus ??
+      DEFAULT_NOTIFICATION_PROMPT_STATUS,
+    remindersEnabled:
+      parseStoredBoolean(storedRemindersEnabled) ??
+      legacySettings?.remindersEnabled ??
+      false,
   };
 }
 
@@ -197,6 +266,9 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
     useState<CurrencyCode>(DEFAULT_CURRENCY);
   const [hasCompletedOnboarding, setHasCompletedOnboardingState] =
     useState(false);
+  const [notificationPromptStatus, setNotificationPromptStatusState] =
+    useState<NotificationPromptStatus>(DEFAULT_NOTIFICATION_PROMPT_STATUS);
+  const [remindersEnabled, setRemindersEnabledState] = useState(false);
   const [hasHydratedSettings, setHasHydratedSettings] = useState(false);
   const [hydratedSettingsScopeKey, setHydratedSettingsScopeKey] = useState<
     string | null
@@ -221,10 +293,14 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
 
         setDefaultCurrencyState(nextSettings.defaultCurrency);
         setHasCompletedOnboardingState(nextSettings.hasCompletedOnboarding);
+        setNotificationPromptStatusState(nextSettings.notificationPromptStatus);
+        setRemindersEnabledState(nextSettings.remindersEnabled);
       } catch {
         if (isMounted) {
           setDefaultCurrencyState(DEFAULT_CURRENCY);
           setHasCompletedOnboardingState(false);
+          setNotificationPromptStatusState(DEFAULT_NOTIFICATION_PROMPT_STATUS);
+          setRemindersEnabledState(false);
         }
       } finally {
         if (isMounted) {
@@ -278,6 +354,50 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
     hydratedSettingsScopeKey,
   ]);
 
+  useEffect(() => {
+    if (
+      !hasHydratedSettings ||
+      appSettingsScopeKey === null ||
+      hydratedSettingsScopeKey !== appSettingsScopeKey
+    ) {
+      return;
+    }
+
+    AsyncStorage.setItem(
+      getRemindersEnabledStorageKey(appSettingsScopeKey),
+      String(remindersEnabled),
+    ).catch(() => {
+      // Scoped reminder preference persistence is best-effort.
+    });
+  }, [
+    appSettingsScopeKey,
+    hasHydratedSettings,
+    hydratedSettingsScopeKey,
+    remindersEnabled,
+  ]);
+
+  useEffect(() => {
+    if (
+      !hasHydratedSettings ||
+      appSettingsScopeKey === null ||
+      hydratedSettingsScopeKey !== appSettingsScopeKey
+    ) {
+      return;
+    }
+
+    AsyncStorage.setItem(
+      getNotificationPromptStatusStorageKey(appSettingsScopeKey),
+      notificationPromptStatus,
+    ).catch(() => {
+      // Scoped notification prompt persistence is best-effort.
+    });
+  }, [
+    appSettingsScopeKey,
+    hasHydratedSettings,
+    hydratedSettingsScopeKey,
+    notificationPromptStatus,
+  ]);
+
   const completeOnboarding = useCallback(() => {
     setHasCompletedOnboardingState(true);
   }, []);
@@ -286,20 +406,39 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
     setDefaultCurrencyState(currency);
   }, []);
 
+  const setRemindersEnabled = useCallback((isEnabled: boolean) => {
+    setRemindersEnabledState(isEnabled);
+  }, []);
+
+  const setNotificationPromptStatus = useCallback(
+    (status: NotificationPromptStatus) => {
+      setNotificationPromptStatusState(status);
+    },
+    [],
+  );
+
   const value = useMemo(
     () => ({
       completeOnboarding,
       defaultCurrency,
       hasCompletedOnboarding,
       hasHydratedSettings,
+      notificationPromptStatus,
+      remindersEnabled,
       setDefaultCurrency,
+      setNotificationPromptStatus,
+      setRemindersEnabled,
     }),
     [
       completeOnboarding,
       defaultCurrency,
       hasCompletedOnboarding,
       hasHydratedSettings,
+      notificationPromptStatus,
+      remindersEnabled,
       setDefaultCurrency,
+      setNotificationPromptStatus,
+      setRemindersEnabled,
     ],
   );
 

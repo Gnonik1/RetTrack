@@ -52,6 +52,7 @@ type ReturnReminderPlanOptions = {
 
 type RescheduleAllPurchaseRemindersOptions = {
   immediatePendingPurchaseIds?: string[];
+  remindersEnabled?: boolean;
 };
 
 let hasConfiguredNotificationHandler = false;
@@ -122,14 +123,19 @@ export async function cancelPurchaseReminders(purchaseId: string) {
   await Promise.all(identifiers.map(cancelScheduledReminder));
 }
 
-export async function schedulePurchaseReminders(purchase: MockPurchase) {
+export async function schedulePurchaseReminders(
+  purchase: MockPurchase,
+  options: { remindersEnabled?: boolean } = {},
+) {
   await cancelPurchaseReminders(purchase.id);
 
   if (purchase.status !== 'active') {
     return [];
   }
 
-  const canSchedule = await canScheduleNotifications();
+  const canSchedule = await canScheduleNotifications(
+    options.remindersEnabled ?? false,
+  );
 
   if (!canSchedule) {
     return [];
@@ -140,7 +146,7 @@ export async function schedulePurchaseReminders(purchase: MockPurchase) {
 
 export async function rescheduleAllPurchaseReminders(
   purchases: MockPurchase[],
-  _options: RescheduleAllPurchaseRemindersOptions = {},
+  options: RescheduleAllPurchaseRemindersOptions = {},
 ) {
   const now = new Date();
   // Current pending counts must come only from the hydrated canonical purchases
@@ -160,7 +166,9 @@ export async function rescheduleAllPurchaseReminders(
   await cancelAllScheduledAppReminders();
   await dismissPresentedPendingDigestNotifications();
 
-  const canSchedule = await canScheduleNotifications();
+  const canSchedule = await canScheduleNotifications(
+    options.remindersEnabled ?? false,
+  );
 
   if (!canSchedule) {
     return [];
@@ -210,7 +218,7 @@ function cancelScheduledReminder(identifier: string) {
   });
 }
 
-function cancelAllScheduledAppReminders() {
+export function cancelAllScheduledAppReminders() {
   return Notifications.cancelAllScheduledNotificationsAsync().catch(() => {
     // Reconcile should keep working even if the native scheduler is unavailable.
   });
@@ -337,7 +345,11 @@ function isPendingDigestCategoryIdentifier(identifier: unknown) {
   );
 }
 
-async function canScheduleNotifications() {
+async function canScheduleNotifications(remindersEnabled: boolean) {
+  if (!remindersEnabled) {
+    return false;
+  }
+
   const status = await getNotificationPermissionsStatus();
 
   return Boolean(status?.granted);

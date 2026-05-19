@@ -29,6 +29,7 @@ import {
   type SupabasePurchasePhotoRow,
 } from '../../../services/purchasePhotoSyncService';
 import { useAuth } from '../../../state/AuthState';
+import { useAppSettings } from '../../settings/state/AppSettingsState';
 import {
   ACCOUNT_ITEM_LIMIT,
   ACCOUNT_PHOTO_LIMIT,
@@ -2048,6 +2049,7 @@ async function syncAccountLocalPurchasePhotos(
 
 export function PurchasesProvider({ children }: { children: ReactNode }) {
   const { isAuthLoading, user } = useAuth();
+  const { hasHydratedSettings, remindersEnabled } = useAppSettings();
   const purchaseScopeKey = useMemo(
     () => (isAuthLoading ? null : getPurchaseScopeKey(user?.id)),
     [isAuthLoading, user?.id],
@@ -2338,6 +2340,7 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (
       !hasHydratedPurchases ||
+      !hasHydratedSettings ||
       purchaseScopeKey === null ||
       hydratedPurchaseScopeKey !== purchaseScopeKey
     ) {
@@ -2908,15 +2911,18 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
       .then(() =>
         rescheduleAllPurchaseReminders(purchasesSnapshot, {
           immediatePendingPurchaseIds,
+          remindersEnabled,
         }),
       )
       .then(() => undefined)
       .catch(() => undefined);
   }, [
     hasHydratedPurchases,
+    hasHydratedSettings,
     hydratedPurchaseScopeKey,
     purchaseScopeKey,
     purchases,
+    remindersEnabled,
   ]);
 
   const effectiveGuestRemaining = useMemo(

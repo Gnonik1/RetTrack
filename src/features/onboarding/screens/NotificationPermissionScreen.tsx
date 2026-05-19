@@ -112,7 +112,7 @@ export function NotificationPermissionScreen({
             <AppButton
               onPress={onEnableNotifications}
               style={styles.primaryActionButton}
-              title="Enable notifications"
+              title="Turn on reminders"
               variant="primary"
             />
             <Pressable

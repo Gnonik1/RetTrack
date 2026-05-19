@@ -7,6 +7,7 @@ import {
   ScrollView,
   Share,
   StyleSheet,
+  Switch,
   View,
 } from 'react-native';
 
@@ -15,6 +16,10 @@ import { AppBottomNav } from '../../../components/AppBottomNav';
 import { AppScreen } from '../../../components/AppScreen';
 import { AppText } from '../../../components/AppText';
 import { theme } from '../../../constants/theme';
+import {
+  cancelAllScheduledAppReminders,
+  requestNotificationPermissions,
+} from '../../notifications/notifications';
 import { useAuth } from '../../../state/AuthState';
 import {
   currencyOptions,
@@ -55,8 +60,8 @@ const SETTINGS_MODAL_CONTENT: Record<
     title: 'Currency',
   },
   notifications: {
-    body: 'Return reminders: 7 days before, 3 days before, and last day.\n\nPending decisions: 10\u00A0AM',
-    secondaryBody: 'Quiet hours: 10\u00A0PM \u2013 10\u00A0AM.',
+    body: 'Return reminders: 7 days before, 3 days before, and last day',
+    secondaryBody: 'Quiet hours: 10\u00A0PM \u2013 10\u00A0AM',
     title: 'Notifications',
   },
   legalLinkError: {
@@ -373,7 +378,13 @@ function FooterMark() {
 }
 
 export function SettingsScreen() {
-  const { defaultCurrency, setDefaultCurrency } = useAppSettings();
+  const {
+    defaultCurrency,
+    remindersEnabled,
+    setDefaultCurrency,
+    setNotificationPromptStatus,
+    setRemindersEnabled,
+  } = useAppSettings();
   const { isAuthenticated, isAuthLoading } = useAuth();
   const [activeModal, setActiveModal] = useState<SettingsModalKey | null>(null);
   const modalContent =
@@ -384,6 +395,7 @@ export function SettingsScreen() {
         : null;
   const isCurrencyModal = activeModal === 'currency';
   const isDeleteModal = activeModal === 'deleteAccount';
+  const isNotificationsModal = activeModal === 'notifications';
   const deleteAccountDetail = isAuthLoading
     ? 'Checking account status'
     : isAuthenticated
@@ -399,6 +411,32 @@ export function SettingsScreen() {
 
   const handleCurrencySelect = (currency: CurrencyCode) => {
     setDefaultCurrency(currency);
+  };
+
+  const turnOffReminders = () => {
+    setRemindersEnabled(false);
+    setNotificationPromptStatus('dismissed');
+    cancelAllScheduledAppReminders().catch(() => undefined);
+  };
+
+  const turnOnReminders = async () => {
+    const isGranted = await requestNotificationPermissions();
+
+    setRemindersEnabled(isGranted);
+    setNotificationPromptStatus(isGranted ? 'enabled' : 'dismissed');
+
+    if (!isGranted) {
+      await cancelAllScheduledAppReminders();
+    }
+  };
+
+  const handleReminderPreferenceChange = (isEnabled: boolean) => {
+    if (!isEnabled) {
+      turnOffReminders();
+      return;
+    }
+
+    turnOnReminders().catch(() => undefined);
   };
 
   const handleShareRetTrack = async () => {
@@ -452,7 +490,7 @@ export function SettingsScreen() {
             tone="app"
           >
             <SettingsRow
-              detail="Reminder timing and quiet hours"
+              detail={remindersEnabled ? 'Reminders are on' : 'Reminders are off'}
               icon={<BellIcon />}
               onPress={() => setActiveModal('notifications')}
               title="Notifications"
@@ -652,6 +690,38 @@ export function SettingsScreen() {
                     {modalContent.secondaryBody}
                   </AppText>
                 </View>
+                {isNotificationsModal ? (
+                  <View style={styles.reminderPreferenceBox}>
+                    <View style={styles.reminderPreferenceContent}>
+                      <View style={styles.reminderPreferenceCopy}>
+                        <AppText
+                          style={styles.reminderPreferenceLabel}
+                          variant="body"
+                        >
+                          Reminders
+                        </AppText>
+                        <AppText
+                          style={styles.reminderPreferenceDetail}
+                          variant="caption"
+                        >
+                          {remindersEnabled ? 'On' : 'Off'}
+                        </AppText>
+                      </View>
+                      <Switch
+                        accessibilityLabel="Reminders"
+                        onValueChange={handleReminderPreferenceChange}
+                        ios_backgroundColor="#DDE7D7"
+                        style={styles.reminderPreferenceSwitch}
+                        thumbColor="#FFFDF8"
+                        trackColor={{
+                          false: '#DDE7D7',
+                          true: '#729B66',
+                        }}
+                        value={remindersEnabled}
+                      />
+                    </View>
+                  </View>
+                ) : null}
                 <AppButton
                   onPress={closeModal}
                   style={styles.modalButton}
@@ -1167,6 +1237,37 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: theme.fontWeight.semibold,
     lineHeight: 18,
+  },
+  reminderPreferenceBox: {
+    backgroundColor: '#FFFDF8',
+    borderColor: '#DDE7D7',
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    marginTop: 12,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: 6,
+  },
+  reminderPreferenceContent: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  reminderPreferenceCopy: {
+    gap: 0,
+  },
+  reminderPreferenceDetail: {
+    color: theme.colors.muted,
+    fontSize: 12,
+    lineHeight: 15,
+  },
+  reminderPreferenceLabel: {
+    color: theme.colors.text,
+    fontSize: 14,
+    fontWeight: theme.fontWeight.bold,
+    lineHeight: 19,
+  },
+  reminderPreferenceSwitch: {
+    transform: [{ scaleX: 0.9 }, { scaleY: 0.9 }],
   },
   screen: {
     paddingBottom: 0,

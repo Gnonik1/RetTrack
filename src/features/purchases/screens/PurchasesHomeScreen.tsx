@@ -16,9 +16,11 @@ import { AppBottomNav } from '../../../components/AppBottomNav';
 import { AppText } from '../../../components/AppText';
 import { theme } from '../../../constants/theme';
 import {
+  cancelAllScheduledAppReminders,
   getNotificationPermissionsStatus,
   requestNotificationPermissions,
 } from '../../notifications/notifications';
+import { useAppSettings } from '../../settings/state/AppSettingsState';
 import {
   purchaseStatusLabels,
   type MockPurchase,
@@ -673,8 +675,16 @@ export function PurchasesHomeScreen({
   onPurchasePress,
 }: PurchasesHomeScreenProps) {
   const { purchases, resolvePurchase } = usePurchases();
+  const {
+    hasHydratedSettings,
+    notificationPromptStatus,
+    remindersEnabled,
+    setNotificationPromptStatus,
+    setRemindersEnabled,
+  } = useAppSettings();
   const [isScrollEnabled, setIsScrollEnabled] = useState(true);
   const [selectedFilter, setSelectedFilter] = useState<FilterKey>('active');
+  const hasShownNotificationPromptRef = useRef(false);
   const selectedFilterIndex = filterItems.findIndex(
     (filterItem) => filterItem.key === selectedFilter,
   );
@@ -710,14 +720,36 @@ export function PurchasesHomeScreen({
     [selectedFilter, selectedFilterIndex, tabTransition],
   );
 
+  const turnOffReminders = useCallback(() => {
+    setRemindersEnabled(false);
+    setNotificationPromptStatus('dismissed');
+    cancelAllScheduledAppReminders().catch(() => undefined);
+  }, [setNotificationPromptStatus, setRemindersEnabled]);
+
+  const turnOnReminders = useCallback(async () => {
+    const isGranted = await requestNotificationPermissions();
+
+    setRemindersEnabled(isGranted);
+    setNotificationPromptStatus(isGranted ? 'enabled' : 'dismissed');
+
+    if (!isGranted) {
+      await cancelAllScheduledAppReminders();
+    }
+  }, [setNotificationPromptStatus, setRemindersEnabled]);
+
   const showNotificationStatus = useCallback(async () => {
     const status = await getNotificationPermissionsStatus();
 
-    if (status?.granted) {
+    if (remindersEnabled && status?.granted) {
       Alert.alert(
         'Reminders are on',
-        'We\u2019ll notify you before return dates and pending decisions.',
+        'We\u2019ll notify you before return dates and pending decisions',
         [
+          {
+            onPress: turnOffReminders,
+            style: 'destructive',
+            text: 'Turn off reminders',
+          },
           {
             text: 'OK',
           },
@@ -728,21 +760,36 @@ export function PurchasesHomeScreen({
 
     Alert.alert(
       'Reminders are off',
-      'Turn on reminders so you don\u2019t miss return dates.',
+      'Turn on reminders before return dates and pending decisions',
       [
         {
           onPress: () => {
-            requestNotificationPermissions().catch(() => undefined);
+            turnOnReminders().catch(() => undefined);
           },
-          text: 'Enable notifications',
+          text: 'Turn on reminders',
         },
         {
+          onPress: turnOffReminders,
           style: 'cancel',
           text: 'Not now',
         },
       ],
     );
-  }, []);
+  }, [remindersEnabled, turnOffReminders, turnOnReminders]);
+
+  useEffect(() => {
+    if (!hasHydratedSettings || notificationPromptStatus !== 'undecided') {
+      hasShownNotificationPromptRef.current = false;
+      return;
+    }
+
+    if (hasShownNotificationPromptRef.current) {
+      return;
+    }
+
+    hasShownNotificationPromptRef.current = true;
+    showNotificationStatus().catch(() => undefined);
+  }, [hasHydratedSettings, notificationPromptStatus, showNotificationStatus]);
 
   useEffect(() => {
     const transitionAnimation = Animated.timing(tabTransition, {
