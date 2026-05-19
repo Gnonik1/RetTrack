@@ -78,6 +78,15 @@ Additional Settings backlog:
 
 - Test local notification scheduling and delivery in a development build or TestFlight because Expo Go has notification limitations.
 - Verify grouped Pending digest delivery in a development build or TestFlight.
+- Real iOS notification delivery QA:
+  - Deferred until Apple Developer Program / dev build or TestFlight setup is available.
+  - Expo Go is enough for current notification UI/preference QA, but not enough to fully prove real iOS notification delivery.
+  - Later, test in an iOS development build or TestFlight:
+    - return reminder delivery
+    - grouped pending digest delivery
+    - Settings/Home reminder toggle scheduling and cancellation
+    - app restart/sign-in/guest scoped reminder behavior
+  - Do not continue EAS/Apple credentials setup until the launch-readiness phase.
 - Later, move notification timing and toggle controls into Settings -> Notifications.
 - Future notification re-prompt after “Not now”:
   - Consider a limited soft reminder prompt after the user taps “Not now”.
