@@ -79,6 +79,13 @@ Additional Settings backlog:
 - Test local notification scheduling and delivery in a development build or TestFlight because Expo Go has notification limitations.
 - Verify grouped Pending digest delivery in a development build or TestFlight.
 - Later, move notification timing and toggle controls into Settings -> Notifications.
+- Future notification re-prompt after “Not now”:
+  - Consider a limited soft reminder prompt after the user taps “Not now”.
+  - Example cadence: 3rd, 6th, and 9th eligible app open.
+  - Must be scoped per guest/account.
+  - Must not show indefinitely or annoy users.
+  - If the user manually turns reminders off from Settings, do not aggressively re-prompt.
+  - Keep this as a future enhancement; do not implement until core notification behavior is fully stable.
 - Later, let the Home bell become an insights or updates entry point after real monthly reports or savings analytics exist.
 - Do not build a placeholder Updates screen until there is real content to show.
 - Delivered notification history needs an app-owned notification log if added.
