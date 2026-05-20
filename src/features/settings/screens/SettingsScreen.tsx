@@ -1,4 +1,5 @@
 import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter } from 'expo-router';
 import { type ReactNode, useState } from 'react';
 import {
   Image,
@@ -16,6 +17,7 @@ import { AppBottomNav } from '../../../components/AppBottomNav';
 import { AppScreen } from '../../../components/AppScreen';
 import { AppText } from '../../../components/AppText';
 import { theme } from '../../../constants/theme';
+import { deleteCurrentAccount } from '../../../services/accountDeletionService';
 import {
   cancelAllScheduledAppReminders,
   requestNotificationPermissions,
@@ -101,9 +103,9 @@ function getDeleteAccountModalContent({
   }
 
   return {
-    body: 'Secure account deletion is not available yet.',
+    body: 'Permanently delete your RetTrack account?',
     secondaryBody:
-      'This will be added before release so signed-in accounts can be removed safely.',
+      'Your purchases, photos, and related account data will be deleted. This cannot be undone.',
     title: 'Delete account',
   };
 }
@@ -378,6 +380,7 @@ function FooterMark() {
 }
 
 export function SettingsScreen() {
+  const router = useRouter();
   const {
     defaultCurrency,
     remindersEnabled,
@@ -387,6 +390,8 @@ export function SettingsScreen() {
   } = useAppSettings();
   const { isAuthenticated, isAuthLoading } = useAuth();
   const [activeModal, setActiveModal] = useState<SettingsModalKey | null>(null);
+  const [deleteAccountError, setDeleteAccountError] = useState('');
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const modalContent =
     activeModal === 'deleteAccount'
       ? getDeleteAccountModalContent({ isAuthenticated, isAuthLoading })
@@ -395,18 +400,30 @@ export function SettingsScreen() {
         : null;
   const isCurrencyModal = activeModal === 'currency';
   const isDeleteModal = activeModal === 'deleteAccount';
+  const shouldShowDeleteConfirmation =
+    isDeleteModal && isAuthenticated && !isAuthLoading;
   const isNotificationsModal = activeModal === 'notifications';
   const deleteAccountDetail = isAuthLoading
     ? 'Checking account status'
     : isAuthenticated
-      ? 'Not available yet'
+      ? 'Permanent deletion'
       : 'Not available in guest mode';
   const accountSectionDetail = isAuthenticated
     ? 'Signed-in account controls.'
     : 'Account controls require sign-in.';
 
   const closeModal = () => {
+    if (isDeletingAccount) {
+      return;
+    }
+
+    setDeleteAccountError('');
     setActiveModal(null);
+  };
+
+  const openDeleteAccountModal = () => {
+    setDeleteAccountError('');
+    setActiveModal('deleteAccount');
   };
 
   const handleCurrencySelect = (currency: CurrencyCode) => {
@@ -453,6 +470,33 @@ export function SettingsScreen() {
     void Linking.openURL(url).catch(() => {
       setActiveModal('legalLinkError');
     });
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!shouldShowDeleteConfirmation || isDeletingAccount) {
+      return;
+    }
+
+    setDeleteAccountError('');
+    setIsDeletingAccount(true);
+
+    try {
+      const result = await deleteCurrentAccount();
+
+      if (!result.success) {
+        setDeleteAccountError(result.error);
+        return;
+      }
+
+      setActiveModal(null);
+      router.replace('/welcome');
+    } catch {
+      setDeleteAccountError(
+        'We could not delete your account right now. Please try again.',
+      );
+    } finally {
+      setIsDeletingAccount(false);
+    }
   };
 
   return (
@@ -557,7 +601,7 @@ export function SettingsScreen() {
               detail={deleteAccountDetail}
               icon={<TrashIcon />}
               isLast
-              onPress={() => setActiveModal('deleteAccount')}
+              onPress={openDeleteAccountModal}
               title="Delete account"
               tone="danger"
             />
@@ -584,6 +628,7 @@ export function SettingsScreen() {
           <Pressable
             accessibilityLabel="Close settings sheet"
             accessibilityRole="button"
+            disabled={isDeletingAccount}
             onPress={closeModal}
             style={styles.sheetBackdrop}
           />
@@ -722,11 +767,43 @@ export function SettingsScreen() {
                     </View>
                   </View>
                 ) : null}
-                <AppButton
-                  onPress={closeModal}
-                  style={styles.modalButton}
-                  title="Done"
-                />
+                {shouldShowDeleteConfirmation ? (
+                  <>
+                    {deleteAccountError ? (
+                      <View style={styles.deleteErrorBox}>
+                        <AppText style={styles.deleteErrorText} variant="caption">
+                          {deleteAccountError}
+                        </AppText>
+                      </View>
+                    ) : null}
+                    <View style={styles.deleteActions}>
+                      <AppButton
+                        disabled={isDeletingAccount}
+                        onPress={closeModal}
+                        style={styles.deleteActionButton}
+                        title="Cancel"
+                        variant="outline"
+                      />
+                      <AppButton
+                        disabled={isDeletingAccount}
+                        onPress={handleDeleteAccount}
+                        style={[
+                          styles.deleteActionButton,
+                          styles.deleteConfirmButton,
+                        ]}
+                        title={
+                          isDeletingAccount ? 'Deleting...' : 'Delete account'
+                        }
+                      />
+                    </View>
+                  </>
+                ) : (
+                  <AppButton
+                    onPress={closeModal}
+                    style={styles.modalButton}
+                    title="Done"
+                  />
+                )}
               </>
             )}
           </View>
@@ -871,6 +948,34 @@ const styles = StyleSheet.create({
   currencyModalCard: {
     paddingHorizontal: 18,
     paddingVertical: 16,
+  },
+  deleteActionButton: {
+    flex: 1,
+    marginTop: 0,
+    minHeight: 50,
+  },
+  deleteActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 14,
+  },
+  deleteConfirmButton: {
+    backgroundColor: theme.colors.pending,
+  },
+  deleteErrorBox: {
+    backgroundColor: '#FFF7F5',
+    borderColor: '#E7C8C0',
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    marginTop: 12,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: 10,
+  },
+  deleteErrorText: {
+    color: '#7E4D45',
+    fontSize: 13,
+    lineHeight: 18,
+    textAlign: 'center',
   },
   currencyOption: {
     alignItems: 'center',
