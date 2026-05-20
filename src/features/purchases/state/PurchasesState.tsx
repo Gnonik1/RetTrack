@@ -828,24 +828,26 @@ function getPurchasesWithUpdatedPurchases(
     : purchases;
 }
 
-function getPurchaseWithLocalDeviceData(
+function getPurchaseWithLocalHydrationData(
   purchase: MockPurchase,
   localPurchases: MockPurchase[],
 ) {
   const localPurchase = findPurchaseBySharedIdentity(purchase, localPurchases);
+  const origin = !purchase.origin ? localPurchase?.origin : undefined;
+  const purchaseWithLocalOrigin = origin ? { ...purchase, origin } : purchase;
 
   if (!localPurchase?.photoUris?.length) {
-    return purchase;
+    return purchaseWithLocalOrigin;
   }
 
   const hasLocalDevicePhoto = localPurchase.photoUris.some(isLocalPhotoUri);
 
   if (!hasLocalDevicePhoto) {
-    return purchase;
+    return purchaseWithLocalOrigin;
   }
 
   return {
-    ...purchase,
+    ...purchaseWithLocalOrigin,
     photoRemotePaths: localPurchase.photoRemotePaths ?? purchase.photoRemotePaths,
     photoUris: localPurchase.photoUris,
   };
@@ -863,7 +865,9 @@ function mergeRemotePurchasesWithLocalUnsynced(
     .filter(
       (purchase) => !hasSharedPurchaseIdentity(purchase, preservedIdentityValues),
     )
-    .map((purchase) => getPurchaseWithLocalDeviceData(purchase, localPurchases));
+    .map((purchase) =>
+      getPurchaseWithLocalHydrationData(purchase, localPurchases),
+    );
 
   return [...preservedLocalPurchases, ...remotePurchasesWithoutPreservedLocal];
 }

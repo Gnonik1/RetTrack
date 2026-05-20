@@ -1,6 +1,10 @@
 import type { PostgrestError } from '@supabase/supabase-js';
 
-import type { MockPurchase, PurchaseStatus } from '../features/purchases/data/mockPurchases';
+import type {
+  MockPurchase,
+  PurchaseOrigin,
+  PurchaseStatus,
+} from '../features/purchases/data/mockPurchases';
 import {
   formatCompactDate,
   formatFullDate,
@@ -11,6 +15,7 @@ import { DEFAULT_CURRENCY } from '../features/settings/state/AppSettingsState';
 import { supabase } from '../lib/supabase';
 
 export type RemoteDecisionStatus = 'open' | 'returned' | 'kept';
+export type RemotePurchaseOrigin = PurchaseOrigin | 'unknown';
 
 export type SupabasePurchaseRow = {
   client_local_id: string | null;
@@ -24,6 +29,7 @@ export type SupabasePurchaseRow = {
   last_modified_by_client_at: string | null;
   price_amount: number | null;
   product_link: string | null;
+  purchase_origin: RemotePurchaseOrigin;
   purchase_date: string | null;
   resolved_at: string | null;
   return_date: string | null;
@@ -46,6 +52,7 @@ export type SupabasePurchaseInsertPayload = {
   last_modified_by_client_at: string;
   price_amount: number | null;
   product_link: string | null;
+  purchase_origin: RemotePurchaseOrigin;
   purchase_date: string | null;
   resolved_at: string | null;
   return_date: string | null;
@@ -55,9 +62,10 @@ export type SupabasePurchaseInsertPayload = {
 
 export type SupabasePurchaseUpdatePayload = Omit<
   SupabasePurchaseInsertPayload,
-  'client_local_id' | 'user_id'
+  'client_local_id' | 'purchase_origin' | 'user_id'
 > & {
   deleted_at?: string | null;
+  purchase_origin?: RemotePurchaseOrigin;
 };
 
 export type PurchaseSyncResult<T> =
@@ -148,6 +156,14 @@ function parsePrice(value?: string) {
     currency: match?.[1] ?? DEFAULT_CURRENCY,
     priceAmount: Number.isFinite(priceAmount) ? priceAmount : null,
   };
+}
+
+function getRemotePurchaseOrigin(origin?: PurchaseOrigin): RemotePurchaseOrigin {
+  return origin ?? 'unknown';
+}
+
+function getLocalPurchaseOrigin(origin: RemotePurchaseOrigin) {
+  return origin === 'account' || origin === 'guest' ? origin : undefined;
 }
 
 function formatPrice(priceAmount: number | null, currency: string | null) {
@@ -263,6 +279,7 @@ export function mapLocalPurchaseToRemoteInsertPayload(
     last_modified_by_client_at: getClientModifiedAt(localPurchase),
     price_amount: priceAmount,
     product_link: compactText(localPurchase.productLink),
+    purchase_origin: getRemotePurchaseOrigin(localPurchase.origin),
     purchase_date: localPurchase.purchaseDateISO ?? null,
     resolved_at: getResolvedAt(localPurchase),
     return_date: localPurchase.returnDateISO ?? null,
@@ -275,6 +292,10 @@ export function mapLocalPurchaseToRemoteUpdatePayload(
   localPurchase: MockPurchase,
 ): SupabasePurchaseUpdatePayload {
   const { currency, priceAmount } = parsePrice(localPurchase.price);
+  const origin =
+    localPurchase.origin === 'account' || localPurchase.origin === 'guest'
+      ? { purchase_origin: localPurchase.origin }
+      : {};
 
   return {
     comments: compactText(localPurchase.comment),
@@ -284,6 +305,7 @@ export function mapLocalPurchaseToRemoteUpdatePayload(
     last_modified_by_client_at: getClientModifiedAt(localPurchase),
     price_amount: priceAmount,
     product_link: compactText(localPurchase.productLink),
+    ...origin,
     purchase_date: localPurchase.purchaseDateISO ?? null,
     resolved_at: getResolvedAt(localPurchase),
     return_date: localPurchase.returnDateISO ?? null,
@@ -299,6 +321,7 @@ export function mapRemotePurchaseRowToLocalPurchase(
   const resolvedStatus = getLocalResolvedStatus(row.decision_status);
   const status = resolvedStatus ?? getLocalOpenStatus(row);
   const completedText = getLocalCompletedText(row);
+  const origin = getLocalPurchaseOrigin(row.purchase_origin);
 
   return {
     comment: row.comments ?? undefined,
@@ -307,6 +330,7 @@ export function mapRemotePurchaseRowToLocalPurchase(
     days: getLocalDays(row),
     id: row.client_local_id ?? row.id,
     itemName: row.item_name,
+    ...(origin ? { origin } : {}),
     price: formatPrice(row.price_amount, row.currency),
     productLink: row.product_link ?? undefined,
     purchaseDateISO: row.purchase_date ?? undefined,
