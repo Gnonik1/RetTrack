@@ -109,6 +109,18 @@ Additional Settings backlog:
 - Later connect password reset to the selected auth provider.
 - Decide final resend/disabled state after password reset email is requested.
 
+## Auth / Account Deletion
+
+- Complete and verify full in-app account deletion:
+  - Deploy the Supabase Edge Function `delete-account`.
+  - Configure required server-side secrets safely; never expose service-role secrets to the Expo/client app.
+  - Test only with a disposable or controlled account, not the main account.
+  - Verify the flow deletes storage objects, purchase_photos rows, purchases, profile row, and auth user.
+  - Verify local account-scoped storage/session cleanup after success.
+  - Verify partial failure shows a retryable error and does not falsely claim success.
+  - Confirm guest mode still shows deletion unavailable.
+  - Treat as launch-critical before App Store submission.
+
 ## App Config / Assets
 
 - Replace default Expo icon and splash assets with final RetTrack assets before production build.
