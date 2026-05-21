@@ -106,8 +106,12 @@ Additional Settings backlog:
 
 ## Auth / Password Reset
 
-- Later connect password reset to the selected auth provider.
-- Decide final resend/disabled state after password reset email is requested.
+- Verify password reset email link handoff in a development build/TestFlight:
+  - Confirm valid reset links open RetTrack and allow password update.
+  - Confirm expired/used/direct `/reset-password` opens show the invalid-link recovery state.
+- Review Supabase Auth reset email sender, subject, and template so it feels like RetTrack.
+- Review Google/Apple sign-in consent/callback/redirect branding and visible provider/Supabase links.
+- Keep auth email/provider branding as launch-readiness polish, not a current local-development blocker.
 
 ## Auth / Account Deletion
 
