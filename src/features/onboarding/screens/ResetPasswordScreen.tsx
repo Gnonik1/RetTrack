@@ -30,7 +30,7 @@ type ResetPasswordErrors = {
 };
 
 const invalidResetLinkMessage =
-  'This reset link is invalid or expired. Request a new password reset email.';
+  'This reset link is invalid or expired';
 const resetSessionCheckIntervalMs = 250;
 const resetSessionCheckMaxAttempts = 16;
 
@@ -206,6 +206,11 @@ export function ResetPasswordScreen({ onBack }: ResetPasswordScreenProps) {
     router.replace(isAuthenticated ? '/profile' : '/sign-in');
   };
 
+  const handleRequestNewLinkPress = () => {
+    router.replace('/forgot-password');
+  };
+
+  const isResetLinkInvalid = !isPreparingSession && !isRecoverySessionReady;
   const isBusy = isPreparingSession || isSubmitting || !isRecoverySessionReady;
   const continueTitle = isAuthenticated ? 'Go to Profile' : 'Go to Sign in';
   const visibleError = isPreparingSession ? '' : recoveryError || submitError;
@@ -243,35 +248,37 @@ export function ResetPasswordScreen({ onBack }: ResetPasswordScreenProps) {
             </AppText>
           </View>
 
-          <View style={styles.fields}>
-            <AppTextField
-              autoCapitalize="none"
-              error={errors.newPassword}
-              label="New password"
-              onChangeText={handleNewPasswordChange}
-              onSubmitEditing={() => confirmPasswordInputRef.current?.focus()}
-              placeholder={'\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022'}
-              returnKeyType="next"
-              secureTextEntry
-              showPasswordToggle
-              textContentType="newPassword"
-              value={newPassword}
-            />
-            <AppTextField
-              ref={confirmPasswordInputRef}
-              autoCapitalize="none"
-              error={errors.confirmPassword}
-              label="Confirm password"
-              onChangeText={handleConfirmPasswordChange}
-              onSubmitEditing={handleUpdatePasswordPress}
-              placeholder={'\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022'}
-              returnKeyType="done"
-              secureTextEntry
-              showPasswordToggle
-              textContentType="newPassword"
-              value={confirmPassword}
-            />
-          </View>
+          {isRecoverySessionReady ? (
+            <View style={styles.fields}>
+              <AppTextField
+                autoCapitalize="none"
+                error={errors.newPassword}
+                label="New password"
+                onChangeText={handleNewPasswordChange}
+                onSubmitEditing={() => confirmPasswordInputRef.current?.focus()}
+                placeholder={'\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022'}
+                returnKeyType="next"
+                secureTextEntry
+                showPasswordToggle
+                textContentType="newPassword"
+                value={newPassword}
+              />
+              <AppTextField
+                ref={confirmPasswordInputRef}
+                autoCapitalize="none"
+                error={errors.confirmPassword}
+                label="Confirm password"
+                onChangeText={handleConfirmPasswordChange}
+                onSubmitEditing={handleUpdatePasswordPress}
+                placeholder={'\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022'}
+                returnKeyType="done"
+                secureTextEntry
+                showPasswordToggle
+                textContentType="newPassword"
+                value={confirmPassword}
+              />
+            </View>
+          ) : null}
 
           {isPreparingSession ? (
             <View style={styles.statusCard}>
@@ -305,6 +312,13 @@ export function ResetPasswordScreen({ onBack }: ResetPasswordScreenProps) {
               onPress={handleContinuePress}
               style={styles.primaryActionButton}
               title={continueTitle}
+              variant="primary"
+            />
+          ) : isResetLinkInvalid ? (
+            <AppButton
+              onPress={handleRequestNewLinkPress}
+              style={styles.primaryActionButton}
+              title="Request new link"
               variant="primary"
             />
           ) : (

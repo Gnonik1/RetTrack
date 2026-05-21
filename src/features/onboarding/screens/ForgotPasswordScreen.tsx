@@ -6,15 +6,25 @@ import { AppScreen } from '../../../components/AppScreen';
 import { AppText } from '../../../components/AppText';
 import { AppTextField } from '../../../components/AppTextField';
 import { theme } from '../../../constants/theme';
+import { resetPassword } from '../../../services/authService';
 
 type ForgotPasswordScreenProps = {
   onBack?: () => void;
 };
 
+type ResetMessage = {
+  text: string;
+  type: 'error' | 'success';
+};
+
 const forgotPasswordSubtitle =
   'Enter your email and we\u2019ll send reset instructions.';
 const resetConfirmationMessage =
-  'If an account exists for that email, we\u2019ll send password reset instructions.';
+  'If an account exists for this email, reset instructions will be sent';
+const resetErrorMessage =
+  "We couldn't send a reset email. Check your email and try again.";
+const resetConnectionErrorMessage =
+  "We couldn't send a reset email. Check your connection and try again.";
 
 function isValidEmailForMvp(email: string) {
   const atIndex = email.indexOf('@');
@@ -30,12 +40,13 @@ function isValidEmailForMvp(email: string) {
 export function ForgotPasswordScreen({ onBack }: ForgotPasswordScreenProps) {
   const [email, setEmail] = useState('');
   const [emailError, setEmailError] = useState<string | undefined>();
-  const [isConfirmationVisible, setIsConfirmationVisible] = useState(false);
+  const [isSendingResetLink, setIsSendingResetLink] = useState(false);
+  const [resetMessage, setResetMessage] = useState<ResetMessage | null>(null);
 
   const handleEmailChange = (text: string) => {
     setEmail(text);
     setEmailError(undefined);
-    setIsConfirmationVisible(false);
+    setResetMessage(null);
   };
 
   const validateEmail = () => {
@@ -43,13 +54,13 @@ export function ForgotPasswordScreen({ onBack }: ForgotPasswordScreenProps) {
 
     if (!trimmedEmail) {
       setEmailError('Email is required');
-      setIsConfirmationVisible(false);
+      setResetMessage(null);
       return false;
     }
 
     if (!isValidEmailForMvp(trimmedEmail)) {
       setEmailError('Enter a valid email');
-      setIsConfirmationVisible(false);
+      setResetMessage(null);
       return false;
     }
 
@@ -62,14 +73,43 @@ export function ForgotPasswordScreen({ onBack }: ForgotPasswordScreenProps) {
     onBack?.();
   };
 
-  const handleSendResetLink = () => {
+  const handleSendResetLink = async () => {
+    if (isSendingResetLink) {
+      return;
+    }
+
     Keyboard.dismiss();
+    setResetMessage(null);
 
     if (!validateEmail()) {
       return;
     }
 
-    setIsConfirmationVisible(true);
+    setIsSendingResetLink(true);
+
+    try {
+      const { error } = await resetPassword(email.trim());
+
+      if (error) {
+        setResetMessage({
+          text: resetErrorMessage,
+          type: 'error',
+        });
+        return;
+      }
+
+      setResetMessage({
+        text: resetConfirmationMessage,
+        type: 'success',
+      });
+    } catch {
+      setResetMessage({
+        text: resetConnectionErrorMessage,
+        type: 'error',
+      });
+    } finally {
+      setIsSendingResetLink(false);
+    }
   };
 
   return (
@@ -119,10 +159,21 @@ export function ForgotPasswordScreen({ onBack }: ForgotPasswordScreenProps) {
               value={email}
             />
 
-            {isConfirmationVisible ? (
-              <View style={styles.confirmationNote}>
-                <AppText style={styles.confirmationText} variant="caption">
-                  {resetConfirmationMessage}
+            {resetMessage ? (
+              <View
+                style={[
+                  styles.confirmationNote,
+                  resetMessage.type === 'error' && styles.errorNote,
+                ]}
+              >
+                <AppText
+                  style={[
+                    styles.confirmationText,
+                    resetMessage.type === 'error' && styles.errorText,
+                  ]}
+                  variant="caption"
+                >
+                  {resetMessage.text}
                 </AppText>
               </View>
             ) : null}
@@ -131,9 +182,10 @@ export function ForgotPasswordScreen({ onBack }: ForgotPasswordScreenProps) {
 
         <View style={styles.actions}>
           <AppButton
+            disabled={isSendingResetLink}
             onPress={handleSendResetLink}
             style={styles.primaryActionButton}
-            title="Send reset link"
+            title={isSendingResetLink ? 'Sending reset...' : 'Send reset link'}
             variant="primary"
           />
         </View>
@@ -216,6 +268,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: theme.fontWeight.medium,
     lineHeight: 18,
+  },
+  errorNote: {
+    backgroundColor: theme.colors.softPending,
+    borderColor: '#E4C8C1',
+  },
+  errorText: {
+    color: theme.colors.pending,
   },
   actions: {
     gap: 12,

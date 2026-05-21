@@ -316,7 +316,7 @@ export function SignInScreen({ onBack }: SignInScreenProps) {
       }
 
       setResetMessage({
-        text: 'Password reset email sent.',
+        text: 'If an account exists for this email, reset instructions will be sent',
         type: 'success',
       });
     } catch {
