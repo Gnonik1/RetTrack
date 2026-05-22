@@ -51,6 +51,10 @@ import {
   getPurchaseReturnDateISO,
   getReturnDateUrgency,
 } from '../utils/purchaseDates';
+import {
+  deleteCopiedPurchasePhotoFiles,
+  isCopiedPurchasePhotoUri,
+} from '../utils/purchasePhotos';
 
 export type ResolvedPurchaseStatus = Extract<
   PurchaseStatus,
@@ -1398,6 +1402,47 @@ function compactPhotoUris(photoUris: string[] | undefined, photoLimit: number) {
   return compactUris?.length ? compactUris : undefined;
 }
 
+function getCopiedPurchasePhotoUris(photoUris: string[] | undefined) {
+  return (photoUris ?? [])
+    .map((photoUri) => photoUri.trim())
+    .filter(isCopiedPurchasePhotoUri);
+}
+
+function getReferencedCopiedPurchasePhotoUris(purchases: MockPurchase[]) {
+  return new Set(
+    purchases.flatMap((purchase) =>
+      getCopiedPurchasePhotoUris(purchase.photoUris),
+    ),
+  );
+}
+
+function getUnreferencedCopiedPurchasePhotoUris(
+  photoUris: string[],
+  remainingPurchases: MockPurchase[],
+) {
+  const referencedPhotoUris =
+    getReferencedCopiedPurchasePhotoUris(remainingPurchases);
+
+  return Array.from(
+    new Set(
+      getCopiedPurchasePhotoUris(photoUris).filter(
+        (photoUri) => !referencedPhotoUris.has(photoUri),
+      ),
+    ),
+  );
+}
+
+function getRemovedCopiedPurchasePhotoUris(
+  previousPhotoUris: string[] | undefined,
+  nextPhotoUris: string[] | undefined,
+) {
+  const nextCopiedPhotoUris = new Set(getCopiedPurchasePhotoUris(nextPhotoUris));
+
+  return getCopiedPurchasePhotoUris(previousPhotoUris).filter(
+    (photoUri) => !nextCopiedPhotoUris.has(photoUri),
+  );
+}
+
 function getAlignedPhotoRemotePaths(
   photoRemotePaths: Array<string | null | undefined> | undefined,
   photoCount: number,
@@ -2078,8 +2123,30 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
   const pendingLinkedGuestDeletesFromAccountRef = useRef<
     PendingLinkedGuestDeleteFromAccount[]
   >([]);
+  const pendingCopiedPhotoCleanupUrisRef = useRef<string[]>([]);
+  const copiedPhotoCleanupVersionRef = useRef(0);
+  const purchasePersistenceVersionRef = useRef(0);
   const reminderSyncQueueRef = useRef(Promise.resolve());
   const signedInUserId = user?.id;
+
+  const queueCopiedPhotoCleanup = useCallback(
+    (photoUris: string[] | undefined) => {
+      const copiedPhotoUris = getCopiedPurchasePhotoUris(photoUris);
+
+      if (!copiedPhotoUris.length) {
+        return;
+      }
+
+      pendingCopiedPhotoCleanupUrisRef.current = Array.from(
+        new Set([
+          ...pendingCopiedPhotoCleanupUrisRef.current,
+          ...copiedPhotoUris,
+        ]),
+      );
+      copiedPhotoCleanupVersionRef.current += 1;
+    },
+    [],
+  );
 
   useEffect(() => {
     if (purchaseScopeKey === null) {
@@ -2097,6 +2164,9 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
     setGuestPurchaseEntriesUsed(fallbackPurchases.length);
     hasSkippedInitialPersistRef.current = false;
     lastReminderPurchasesRef.current = null;
+    pendingCopiedPhotoCleanupUrisRef.current = [];
+    copiedPhotoCleanupVersionRef.current += 1;
+    purchasePersistenceVersionRef.current += 1;
     if (purchaseScopeKey === GUEST_PURCHASE_SCOPE_KEY) {
       pendingLocalTombstonesRef.current = [];
     }
@@ -2356,15 +2426,59 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    persistVisiblePurchases(
-      purchaseScopeKey,
-      purchases,
+    const persistenceVersion = purchasePersistenceVersionRef.current + 1;
+    const cleanupVersion = copiedPhotoCleanupVersionRef.current;
+    const purchasesSnapshot = purchases;
+    const pendingTombstonedPurchases =
       purchaseScopeKey === GUEST_PURCHASE_SCOPE_KEY
         ? pendingLocalTombstonesRef.current
-        : [],
-    ).catch(() => {
-      // Local persistence is best-effort for the frontend-only purchase state.
-    });
+        : [];
+
+    purchasePersistenceVersionRef.current = persistenceVersion;
+
+    persistVisiblePurchases(
+      purchaseScopeKey,
+      purchasesSnapshot,
+      pendingTombstonedPurchases,
+    )
+      .then(() => {
+        const pendingPhotoUris = pendingCopiedPhotoCleanupUrisRef.current;
+
+        if (!pendingPhotoUris.length) {
+          return undefined;
+        }
+
+        const unreferencedPhotoUris = getUnreferencedCopiedPurchasePhotoUris(
+          pendingPhotoUris,
+          purchasesSnapshot,
+        );
+        const canDrainPreservedPhotoUris =
+          purchasePersistenceVersionRef.current === persistenceVersion &&
+          copiedPhotoCleanupVersionRef.current === cleanupVersion;
+        const processedPhotoUris = canDrainPreservedPhotoUris
+          ? pendingPhotoUris
+          : unreferencedPhotoUris;
+
+        if (processedPhotoUris.length) {
+          const processedPhotoUriSet = new Set(processedPhotoUris);
+
+          pendingCopiedPhotoCleanupUrisRef.current =
+            pendingCopiedPhotoCleanupUrisRef.current.filter(
+              (photoUri) => !processedPhotoUriSet.has(photoUri),
+            );
+        }
+
+        if (!unreferencedPhotoUris.length) {
+          return undefined;
+        }
+
+        return deleteCopiedPurchasePhotoFiles(unreferencedPhotoUris).catch(
+          () => undefined,
+        );
+      })
+      .catch(() => {
+        // Local persistence is best-effort for the frontend-only purchase state.
+      });
   }, [
     hasHydratedPurchases,
     hydratedPurchaseScopeKey,
@@ -2741,6 +2855,7 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
 
       return currentPurchases.filter((purchase) => purchase.id !== itemId);
     });
+    queueCopiedPhotoCleanup(purchaseToDelete.photoUris);
 
     if (!signedInUserId) {
       if (
@@ -2775,7 +2890,7 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
     void syncDeletedPurchase(purchaseToDelete, deletedAt);
 
     return true;
-  }, [purchases, signedInUserId, syncDeletedPurchase]);
+  }, [purchases, queueCopiedPhotoCleanup, signedInUserId, syncDeletedPurchase]);
 
   const resolvePurchase = useCallback(
     (itemId: string, status: ResolvedPurchaseStatus) => {
@@ -2854,6 +2969,10 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
         purchaseToUpdate.photoRemotePaths,
         nextPhotoRemotePaths,
       );
+    const removedCopiedPhotoUris = getRemovedCopiedPurchasePhotoUris(
+      purchaseToUpdate.photoUris,
+      nextPhotoUris,
+    );
 
     const updatedPurchase = getPurchaseWithCurrentDateState(
       {
@@ -2889,9 +3008,10 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
         return updatedPurchase;
       }),
     );
+    queueCopiedPhotoCleanup(removedCopiedPhotoUris);
 
     void syncUpdatedPurchase(updatedPurchase);
-  }, [purchases, signedInUserId, syncUpdatedPurchase]);
+  }, [purchases, queueCopiedPhotoCleanup, signedInUserId, syncUpdatedPurchase]);
 
   useEffect(() => {
     if (
