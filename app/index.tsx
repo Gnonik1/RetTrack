@@ -19,9 +19,6 @@ export default function Index() {
     purchases,
   } = usePurchases();
 
-  // Temporary visual-review routing only: remove this return to restore startup logic below.
-  return <Redirect href="/welcome" />;
-
   if (isAuthLoading || !hasHydratedSettings || !hasHydratedPurchases) {
     return null;
   }
