@@ -1,5 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import { cancelAllScheduledAppReminders } from '../features/notifications/notifications';
+import {
+  deleteCopiedPurchasePhotoFiles,
+  isCopiedPurchasePhotoUri,
+} from '../features/purchases/utils/purchasePhotos';
 import { supabase } from '../lib/supabase';
 
 type DeleteAccountFunctionResponse = {
@@ -34,16 +39,21 @@ const NOTIFICATION_PROMPT_STATUS_STORAGE_KEY_PREFIX =
   `${APP_SETTINGS_STORAGE_KEY}:notificationPromptStatus`;
 const REMINDERS_ENABLED_STORAGE_KEY_PREFIX =
   `${APP_SETTINGS_STORAGE_KEY}:remindersEnabled`;
+const GUEST_PURCHASE_SCOPE_KEY = 'guest';
 
 function getAccountScopeKey(userId: string) {
   return `user:${encodeURIComponent(userId)}`;
+}
+
+function getPurchaseStorageKey(scopeKey: string) {
+  return `${PURCHASES_STORAGE_KEY_PREFIX}:${scopeKey}`;
 }
 
 function getAccountScopedLocalStorageKeys(userId: string) {
   const scopeKey = getAccountScopeKey(userId);
 
   return [
-    `${PURCHASES_STORAGE_KEY_PREFIX}:${scopeKey}`,
+    getPurchaseStorageKey(scopeKey),
     `${GUEST_PURCHASE_ENTRIES_USED_STORAGE_KEY_PREFIX}:${scopeKey}`,
     `${ONBOARDING_COMPLETION_STORAGE_KEY_PREFIX}:${scopeKey}`,
     `${NOTIFICATION_PROMPT_STATUS_STORAGE_KEY_PREFIX}:${scopeKey}`,
@@ -53,6 +63,72 @@ function getAccountScopedLocalStorageKeys(userId: string) {
 
 async function clearAccountScopedLocalState(userId: string) {
   await AsyncStorage.multiRemove(getAccountScopedLocalStorageKeys(userId));
+}
+
+function getPurchasePhotoUris(purchase: unknown) {
+  if (typeof purchase !== 'object' || purchase === null) {
+    return [];
+  }
+
+  const photoUris = (purchase as { photoUris?: unknown }).photoUris;
+
+  if (!Array.isArray(photoUris)) {
+    return [];
+  }
+
+  return photoUris.filter(
+    (photoUri): photoUri is string => typeof photoUri === 'string',
+  );
+}
+
+function getPhotoUrisFromStoredPurchases(storedPurchases: string | null) {
+  if (!storedPurchases) {
+    return [];
+  }
+
+  try {
+    const parsedPurchases: unknown = JSON.parse(storedPurchases);
+
+    if (!Array.isArray(parsedPurchases)) {
+      return [];
+    }
+
+    return parsedPurchases.flatMap(getPurchasePhotoUris);
+  } catch {
+    return [];
+  }
+}
+
+async function clearUnreferencedAccountLocalPhotoFiles(userId: string) {
+  const accountScopeKey = getAccountScopeKey(userId);
+  const [storedAccountPurchases, storedGuestPurchases] = await Promise.all([
+    AsyncStorage.getItem(getPurchaseStorageKey(accountScopeKey)),
+    AsyncStorage.getItem(getPurchaseStorageKey(GUEST_PURCHASE_SCOPE_KEY)),
+  ]);
+  const accountPhotoUris =
+    getPhotoUrisFromStoredPurchases(storedAccountPurchases);
+  const guestCopiedPhotoUris = new Set(
+    getPhotoUrisFromStoredPurchases(storedGuestPurchases)
+      .map((photoUri) => photoUri.trim())
+      .filter(isCopiedPurchasePhotoUri),
+  );
+  const unreferencedAccountPhotoUris = accountPhotoUris.filter((photoUri) => {
+    const copiedPhotoUri = photoUri.trim();
+
+    return (
+      isCopiedPurchasePhotoUri(copiedPhotoUri) &&
+      !guestCopiedPhotoUris.has(copiedPhotoUri)
+    );
+  });
+
+  await deleteCopiedPurchasePhotoFiles(unreferencedAccountPhotoUris);
+}
+
+async function runBestEffortPostBackendLocalCleanup(userId: string) {
+  await Promise.all([
+    clearUnreferencedAccountLocalPhotoFiles(userId).catch(() => undefined),
+    cancelAllScheduledAppReminders().catch(() => undefined),
+  ]);
 }
 
 function getSafeErrorMessage(error?: string) {
@@ -83,6 +159,7 @@ export async function deleteCurrentAccount(): Promise<DeleteCurrentAccountResult
   }
 
   try {
+    await runBestEffortPostBackendLocalCleanup(userId);
     await clearAccountScopedLocalState(userId);
 
     const { error: signOutError } = await supabase.auth.signOut({

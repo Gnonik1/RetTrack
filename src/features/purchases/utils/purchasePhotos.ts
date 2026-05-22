@@ -30,6 +30,58 @@ function getPurchasePhotoDirectory() {
     : null;
 }
 
+function getCopiedPurchasePhotoFileUri(uri: string | null | undefined) {
+  const photoDirectory = getPurchasePhotoDirectory();
+  const normalizedUri = uri?.trim();
+
+  if (
+    !photoDirectory ||
+    !normalizedUri ||
+    !normalizedUri.startsWith(photoDirectory) ||
+    normalizedUri.endsWith('/')
+  ) {
+    return null;
+  }
+
+  const relativePhotoPath = normalizedUri.slice(photoDirectory.length);
+
+  if (
+    !relativePhotoPath ||
+    relativePhotoPath.includes('\\') ||
+    relativePhotoPath.split('/').includes('..')
+  ) {
+    return null;
+  }
+
+  return normalizedUri;
+}
+
+export function isCopiedPurchasePhotoUri(
+  uri: string | null | undefined,
+): uri is string {
+  return Boolean(getCopiedPurchasePhotoFileUri(uri));
+}
+
+export async function deleteCopiedPurchasePhotoFiles(
+  photoUris: Array<string | null | undefined>,
+) {
+  const copiedPhotoUris = Array.from(
+    new Set(
+      photoUris
+        .map(getCopiedPurchasePhotoFileUri)
+        .filter((photoUri): photoUri is string => Boolean(photoUri)),
+    ),
+  );
+
+  await Promise.all(
+    copiedPhotoUris.map((photoUri) =>
+      FileSystem.deleteAsync(photoUri, { idempotent: true }).catch(
+        () => undefined,
+      ),
+    ),
+  );
+}
+
 function getPhotoExtension(asset: PurchasePhotoDraft) {
   const extensionSource = asset.fileName ?? asset.uri.split('?')[0];
   const extension = extensionSource.match(/\.([a-zA-Z0-9]+)$/)?.[1];
