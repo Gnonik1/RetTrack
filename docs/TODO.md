@@ -30,7 +30,13 @@
 
 - Support up to 3 photos per item for backend account users later.
 - Upload/sync local purchase photos to backend storage later.
-- Clean up orphaned local photo files after Delete Purchase.
+- Local copied photo cleanup completed:
+  - Purchase delete/edit flows now delete unreferenced app-owned copied local photo files after purchase persistence succeeds.
+  - Cleanup is best-effort and does not block purchase delete/edit.
+  - Remote URLs, content URIs, external library URIs, and unrelated local files are ignored.
+  - Copied files still referenced by another purchase are preserved.
+- Re-test purchase delete/edit copied photo cleanup in an iOS development build/TestFlight before public App Store submission.
+- Re-test signed-in photo sync after photo cleanup changes in an iOS development build/TestFlight before public App Store submission.
 - Review photo permissions and iOS behavior before production release.
 
 ## Profile and Settings refinement
@@ -119,9 +125,18 @@ Additional Settings backlog:
   - Supabase Edge Function `delete-account` is deployed.
   - Disposable account deletion was tested successfully.
   - Backend deletion verification passed: auth user, profile row, purchases, purchase_photos rows, and storage objects were deleted as expected.
+- Account deletion local cleanup completed:
+  - After backend success, account deletion deletes account-only app-owned copied local purchase photo files.
+  - Copied files still referenced by guest scope are preserved.
+  - Scheduled RetTrack reminders are cancelled before local sign-out.
+  - Account-scoped local state is then cleared and the local Supabase session is signed out.
+  - Cleanup is best-effort and does not undo successful backend deletion if local photo/reminder cleanup fails.
 - Repeat account deletion smoke QA in an iOS development build/TestFlight before public App Store submission:
   - Test only with a disposable or controlled account, not the main account.
+  - Re-test account deletion local cleanup after success.
   - Verify local account-scoped storage/session cleanup after success.
+  - Verify account-only copied local purchase photo files are deleted after success.
+  - Verify scheduled RetTrack reminders are cancelled after success.
   - Verify partial failure shows a retryable error and does not falsely claim success.
   - Confirm guest mode still shows deletion unavailable.
   - Keep server-side service-role secrets out of Expo/client code, EAS public env, app config, and repo files.
