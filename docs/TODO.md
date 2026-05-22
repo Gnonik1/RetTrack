@@ -115,15 +115,17 @@ Additional Settings backlog:
 
 ## Auth / Account Deletion
 
-- Complete and verify full in-app account deletion:
-  - Deploy the Supabase Edge Function `delete-account`.
-  - Configure required server-side secrets safely; never expose service-role secrets to the Expo/client app.
+- Account deletion deployment and initial live QA completed:
+  - Supabase Edge Function `delete-account` is deployed.
+  - Disposable account deletion was tested successfully.
+  - Backend deletion verification passed: auth user, profile row, purchases, purchase_photos rows, and storage objects were deleted as expected.
+- Repeat account deletion smoke QA in an iOS development build/TestFlight before public App Store submission:
   - Test only with a disposable or controlled account, not the main account.
-  - Verify the flow deletes storage objects, purchase_photos rows, purchases, profile row, and auth user.
   - Verify local account-scoped storage/session cleanup after success.
   - Verify partial failure shows a retryable error and does not falsely claim success.
   - Confirm guest mode still shows deletion unavailable.
-  - Treat as launch-critical before App Store submission.
+  - Keep server-side service-role secrets out of Expo/client code, EAS public env, app config, and repo files.
+  - Confirm Privacy Policy/App Store disclosures accurately cover in-app account and related account-data deletion.
 
 ## App Config / Assets
 
