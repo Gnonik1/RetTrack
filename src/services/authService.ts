@@ -278,6 +278,9 @@ export async function signInWithGoogle(): Promise<GoogleSignInResult> {
   try {
     const { data, error } = await supabase.auth.signInWithOAuth({
       options: {
+        queryParams: {
+          prompt: "select_account",
+        },
         redirectTo,
         skipBrowserRedirect: true,
       },
