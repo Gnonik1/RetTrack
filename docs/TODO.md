@@ -17,14 +17,16 @@
 
 ## Purchases / Account Capacity QA
 
-- Controlled Stage 3 edge-case QA:
-  - Account 18/20 + guest below limit -> guest can add only 2 more purchases.
-  - Account 20/20 -> guest add is blocked with the existing limit-full UI.
-  - Raw guest/account counters must not be polluted.
-  - Delete / Returned / Kept / edit / photo must not reduce historical counts.
-  - Do not reset main data casually.
-  - Do not create temporary dev QA helper unless absolutely necessary.
-  - Do not commit temporary QA tooling.
+- Stage 3 guest/account capacity boundary QA completed locally:
+  - Account 18/20 correctly limits guest remaining capacity to 2.
+  - Guest can add exactly two purchases.
+  - Third guest add is blocked with the existing limit-full UI.
+  - Guest-origin purchases are counted toward account historical usage after migration.
+  - Account reaches 20/20 after migrated guest-origin purchases are counted.
+  - Guest shows 0 remaining after sign-out from a 20/20 account.
+  - Guest add is blocked at 20/20.
+- Release QA reminder:
+  - Re-test Stage 3 capacity behavior in an iOS development build/TestFlight before public App Store submission.
 
 ## Purchases / Photos
 
@@ -167,7 +169,7 @@ Additional Settings backlog:
   - Signed-in photo upload/sync support and 3-photo account UI support are implemented.
 - Release QA still pending:
   - Verify app icon and splash in iOS development build/TestFlight.
-  - Complete controlled Stage 3 capacity QA.
+  - Re-test Stage 3 capacity behavior in iOS development build/TestFlight.
   - Complete real iOS notification delivery/toggle/digest QA.
   - Complete password reset native deep-link QA.
   - Complete Google native return-to-app QA.
