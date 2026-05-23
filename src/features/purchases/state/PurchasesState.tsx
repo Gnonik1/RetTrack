@@ -107,6 +107,8 @@ const GUEST_PURCHASE_ENTRIES_USED_STORAGE_KEY =
 const GUEST_PURCHASE_SCOPE_KEY = 'guest';
 const LAST_KNOWN_ACCOUNT_CAPACITY_STORAGE_KEY =
   'rettrack:lastKnownAccountCapacity:v1';
+const COUNTED_GUEST_ORIGIN_ENTRIES_STORAGE_KEY =
+  'rettrack:countedGuestOriginEntries:v1';
 const PURCHASES_STORAGE_KEY_PREFIX = PURCHASES_STORAGE_KEY;
 const GUEST_PURCHASE_ENTRIES_USED_STORAGE_KEY_PREFIX =
   GUEST_PURCHASE_ENTRIES_USED_STORAGE_KEY;
@@ -301,6 +303,12 @@ function getScopedPurchaseStorageKeys(scopeKey: string) {
   };
 }
 
+function getCountedGuestOriginEntriesStorageKey(userId: string) {
+  return `${COUNTED_GUEST_ORIGIN_ENTRIES_STORAGE_KEY}:${getPurchaseScopeKey(
+    userId,
+  )}`;
+}
+
 function getPurchaseStorageSnapshot(
   storedPurchases: string | null,
   storedGuestPurchaseEntriesUsed: string | null,
@@ -371,6 +379,29 @@ function hasSharedPurchaseIdentity(
 
 function getPurchaseIdentitySet(purchases: MockPurchase[]) {
   return new Set(purchases.flatMap(getPurchaseIdentityValues));
+}
+
+function getGuestOriginAccountEntryCount(purchases: MockPurchase[]) {
+  const countedPurchaseIdentities = new Set<string>();
+
+  return purchases.reduce((count, purchase) => {
+    if (purchase.origin !== 'guest' || isTombstonedPurchase(purchase)) {
+      return count;
+    }
+
+    const purchaseIdentity =
+      purchase.remoteId ??
+      purchase.linkedRemoteId ??
+      purchase.linkedClientLocalId ??
+      purchase.id;
+
+    if (countedPurchaseIdentities.has(purchaseIdentity)) {
+      return count;
+    }
+
+    countedPurchaseIdentities.add(purchaseIdentity);
+    return count + 1;
+  }, 0);
 }
 
 function findPurchaseBySharedIdentity(
@@ -1336,6 +1367,24 @@ async function persistLastKnownAccountCapacitySnapshot(
   await AsyncStorage.setItem(
     LAST_KNOWN_ACCOUNT_CAPACITY_STORAGE_KEY,
     JSON.stringify(snapshot),
+  ).catch(() => undefined);
+}
+
+async function hydrateCountedGuestOriginEntries(userId: string) {
+  const storedCount = await AsyncStorage.getItem(
+    getCountedGuestOriginEntriesStorageKey(userId),
+  ).catch(() => null);
+
+  return parseStoredGuestPurchaseEntriesUsed(storedCount) ?? 0;
+}
+
+async function persistCountedGuestOriginEntries(
+  userId: string,
+  countedGuestOriginEntries: number,
+) {
+  await AsyncStorage.setItem(
+    getCountedGuestOriginEntriesStorageKey(userId),
+    String(Math.max(0, Math.floor(countedGuestOriginEntries))),
   ).catch(() => undefined);
 }
 
@@ -2344,6 +2393,25 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
           const visibleAccountPurchasesWithSyncedPhotos = getVisiblePurchases(
             accountPurchasesWithSyncedPhotos,
           );
+          const currentGuestOriginAccountEntryCount =
+            getGuestOriginAccountEntryCount(accountPurchasesWithSyncedPhotos);
+          const countedGuestOriginEntries =
+            await hydrateCountedGuestOriginEntries(signedInUserId);
+          const newlyUncountedGuestOriginEntries = Math.max(
+            0,
+            currentGuestOriginAccountEntryCount - countedGuestOriginEntries,
+          );
+          const successfulMigratedGuestPurchaseCount =
+            migratedGuestPurchases.filter((migrationResult) =>
+              Boolean(migrationResult.link?.remoteId),
+            ).length;
+          const entriesToChargeToAccountUsage = Math.max(
+            newlyUncountedGuestOriginEntries,
+            successfulMigratedGuestPurchaseCount,
+          );
+          const migrationUsageFloor =
+            scopedPurchaseSnapshot.guestPurchaseEntriesUsed +
+            entriesToChargeToAccountUsage;
           const { data: remoteTotalEntryCount } =
             await fetchRemotePurchaseEntryCount(signedInUserId);
           const reconciledAccountPurchaseEntriesUsed =
@@ -2351,6 +2419,7 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
               localKnownEntriesUsed: Math.max(
                 scopedPurchaseSnapshot.purchases.length,
                 visibleAccountPurchasesWithSyncedPhotos.length,
+                migrationUsageFloor,
               ),
               remoteTotalEntryCount: remoteTotalEntryCount ?? remoteRows.length,
               storedEntriesUsed: scopedPurchaseSnapshot.guestPurchaseEntriesUsed,
@@ -2380,6 +2449,13 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
           );
           await persistLastKnownAccountCapacitySnapshot(
             nextLastKnownAccountCapacitySnapshot,
+          );
+          await persistCountedGuestOriginEntries(
+            signedInUserId,
+            Math.max(
+              countedGuestOriginEntries,
+              currentGuestOriginAccountEntryCount,
+            ),
           );
           await persistGuestPurchaseLinkAndTombstoneUpdates(
             guestPurchaseAccountLinks,
