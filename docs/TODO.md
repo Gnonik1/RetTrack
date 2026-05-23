@@ -28,16 +28,20 @@
 
 ## Purchases / Photos
 
-- Support up to 3 photos per item for backend account users later.
-- Upload/sync local purchase photos to backend storage later.
+- Signed-in photo upload/sync and 3-photo account UI support are implemented:
+  - Signed-in account users can attach up to 3 photos per item.
+  - Guest mode remains limited to 1 local photo per item.
+  - Signed-in local purchase photos sync to backend storage and metadata.
 - Local copied photo cleanup completed:
   - Purchase delete/edit flows now delete unreferenced app-owned copied local photo files after purchase persistence succeeds.
   - Cleanup is best-effort and does not block purchase delete/edit.
   - Remote URLs, content URIs, external library URIs, and unrelated local files are ignored.
   - Copied files still referenced by another purchase are preserved.
-- Re-test purchase delete/edit copied photo cleanup in an iOS development build/TestFlight before public App Store submission.
-- Re-test signed-in photo sync after photo cleanup changes in an iOS development build/TestFlight before public App Store submission.
-- Review photo permissions and iOS behavior before production release.
+- Re-test purchase photo behavior in an iOS development build/TestFlight before public App Store submission:
+  - Re-test purchase delete/edit copied photo cleanup.
+  - Re-test signed-in photo upload/sync after photo cleanup changes.
+  - Re-test account 3-photo add, replace, remove, reorder, and display behavior.
+  - Review photo permissions and iOS behavior before production release.
 
 ## Profile and Settings refinement
 
@@ -92,7 +96,7 @@ Additional Settings backlog:
     - grouped pending digest delivery
     - Settings/Home reminder toggle scheduling and cancellation
     - app restart/sign-in/guest scoped reminder behavior
-  - Do not continue EAS/Apple credentials setup until the launch-readiness phase.
+  - Apple/TestFlight notification QA remains blocked until Apple Developer account / dev build or TestFlight setup is available.
 - Later, move notification timing and toggle controls into Settings -> Notifications.
 - Future notification re-prompt after “Not now”:
   - Consider a limited soft reminder prompt after the user taps “Not now”.
@@ -107,8 +111,8 @@ Additional Settings backlog:
 
 ## Auth / Validation
 
-- Decide disabled/enabled button behavior for invalid forms before auth integration.
-- Replace frontend-only auth validation success/no-op behavior with real auth integration later.
+- Auth integration is implemented; keep disabled/enabled invalid-form behavior as a polish decision:
+  - Decide whether invalid auth/purchase forms should keep current submit-then-show-errors behavior or switch to disabled/enabled buttons.
 
 ## Auth / Password Reset
 
@@ -116,8 +120,15 @@ Additional Settings backlog:
   - Confirm valid reset links open RetTrack and allow password update.
   - Confirm expired/used/direct `/reset-password` opens show the invalid-link recovery state.
 - Review Supabase Auth reset email sender, subject, and template so it feels like RetTrack.
-- Review Google/Apple sign-in consent/callback/redirect branding and visible provider/Supabase links.
+- Review auth email/provider branding and visible provider/Supabase links.
 - Keep auth email/provider branding as launch-readiness polish, not a current local-development blocker.
+
+## Auth / Provider QA
+
+- Google account chooser fix completed; verify Google native return-to-app/session handoff in an iOS development build/TestFlight.
+- Apple Sign In setup/QA remains blocked until Apple Developer account is available:
+  - Configure required Apple/Supabase provider settings when the account is available.
+  - Verify native Apple Sign In success, cancel, and provider-setup-required states in an iOS development build/TestFlight.
 
 ## Auth / Account Deletion
 
@@ -142,7 +153,25 @@ Additional Settings backlog:
   - Keep server-side service-role secrets out of Expo/client code, EAS public env, app config, and repo files.
   - Confirm Privacy Policy/App Store disclosures accurately cover in-app account and related account-data deletion.
 
-## App Config / Assets
+## Launch Readiness / Stale Cleanup
 
-- Replace default Expo icon and splash assets with final RetTrack assets before production build.
+- Completed launch-readiness implementation/config cleanup:
+  - Final RetTrack app icon asset has replaced the default Expo icon.
+  - Final RetTrack splash icon asset has replaced the default Expo splash asset.
+  - Production startup routing has been restored.
+  - Supabase CLI project config is committed.
+  - Supabase live verification passed.
+  - Google account chooser fix is committed.
+  - Account deletion deployment, live backend QA, and local cleanup are completed.
+  - Purchase delete/edit copied local photo cleanup is completed.
+  - Signed-in photo upload/sync support and 3-photo account UI support are implemented.
+- Release QA still pending:
+  - Verify app icon and splash in iOS development build/TestFlight.
+  - Complete controlled Stage 3 capacity QA.
+  - Complete real iOS notification delivery/toggle/digest QA.
+  - Complete password reset native deep-link QA.
+  - Complete Google native return-to-app QA.
+  - Complete Apple Sign In setup/QA after Apple Developer account is available.
+  - Repeat account deletion smoke QA in an iOS development build/TestFlight.
+  - Re-test purchase photo cleanup and signed-in photo sync in an iOS development build/TestFlight.
 - Confirm final iOS bundle identifier before App Store setup.
