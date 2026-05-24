@@ -1,5 +1,6 @@
 import { useRouter } from 'expo-router';
 import { Pressable, StyleSheet, View } from 'react-native';
+import Svg, { Circle, Line, Path } from 'react-native-svg';
 
 import { theme } from '../constants/theme';
 import { AppText } from './AppText';
@@ -42,106 +43,147 @@ type NavIconProps = {
   active?: boolean;
 };
 
+const NAV_ICON_SIZE = 24;
+const NAV_ICON_STROKE_WIDTH = 2;
+
+function getNavIconColor(active: boolean) {
+  return active ? theme.colors.greenDark : theme.colors.muted;
+}
+
 function HomeNavIcon({ active = false }: NavIconProps) {
+  const color = getNavIconColor(active);
+
   return (
-    <View style={styles.navIconHome} accessibilityElementsHidden>
-      <View style={[styles.navHomeRoof, active && styles.navIconActive]} />
-      <View style={[styles.navHomeBody, active && styles.navIconActive]} />
-    </View>
+    <Svg
+      fill="none"
+      height={NAV_ICON_SIZE}
+      viewBox="0 0 24 24"
+      width={NAV_ICON_SIZE}
+    >
+      <Path
+        d="M4.6 10.8 12 4.5l7.4 6.3"
+        stroke={color}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={NAV_ICON_STROKE_WIDTH}
+      />
+      <Path
+        d="M6.5 10.3v8.1c0 .7.5 1.2 1.2 1.2h2.8v-5.2h3v5.2h2.8c.7 0 1.2-.5 1.2-1.2v-8.1"
+        stroke={color}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={NAV_ICON_STROKE_WIDTH}
+      />
+    </Svg>
   );
 }
 
 function HistoryNavIcon({ active = false }: NavIconProps) {
+  const color = getNavIconColor(active);
+
   return (
-    <View
-      style={[styles.navIconCircle, active && styles.navIconActive]}
-      accessibilityElementsHidden
+    <Svg
+      fill="none"
+      height={NAV_ICON_SIZE}
+      viewBox="0 0 24 24"
+      width={NAV_ICON_SIZE}
     >
-      <View
-        style={[styles.navClockMinute, active && styles.navIconFillActive]}
+      <Circle
+        cx="12"
+        cy="12"
+        r="8.4"
+        stroke={color}
+        strokeWidth={NAV_ICON_STROKE_WIDTH}
       />
-      <View style={[styles.navClockHour, active && styles.navIconFillActive]} />
-      <View
-        style={[styles.navClockCenter, active && styles.navIconFillActive]}
+      <Path
+        d="M12 7.5v4.9l3.4 2"
+        stroke={color}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={NAV_ICON_STROKE_WIDTH}
       />
-    </View>
+    </Svg>
   );
 }
 
 function ProfileNavIcon({ active = false }: NavIconProps) {
+  const color = getNavIconColor(active);
+
   return (
-    <View style={styles.navIconProfile} accessibilityElementsHidden>
-      <View style={[styles.navProfileHead, active && styles.navIconActive]} />
-      <View style={[styles.navProfileBody, active && styles.navIconActive]} />
-    </View>
+    <Svg
+      fill="none"
+      height={NAV_ICON_SIZE}
+      viewBox="0 0 24 24"
+      width={NAV_ICON_SIZE}
+    >
+      <Circle
+        cx="12"
+        cy="8.25"
+        r="3.15"
+        stroke={color}
+        strokeWidth={NAV_ICON_STROKE_WIDTH}
+      />
+      <Path
+        d="M5.4 20.1v-.45C5.4 16.4 8 14.1 12 14.1s6.6 2.3 6.6 5.55v.45"
+        stroke={color}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={NAV_ICON_STROKE_WIDTH}
+      />
+    </Svg>
   );
 }
 
 function SettingsNavIcon({ active = false }: NavIconProps) {
+  const color = getNavIconColor(active);
+
   return (
-    <View style={styles.navIconSettings} accessibilityElementsHidden>
-      <View
-        style={[
-          styles.navGearTooth,
-          styles.navGearToothTop,
-          active && styles.navIconFillActive,
-        ]}
+    <Svg
+      fill="none"
+      height={NAV_ICON_SIZE}
+      viewBox="0 0 24 24"
+      width={NAV_ICON_SIZE}
+    >
+      <Path
+        d="M9.7 3.4h4.6l.5 2.45c.53.18 1.04.46 1.49.82l2.38-.8 2.3 4-1.86 1.64c.05.33.08.65.08.99s-.03.66-.08.99l1.86 1.64-2.3 4-2.38-.8c-.45.36-.96.64-1.49.82l-.5 2.45H9.7l-.5-2.45a6.1 6.1 0 0 1-1.49-.82l-2.38.8-2.3-4 1.86-1.64a6.8 6.8 0 0 1 0-1.98L3.03 9.87l2.3-4 2.38.8c.45-.36.96-.64 1.49-.82l.5-2.45Z"
+        stroke={color}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={1.9}
       />
-      <View
-        style={[
-          styles.navGearTooth,
-          styles.navGearToothRight,
-          active && styles.navIconFillActive,
-        ]}
+      <Circle
+        cx="12"
+        cy="12.5"
+        r="3.05"
+        stroke={color}
+        strokeWidth={1.9}
       />
-      <View
-        style={[
-          styles.navGearTooth,
-          styles.navGearToothBottom,
-          active && styles.navIconFillActive,
-        ]}
+    </Svg>
+  );
+}
+
+function AddNavIcon() {
+  return (
+    <Svg fill="none" height={24} viewBox="0 0 24 24" width={24}>
+      <Line
+        stroke={theme.colors.card}
+        strokeLinecap="round"
+        strokeWidth={2.6}
+        x1="12"
+        x2="12"
+        y1="5.5"
+        y2="18.5"
       />
-      <View
-        style={[
-          styles.navGearTooth,
-          styles.navGearToothLeft,
-          active && styles.navIconFillActive,
-        ]}
+      <Line
+        stroke={theme.colors.card}
+        strokeLinecap="round"
+        strokeWidth={2.6}
+        x1="5.5"
+        x2="18.5"
+        y1="12"
+        y2="12"
       />
-      <View
-        style={[
-          styles.navGearTooth,
-          styles.navGearToothUpperRight,
-          active && styles.navIconFillActive,
-        ]}
-      />
-      <View
-        style={[
-          styles.navGearTooth,
-          styles.navGearToothLowerRight,
-          active && styles.navIconFillActive,
-        ]}
-      />
-      <View
-        style={[
-          styles.navGearTooth,
-          styles.navGearToothLowerLeft,
-          active && styles.navIconFillActive,
-        ]}
-      />
-      <View
-        style={[
-          styles.navGearTooth,
-          styles.navGearToothUpperLeft,
-          active && styles.navIconFillActive,
-        ]}
-      />
-      <View style={[styles.navGearRing, active && styles.navIconActive]}>
-        <View
-          style={[styles.navGearCenter, active && styles.navIconFillActive]}
-        />
-      </View>
-    </View>
+    </Svg>
   );
 }
 
@@ -177,14 +219,16 @@ export function AppBottomNav({ activeTab, onAddPress }: AppBottomNavProps) {
           pressed && !isActive ? styles.navItemPressed : null,
         ]}
       >
-        <Icon active={isActive} />
-        <AppText
-          style={[styles.navLabel, isActive && styles.navLabelActive]}
-          variant="caption"
-        >
-          {item.label}
-        </AppText>
-        {isActive ? <View style={styles.navActiveIndicator} /> : null}
+        <View style={styles.navItemContent}>
+          {isActive ? <View style={styles.navActiveCapsule} /> : null}
+          <Icon active={isActive} />
+          <AppText
+            style={[styles.navLabel, isActive && styles.navLabelActive]}
+            variant="caption"
+          >
+            {item.label}
+          </AppText>
+        </View>
       </Pressable>
     );
   };
@@ -203,9 +247,7 @@ export function AppBottomNav({ activeTab, onAddPress }: AppBottomNavProps) {
           pressed && styles.navAddButtonPressed,
         ]}
       >
-        <AppText style={styles.navAddButtonText} variant="button">
-          +
-        </AppText>
+        <AddNavIcon />
       </Pressable>
 
       {renderNavItem(navItems[2])}
@@ -237,15 +279,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08,
     shadowRadius: 24,
   },
-  navActiveIndicator: {
-    backgroundColor: theme.colors.greenDark,
-    borderRadius: theme.radius.pill,
-    bottom: 1,
-    height: 2,
-    opacity: 0.82,
-    position: 'absolute',
-    width: 12,
-  },
   navAddButton: {
     alignItems: 'center',
     backgroundColor: theme.colors.green,
@@ -265,152 +298,15 @@ const styles = StyleSheet.create({
   navAddButtonPressed: {
     opacity: 0.82,
   },
-  navAddButtonText: {
-    color: theme.colors.card,
-    fontSize: 30,
-    fontWeight: theme.fontWeight.regular,
-    lineHeight: 32,
-    marginTop: -2,
-  },
-  navClockCenter: {
-    backgroundColor: theme.colors.muted,
-    borderRadius: theme.radius.pill,
-    height: 3.2,
-    left: 8.9,
+  navActiveCapsule: {
+    backgroundColor: theme.colors.sage,
+    borderRadius: 18,
+    bottom: 0,
+    left: 0,
+    opacity: 0.82,
     position: 'absolute',
-    top: 8.9,
-    width: 3.2,
-  },
-  navClockHour: {
-    backgroundColor: theme.colors.muted,
-    borderRadius: theme.radius.pill,
-    height: 1.8,
-    left: 9.6,
-    position: 'absolute',
-    top: 10.1,
-    width: 5.3,
-  },
-  navClockMinute: {
-    backgroundColor: theme.colors.muted,
-    borderRadius: theme.radius.pill,
-    height: 6.2,
-    left: 9.6,
-    position: 'absolute',
-    top: 5.2,
-    width: 1.8,
-  },
-  navGearCenter: {
-    backgroundColor: theme.colors.muted,
-    borderRadius: theme.radius.pill,
-    height: 3.4,
-    width: 3.4,
-  },
-  navGearRing: {
-    alignItems: 'center',
-    borderColor: theme.colors.muted,
-    borderRadius: theme.radius.pill,
-    borderWidth: 1.7,
-    height: 12.5,
-    justifyContent: 'center',
-    width: 12.5,
-  },
-  navGearTooth: {
-    backgroundColor: theme.colors.muted,
-    borderRadius: theme.radius.pill,
-    height: 1.8,
-    position: 'absolute',
-    width: 4.4,
-  },
-  navGearToothBottom: {
-    bottom: 1.4,
-    left: 8.8,
-    transform: [{ rotate: '90deg' }],
-  },
-  navGearToothLeft: {
-    left: 1.4,
-    top: 10.1,
-  },
-  navGearToothLowerLeft: {
-    bottom: 4.1,
-    left: 3.8,
-    transform: [{ rotate: '45deg' }],
-  },
-  navGearToothLowerRight: {
-    bottom: 4.1,
-    right: 3.8,
-    transform: [{ rotate: '-45deg' }],
-  },
-  navGearToothRight: {
-    right: 1.4,
-    top: 10.1,
-  },
-  navGearToothTop: {
-    left: 8.8,
-    top: 1.4,
-    transform: [{ rotate: '90deg' }],
-  },
-  navGearToothUpperLeft: {
-    left: 3.8,
-    top: 4.1,
-    transform: [{ rotate: '-45deg' }],
-  },
-  navGearToothUpperRight: {
-    right: 3.8,
-    top: 4.1,
-    transform: [{ rotate: '45deg' }],
-  },
-  navHomeBody: {
-    borderColor: theme.colors.muted,
-    borderRadius: 3,
-    borderWidth: 1.8,
-    height: 11,
-    marginTop: 7,
-    width: 14,
-  },
-  navHomeRoof: {
-    borderColor: theme.colors.muted,
-    borderLeftWidth: 1.8,
-    borderTopWidth: 1.8,
-    height: 12,
-    position: 'absolute',
-    top: 2,
-    transform: [{ rotate: '45deg' }],
-    width: 12,
-  },
-  navIconActive: {
-    borderColor: theme.colors.greenDark,
-  },
-  navIconCircle: {
-    alignItems: 'center',
-    borderColor: theme.colors.muted,
-    borderRadius: theme.radius.pill,
-    borderWidth: 1.8,
-    height: 21,
-    justifyContent: 'center',
-    position: 'relative',
-    width: 21,
-  },
-  navIconFillActive: {
-    backgroundColor: theme.colors.greenDark,
-  },
-  navIconHome: {
-    alignItems: 'center',
-    height: 20,
-    justifyContent: 'center',
-    width: 22,
-  },
-  navIconProfile: {
-    alignItems: 'center',
-    height: 20,
-    justifyContent: 'center',
-    width: 20,
-  },
-  navIconSettings: {
-    alignItems: 'center',
-    height: 22,
-    justifyContent: 'center',
-    position: 'relative',
-    width: 22,
+    right: 0,
+    top: 0,
   },
   navItem: {
     alignItems: 'center',
@@ -419,6 +315,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     minHeight: 46,
     position: 'relative',
+  },
+  navItemContent: {
+    alignItems: 'center',
+    gap: 2,
+    height: 46,
+    justifyContent: 'center',
+    paddingTop: 1,
+    position: 'relative',
+    width: 58,
   },
   navItemPressed: {
     opacity: 0.78,
@@ -432,20 +337,5 @@ const styles = StyleSheet.create({
   navLabelActive: {
     color: theme.colors.greenDark,
     fontWeight: theme.fontWeight.semibold,
-  },
-  navProfileBody: {
-    borderColor: theme.colors.muted,
-    borderRadius: 8,
-    borderWidth: 1.8,
-    height: 8,
-    marginTop: 2,
-    width: 16,
-  },
-  navProfileHead: {
-    borderColor: theme.colors.muted,
-    borderRadius: theme.radius.pill,
-    borderWidth: 1.8,
-    height: 8,
-    width: 8,
   },
 });
