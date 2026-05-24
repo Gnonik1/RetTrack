@@ -12,7 +12,6 @@ import {
 } from 'react-native';
 
 import { AppScreen } from '../../../components/AppScreen';
-import { AppBottomNav } from '../../../components/AppBottomNav';
 import { AppText } from '../../../components/AppText';
 import { theme } from '../../../constants/theme';
 import {
@@ -1059,8 +1058,6 @@ export function PurchasesHomeScreen({
           </Animated.View>
         </View>
       </ScrollView>
-
-      <AppBottomNav activeTab="home" onAddPress={onAddItem} />
     </AppScreen>
   );
 }

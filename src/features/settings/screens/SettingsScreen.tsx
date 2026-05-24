@@ -13,7 +13,6 @@ import {
 } from 'react-native';
 
 import { AppButton } from '../../../components/AppButton';
-import { AppBottomNav } from '../../../components/AppBottomNav';
 import { AppScreen } from '../../../components/AppScreen';
 import { AppText } from '../../../components/AppText';
 import { theme } from '../../../constants/theme';
@@ -513,7 +512,9 @@ export function SettingsScreen() {
       <View pointerEvents="none" style={styles.backgroundPaperWash} />
 
       <ScrollView
+        automaticallyAdjustContentInsets={false}
         contentContainerStyle={styles.content}
+        contentInsetAdjustmentBehavior="never"
         showsVerticalScrollIndicator={false}
         style={styles.scroll}
       >
@@ -620,9 +621,6 @@ export function SettingsScreen() {
           </AppText>
         </View>
       </ScrollView>
-
-      <AppBottomNav activeTab="settings" />
-
       {modalContent ? (
         <View style={styles.sheetOverlay}>
           <Pressable

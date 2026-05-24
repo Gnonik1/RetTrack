@@ -10,6 +10,7 @@ export type AppBottomNavTab = 'history' | 'home' | 'profile' | 'settings';
 type AppBottomNavProps = {
   activeTab: AppBottomNavTab;
   onAddPress?: () => void;
+  onTabPress?: (tab: AppBottomNavTab) => void;
 };
 
 const navItems = [
@@ -187,7 +188,11 @@ function AddNavIcon() {
   );
 }
 
-export function AppBottomNav({ activeTab, onAddPress }: AppBottomNavProps) {
+export function AppBottomNav({
+  activeTab,
+  onAddPress,
+  onTabPress,
+}: AppBottomNavProps) {
   const router = useRouter();
 
   const handleAddPress = () => {
@@ -211,6 +216,11 @@ export function AppBottomNav({ activeTab, onAddPress }: AppBottomNavProps) {
         key={item.key}
         onPress={() => {
           if (!isActive) {
+            if (onTabPress) {
+              onTabPress(item.key);
+              return;
+            }
+
             router.replace(item.route);
           }
         }}

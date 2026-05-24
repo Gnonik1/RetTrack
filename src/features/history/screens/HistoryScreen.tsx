@@ -3,7 +3,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
-import { AppBottomNav } from '../../../components/AppBottomNav';
 import { AppScreen } from '../../../components/AppScreen';
 import { AppText } from '../../../components/AppText';
 import { theme } from '../../../constants/theme';
@@ -320,8 +319,6 @@ export function HistoryScreen() {
           </View>
         )}
       </ScrollView>
-
-      <AppBottomNav activeTab="history" />
     </AppScreen>
   );
 }

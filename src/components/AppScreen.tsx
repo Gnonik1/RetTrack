@@ -1,8 +1,6 @@
 import type { ReactNode } from 'react';
 import { StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import {
-  initialWindowMetrics,
-  SafeAreaProvider,
   SafeAreaView,
   useSafeAreaInsets,
 } from 'react-native-safe-area-context';
@@ -36,7 +34,10 @@ function getPaddingTop(style?: StyleProp<ViewStyle>) {
   return 0;
 }
 
-function StableTopInsetScreen({ children, style }: Omit<AppScreenProps, 'stableTopInset'>) {
+function StableTopInsetScreen({
+  children,
+  style,
+}: Omit<AppScreenProps, 'stableTopInset'>) {
   const insets = useSafeAreaInsets();
   const localPaddingTop = getPaddingTop(style);
 
@@ -50,22 +51,19 @@ function StableTopInsetScreen({ children, style }: Omit<AppScreenProps, 'stableT
   );
 }
 
-export function AppScreen({ children, style, stableTopInset = false }: AppScreenProps) {
+export function AppScreen({
+  children,
+  style,
+  stableTopInset = false,
+}: AppScreenProps) {
   if (stableTopInset) {
-    return (
-      <SafeAreaProvider initialMetrics={initialWindowMetrics} style={styles.provider}>
-        <StableTopInsetScreen style={style}>{children}</StableTopInsetScreen>
-      </SafeAreaProvider>
-    );
+    return <StableTopInsetScreen style={style}>{children}</StableTopInsetScreen>;
   }
 
   return <SafeAreaView style={[styles.screen, style]}>{children}</SafeAreaView>;
 }
 
 const styles = StyleSheet.create({
-  provider: {
-    flex: 1,
-  },
   screen: {
     flex: 1,
     backgroundColor: theme.colors.bg,

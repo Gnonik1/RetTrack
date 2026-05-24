@@ -2,7 +2,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useMemo, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
-import { AppBottomNav } from '../../../components/AppBottomNav';
 import { AppButton } from '../../../components/AppButton';
 import { AppScreen } from '../../../components/AppScreen';
 import { AppText } from '../../../components/AppText';
@@ -309,7 +308,12 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
           </AppText>
         </View>
 
-        <View style={styles.profileCard}>
+        <View
+          style={[
+            styles.profileCard,
+            isAccountLoading && styles.profileCardLoading,
+          ]}
+        >
           <View style={styles.identityRow}>
             <View style={styles.avatar}>
               {shouldShowAvatarImage && googleAvatarUrl ? (
@@ -476,6 +480,10 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
           {!isAccountLoading && isAuthenticated ? <RateRetTrackCard /> : null}
         </View>
 
+        {isAccountLoading ? (
+          <View style={styles.profileActionsLoadingSpace} />
+        ) : null}
+
         {!isAccountLoading && !isAuthenticated ? (
           <View style={[styles.actions, styles.guestActions, styles.guestCtaSection]}>
             <AppButton
@@ -518,8 +526,6 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
           </View>
         ) : null}
       </ScrollView>
-
-      <AppBottomNav activeTab="profile" />
     </AppScreen>
   );
 }
@@ -770,6 +776,12 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.12,
     shadowRadius: 40,
     elevation: 3,
+  },
+  profileActionsLoadingSpace: {
+    minHeight: 66,
+  },
+  profileCardLoading: {
+    minHeight: 548,
   },
   progressFill: {
     backgroundColor: theme.colors.greenDark,

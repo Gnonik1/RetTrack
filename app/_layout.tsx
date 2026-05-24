@@ -1,4 +1,8 @@
 import { Stack } from 'expo-router';
+import {
+  initialWindowMetrics,
+  SafeAreaProvider,
+} from 'react-native-safe-area-context';
 
 import { AuthDeepLinkHandler } from '../src/components/AuthDeepLinkHandler';
 import { configureNotificationHandler } from '../src/features/notifications/notifications';
@@ -10,19 +14,18 @@ configureNotificationHandler();
 
 export default function RootLayout() {
   return (
-    <AuthProvider>
-      <AuthDeepLinkHandler />
-      <AppSettingsProvider>
-        <PurchasesProvider>
-          <Stack screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="welcome" options={{ animation: 'none' }} />
-            <Stack.Screen name="purchases" options={{ animation: 'none' }} />
-            <Stack.Screen name="history" options={{ animation: 'none' }} />
-            <Stack.Screen name="profile" options={{ animation: 'none' }} />
-            <Stack.Screen name="settings" options={{ animation: 'none' }} />
-          </Stack>
-        </PurchasesProvider>
-      </AppSettingsProvider>
-    </AuthProvider>
+    <SafeAreaProvider initialMetrics={initialWindowMetrics}>
+      <AuthProvider>
+        <AuthDeepLinkHandler />
+        <AppSettingsProvider>
+          <PurchasesProvider>
+            <Stack screenOptions={{ headerShown: false }}>
+              <Stack.Screen name="welcome" options={{ animation: 'none' }} />
+              <Stack.Screen name="(tabs)" options={{ animation: 'none' }} />
+            </Stack>
+          </PurchasesProvider>
+        </AppSettingsProvider>
+      </AuthProvider>
+    </SafeAreaProvider>
   );
 }
