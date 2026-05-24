@@ -6,10 +6,25 @@
 - Use the same bottom action spacing pattern from Welcome screen across onboarding screens where appropriate.
 - Keep screen title typography consistent across similar auth/onboarding screens.
 - Add high-quality optional field icons later using a consistent icon approach; avoid emoji-style text icons.
-- Replace temporary custom-drawn icons with a professional icon system later, such as lucide-react-native, only after checking Expo SDK compatibility and dependency requirements; include Home, History, Profile, Settings, notification, and purchase item icons in that review.
+- Optional later icon-system review should focus on non-bottom-nav icons, such as notification and purchase item icons, only after checking Expo SDK compatibility and dependency requirements.
 - Avoid npm --legacy-peer-deps or --force unless explicitly approved after reviewing the dependency conflict.
 - Revisit currency symbols later after confirming reliable font/rendering support for GEL/Lari symbol.
 - Evaluate adding a blurred backdrop for centered picker/modals, such as currency/date/photo pickers, after reviewing dependency fit such as expo-blur.
+
+## Bottom Navigation / Main Tabs
+
+- Bottom navigation polish completed locally:
+  - Custom `AppBottomNav` SVG icon set is the final local baseline for App Store screenshots.
+  - Active tab uses the approved soft sage capsule visual state.
+  - Home / History / Profile / Settings icon balance is completed locally, including final Home tab optical balance refinement.
+  - Add remains the main green circular action.
+- Persistent main-tabs/navigation flicker fix completed locally:
+  - Home / History / Profile / Settings now use a persistent Expo Router tabs layout.
+  - Tab switching is stable, with no duplicate bottom navigation.
+  - First-load Profile / Settings layout snap is fixed locally.
+  - Add still pushes `/add-purchase`; purchase details and edit routes remain outside the main tabs.
+- Release QA reminder:
+  - Re-test bottom nav visuals, tab switching, no duplicate nav, Add flow, details/edit routes, and Profile/Settings first-load stability in an iOS development build/TestFlight before App Store screenshots or submission.
 
 ## Purchases / Add First Purchase
 
