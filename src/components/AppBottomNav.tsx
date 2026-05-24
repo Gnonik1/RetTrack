@@ -62,14 +62,14 @@ function HomeNavIcon({ active = false }: NavIconProps) {
       width={NAV_ICON_SIZE}
     >
       <Path
-        d="M4.6 10.8 12 4.5l7.4 6.3"
+        d="M3.8 10.8 12 3.8l8.2 7"
         stroke={color}
         strokeLinecap="round"
         strokeLinejoin="round"
         strokeWidth={NAV_ICON_STROKE_WIDTH}
       />
       <Path
-        d="M6.5 10.3v8.1c0 .7.5 1.2 1.2 1.2h2.8v-5.2h3v5.2h2.8c.7 0 1.2-.5 1.2-1.2v-8.1"
+        d="M5.6 10.1v8.6c0 .7.5 1.2 1.2 1.2H10v-5.5h4v5.5h3.2c.7 0 1.2-.5 1.2-1.2v-8.6"
         stroke={color}
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -233,7 +233,11 @@ export function AppBottomNav({
           {isActive ? <View style={styles.navActiveCapsule} /> : null}
           <Icon active={isActive} />
           <AppText
-            style={[styles.navLabel, isActive && styles.navLabelActive]}
+            style={[
+              styles.navLabel,
+              item.key === 'home' && isActive && styles.navLabelHomeActive,
+              isActive && styles.navLabelActive,
+            ]}
             variant="caption"
           >
             {item.label}
@@ -347,5 +351,8 @@ const styles = StyleSheet.create({
   navLabelActive: {
     color: theme.colors.greenDark,
     fontWeight: theme.fontWeight.semibold,
+  },
+  navLabelHomeActive: {
+    fontSize: 11.5,
   },
 });
