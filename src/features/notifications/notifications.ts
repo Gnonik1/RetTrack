@@ -50,10 +50,31 @@ type ReturnReminderPlanOptions = {
   skipDueTodayLastDayReminder?: boolean;
 };
 
+type GroupedReturnReminderKind = Extract<
+  ReminderKind,
+  'return-seven-days' | 'return-three-days'
+>;
+
+type GroupedReturnReminderDefinition = {
+  daysLeft: 3 | 7;
+  kind: GroupedReturnReminderKind;
+};
+
 type RescheduleAllPurchaseRemindersOptions = {
   immediatePendingPurchaseIds?: string[];
   remindersEnabled?: boolean;
 };
+
+const GROUPED_RETURN_REMINDER_DEFINITIONS: GroupedReturnReminderDefinition[] = [
+  {
+    daysLeft: 7,
+    kind: 'return-seven-days',
+  },
+  {
+    daysLeft: 3,
+    kind: 'return-three-days',
+  },
+];
 
 let hasConfiguredNotificationHandler = false;
 
@@ -141,7 +162,12 @@ export async function schedulePurchaseReminders(
     return [];
   }
 
-  return scheduleReminderPlans(getReturnReminderPlans(purchase, new Date()));
+  const now = new Date();
+
+  return scheduleReminderPlans([
+    ...getGroupedReturnReminderPlans([purchase], now),
+    ...getLastDayReturnReminderPlans(purchase, now),
+  ]);
 }
 
 export async function rescheduleAllPurchaseReminders(
@@ -174,22 +200,24 @@ export async function rescheduleAllPurchaseReminders(
     return [];
   }
 
-  const dueTodayPurchases = purchases.filter(
+  const activePurchases = purchases.filter(
+    (purchase) => purchase.status === 'active',
+  );
+  const dueTodayPurchases = activePurchases.filter(
     (purchase) =>
-      purchase.status === 'active' && isPurchaseDueToday(purchase, now),
+      isPurchaseDueToday(purchase, now),
   );
   const dueTodayPurchaseIds = new Set(
     dueTodayPurchases.map((purchase) => purchase.id),
   );
-  const reminderPlans = purchases.flatMap((purchase) => {
-    if (purchase.status === 'active') {
-      return getReturnReminderPlans(purchase, now, {
+  const reminderPlans = [
+    ...getGroupedReturnReminderPlans(activePurchases, now),
+    ...activePurchases.flatMap((purchase) =>
+      getLastDayReturnReminderPlans(purchase, now, {
         skipDueTodayLastDayReminder: dueTodayPurchaseIds.has(purchase.id),
-      });
-    }
-
-    return [];
-  });
+      }),
+    ),
+  ];
   const dueTodayReminderPlan = getDueTodayReminderPlan(dueTodayPurchases, now);
   const pendingDigestAnchorDate =
     pendingPurchases.length > 0
@@ -431,7 +459,7 @@ function getItemName(purchase: MockPurchase) {
   return purchase.itemName.trim() || 'this item';
 }
 
-function getReturnReminderPlans(
+function getLastDayReturnReminderPlans(
   purchase: MockPurchase,
   now: Date,
   options: ReturnReminderPlanOptions = {},
@@ -443,22 +471,7 @@ function getReturnReminderPlans(
   }
 
   const itemName = getItemName(purchase);
-  const reminderPlans: ReminderPlan[] = [
-    {
-      body: `7 days left to return ${itemName}.`,
-      date: getReturnReminderDate(returnDate, 7, FUTURE_RETURN_REMINDER_HOUR),
-      identifier: getReminderIdentifier(purchase.id, 'return-seven-days'),
-      kind: 'return-seven-days',
-      title: 'Return reminder',
-    },
-    {
-      body: `3 days left to return ${itemName}.`,
-      date: getReturnReminderDate(returnDate, 3, FUTURE_RETURN_REMINDER_HOUR),
-      identifier: getReminderIdentifier(purchase.id, 'return-three-days'),
-      kind: 'return-three-days',
-      title: 'Return window closing',
-    },
-  ];
+  const reminderPlans: ReminderPlan[] = [];
   const lastDayReminderDate = getLastDayReminderDate(returnDate, now);
 
   if (
@@ -478,6 +491,88 @@ function getReturnReminderPlans(
   }
 
   return reminderPlans.filter((plan) => isFutureDate(plan.date, now));
+}
+
+function getGroupedReturnReminderPlans(
+  purchases: MockPurchase[],
+  now: Date,
+) {
+  const groupedReminders = new Map<
+    string,
+    {
+      count: number;
+      date: Date;
+      daysLeft: 3 | 7;
+      kind: GroupedReturnReminderKind;
+    }
+  >();
+
+  for (const purchase of purchases) {
+    const returnDate = getPurchaseReturnDate(purchase);
+
+    if (!returnDate) {
+      continue;
+    }
+
+    for (const reminderDefinition of GROUPED_RETURN_REMINDER_DEFINITIONS) {
+      const reminderDate = getReturnReminderDate(
+        returnDate,
+        reminderDefinition.daysLeft,
+        FUTURE_RETURN_REMINDER_HOUR,
+      );
+
+      if (!isFutureDate(reminderDate, now)) {
+        continue;
+      }
+
+      const reminderDateKey = getLocalDateKey(reminderDate);
+      const groupKey = `${reminderDefinition.kind}:${reminderDateKey}`;
+      const groupedReminder = groupedReminders.get(groupKey);
+
+      if (groupedReminder) {
+        groupedReminder.count += 1;
+        continue;
+      }
+
+      groupedReminders.set(groupKey, {
+        count: 1,
+        date: reminderDate,
+        daysLeft: reminderDefinition.daysLeft,
+        kind: reminderDefinition.kind,
+      });
+    }
+  }
+
+  return Array.from(groupedReminders.values()).map(
+    (groupedReminder): ReminderPlan => ({
+      body: getGroupedReturnReminderBody(
+        groupedReminder.count,
+        groupedReminder.daysLeft,
+      ),
+      date: groupedReminder.date,
+      identifier: getGroupedReturnReminderIdentifier(
+        groupedReminder.kind,
+        groupedReminder.date,
+      ),
+      kind: groupedReminder.kind,
+      title: 'Return reminder',
+    }),
+  );
+}
+
+function getGroupedReturnReminderBody(purchaseCount: number, daysLeft: 3 | 7) {
+  if (purchaseCount === 1) {
+    return `1 purchase has ${daysLeft} days left to return.`;
+  }
+
+  return `${purchaseCount} purchases have ${daysLeft} days left to return.`;
+}
+
+function getGroupedReturnReminderIdentifier(
+  kind: GroupedReturnReminderKind,
+  date: Date,
+) {
+  return `rettrack:${kind}:${getLocalDateKey(date)}`;
 }
 
 function getPendingDigestReminderPlans(
@@ -758,7 +853,9 @@ function getDateTrigger(date: Date): Notifications.DateTriggerInput {
 function getPurchaseIdFromReminderIdentifier(identifier: string) {
   if (
     identifier.startsWith('rettrack:due-today:') ||
-    identifier.startsWith('rettrack:pending-digest:')
+    identifier.startsWith('rettrack:pending-digest:') ||
+    identifier.startsWith('rettrack:return-seven-days:') ||
+    identifier.startsWith('rettrack:return-three-days:')
   ) {
     return null;
   }
