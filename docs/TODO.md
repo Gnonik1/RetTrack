@@ -14,7 +14,7 @@
 ## Bottom Navigation / Main Tabs
 
 - Bottom navigation polish completed locally:
-  - Custom `AppBottomNav` SVG icon set is the final local baseline for App Store screenshots.
+  - Custom `AppBottomNav` SVG icon set is the final local baseline for approved App Store screenshots.
   - Active tab uses the approved soft sage capsule visual state.
   - Home / History / Profile / Settings icon balance is completed locally, including final Home tab optical balance refinement.
   - Add remains the main green circular action.
@@ -24,7 +24,7 @@
   - First-load Profile / Settings layout snap is fixed locally.
   - Add still pushes `/add-purchase`; purchase details and edit routes remain outside the main tabs.
 - Release QA reminder:
-  - Re-test bottom nav visuals, tab switching, no duplicate nav, Add flow, details/edit routes, and Profile/Settings first-load stability in an iOS development build/TestFlight before App Store screenshots or submission.
+  - Re-test bottom nav visuals, tab switching, no duplicate nav, Add flow, details/edit routes, and Profile/Settings first-load stability in an iOS development build/TestFlight before App Store submission.
 
 ## Purchases / Add First Purchase
 
@@ -110,6 +110,7 @@ Additional Settings backlog:
   - Expo Go is enough for current notification UI/preference QA, but not enough to fully prove real iOS notification delivery.
   - Later, test in an iOS development build or TestFlight:
     - return reminder delivery
+    - grouped return reminder delivery
     - grouped pending digest delivery
     - Settings/Home reminder toggle scheduling and cancellation
     - app restart/sign-in/guest scoped reminder behavior
@@ -170,7 +171,7 @@ Additional Settings backlog:
   - Keep server-side service-role secrets out of Expo/client code, EAS public env, app config, and repo files.
   - Confirm Privacy Policy/App Store disclosures accurately cover in-app account and related account-data deletion.
 
-## Launch Readiness / Stale Cleanup
+## App Store / Launch Readiness
 
 - Completed launch-readiness implementation/config cleanup:
   - Final RetTrack app icon asset has replaced the default Expo icon.
@@ -182,13 +183,45 @@ Additional Settings backlog:
   - Account deletion deployment, live backend QA, and local cleanup are completed.
   - Purchase delete/edit copied local photo cleanup is completed.
   - Signed-in photo upload/sync support and 3-photo account UI support are implemented.
+- App Store presentation completed locally:
+  - App Store screenshots are approved.
+  - Approved screenshot set/order:
+    1. Track what you buy — All your purchases in one calm place
+    2. Return on time — See what’s due soon before it costs you
+    3. Save the details that matter — Price, dates, links, photos, and notes — all in one place
+    4. Return it or keep it — Mark your decision in one tap and keep your history clear
+    5. Your purchases stay with you — Sign in to sync across devices
+  - App Store metadata is approved:
+    - App Name: RetTrack
+    - Subtitle: Purchase & return tracker
+    - Promotional Text: Track what you buy, remember return windows, and keep the details that matter in one calm place.
+    - Keywords: reminder,shopping,items,organizer,receipt,deadline,dates,online,orders,store,history,notes
+    - Primary Category: Productivity
+    - Secondary Category if needed: Lifestyle
+  - App Store description is approved.
+  - App Store review notes are approved.
+  - Privacy Policy and Terms URLs are available.
+  - Bottom navigation visual baseline is final for App Store screenshots.
+  - Notification grouping fix is completed and committed.
+- App Store / launch tasks still pending:
+  - Complete Apple Developer account setup.
+  - Complete App Store Connect setup.
+  - Enter final App Store privacy labels.
+  - Upload final screenshots and metadata to App Store Connect.
+  - Confirm final app icon and splash asset readiness in an iOS development build/TestFlight.
+  - Confirm final iOS bundle identifier before App Store setup.
+  - Complete iOS development build/TestFlight QA.
+  - Complete native Apple Sign In QA after Apple Developer account is available.
+  - Complete password reset native deep-link QA.
+  - Complete real iOS notification delivery/grouping QA.
+  - Repeat account deletion smoke QA in an iOS development build/TestFlight.
+  - Re-test purchase photo sync and photo cleanup in an iOS development build/TestFlight.
 - Release QA still pending:
   - Verify app icon and splash in iOS development build/TestFlight.
   - Re-test Stage 3 capacity behavior in iOS development build/TestFlight.
-  - Complete real iOS notification delivery/toggle/digest QA.
+  - Complete real iOS notification delivery/toggle/grouping/digest QA.
   - Complete password reset native deep-link QA.
   - Complete Google native return-to-app QA.
   - Complete Apple Sign In setup/QA after Apple Developer account is available.
   - Repeat account deletion smoke QA in an iOS development build/TestFlight.
   - Re-test purchase photo cleanup and signed-in photo sync in an iOS development build/TestFlight.
-- Confirm final iOS bundle identifier before App Store setup.
