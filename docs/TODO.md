@@ -176,6 +176,12 @@ Additional Settings backlog:
 - Completed launch-readiness implementation/config cleanup:
   - Final RetTrack app icon asset has replaced the default Expo icon.
   - Final RetTrack splash icon asset has replaced the default Expo splash asset.
+  - Production splash setup is completed locally and committed:
+    - expo-splash-screen is installed.
+    - Native splash config is added in app.json.
+    - React startup splash is added.
+    - React startup splash visual is approved locally.
+    - No further splash visual polish is planned for now.
   - Production startup routing has been restored.
   - Supabase CLI project config is committed.
   - Supabase live verification passed.
@@ -208,7 +214,7 @@ Additional Settings backlog:
   - Complete App Store Connect setup.
   - Enter final App Store privacy labels.
   - Upload final screenshots and metadata to App Store Connect.
-  - Confirm final app icon and splash asset readiness in an iOS development build/TestFlight.
+  - Confirm final app icon readiness in an iOS development build/TestFlight.
   - Confirm final iOS bundle identifier before App Store setup.
   - Complete iOS development build/TestFlight QA.
   - Complete native Apple Sign In QA after Apple Developer account is available.
@@ -217,7 +223,10 @@ Additional Settings backlog:
   - Repeat account deletion smoke QA in an iOS development build/TestFlight.
   - Re-test purchase photo sync and photo cleanup in an iOS development build/TestFlight.
 - Release QA still pending:
-  - Verify app icon and splash in iOS development build/TestFlight.
+  - Verify native splash -> React startup splash -> app transition in an iOS development/preview/TestFlight build:
+    - Confirm no white/black flash.
+    - Confirm the app does not get stuck on splash.
+    - Confirm startup routing still works.
   - Re-test Stage 3 capacity behavior in iOS development build/TestFlight.
   - Complete real iOS notification delivery/toggle/grouping/digest QA.
   - Complete password reset native deep-link QA.
