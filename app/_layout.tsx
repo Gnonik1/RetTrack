@@ -1,8 +1,10 @@
 import { Stack } from 'expo-router';
+import * as SplashScreen from 'expo-splash-screen';
 import {
   initialWindowMetrics,
   SafeAreaProvider,
 } from 'react-native-safe-area-context';
+import { StyleSheet, View } from 'react-native';
 
 import { AuthDeepLinkHandler } from '../src/components/AuthDeepLinkHandler';
 import { configureNotificationHandler } from '../src/features/notifications/notifications';
@@ -11,21 +13,43 @@ import { AppSettingsProvider } from '../src/features/settings/state/AppSettingsS
 import { AuthProvider } from '../src/state/AuthState';
 
 configureNotificationHandler();
+void SplashScreen.preventAutoHideAsync().catch(() => undefined);
+
+let hasRequestedNativeSplashHide = false;
+
+function hideNativeSplashAfterLayout() {
+  if (hasRequestedNativeSplashHide) {
+    return;
+  }
+
+  hasRequestedNativeSplashHide = true;
+  void SplashScreen.hideAsync().catch(() => {
+    hasRequestedNativeSplashHide = false;
+  });
+}
 
 export default function RootLayout() {
   return (
     <SafeAreaProvider initialMetrics={initialWindowMetrics}>
-      <AuthProvider>
-        <AuthDeepLinkHandler />
-        <AppSettingsProvider>
-          <PurchasesProvider>
-            <Stack screenOptions={{ headerShown: false }}>
-              <Stack.Screen name="welcome" options={{ animation: 'none' }} />
-              <Stack.Screen name="(tabs)" options={{ animation: 'none' }} />
-            </Stack>
-          </PurchasesProvider>
-        </AppSettingsProvider>
-      </AuthProvider>
+      <View onLayout={hideNativeSplashAfterLayout} style={styles.root}>
+        <AuthProvider>
+          <AuthDeepLinkHandler />
+          <AppSettingsProvider>
+            <PurchasesProvider>
+              <Stack screenOptions={{ headerShown: false }}>
+                <Stack.Screen name="welcome" options={{ animation: 'none' }} />
+                <Stack.Screen name="(tabs)" options={{ animation: 'none' }} />
+              </Stack>
+            </PurchasesProvider>
+          </AppSettingsProvider>
+        </AuthProvider>
+      </View>
     </SafeAreaProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+  },
+});

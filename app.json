@@ -11,7 +11,7 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#F8F8F3"
     },
     "ios": {
       "bundleIdentifier": "com.gnonik.rettrack",
@@ -34,6 +34,15 @@
     },
     "plugins": [
       "expo-apple-authentication",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#F8F8F3",
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain"
+        }
+      ],
       "expo-router",
       "expo-web-browser"
     ],

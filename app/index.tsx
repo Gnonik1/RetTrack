@@ -1,5 +1,6 @@
 import { Redirect } from 'expo-router';
 
+import { AppStartupSplash } from '../src/components/AppStartupSplash';
 import { usePurchases } from '../src/features/purchases/state/PurchasesState';
 import { useAppSettings } from '../src/features/settings/state/AppSettingsState';
 import { useAuth } from '../src/state/AuthState';
@@ -20,7 +21,7 @@ export default function Index() {
   } = usePurchases();
 
   if (isAuthLoading || !hasHydratedSettings || !hasHydratedPurchases) {
-    return null;
+    return <AppStartupSplash />;
   }
 
   if (
