@@ -208,6 +208,7 @@ Additional Settings backlog:
   - App Store review notes are approved.
   - Privacy Policy and Terms URLs are available.
   - App Store Privacy Labels draft is prepared in `docs/app-store-privacy-labels.md`.
+  - Apple-day QA checklist is prepared in `docs/apple-day-qa-checklist.md`.
   - Bottom navigation visual baseline is final for App Store screenshots.
   - Notification grouping fix is completed and committed.
 - App Store / launch tasks still pending:
