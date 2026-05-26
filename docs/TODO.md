@@ -207,6 +207,7 @@ Additional Settings backlog:
   - App Store description is approved.
   - App Store review notes are approved.
   - Privacy Policy and Terms URLs are available.
+  - App Store Privacy Labels draft is prepared in `docs/app-store-privacy-labels.md`.
   - Bottom navigation visual baseline is final for App Store screenshots.
   - Notification grouping fix is completed and committed.
 - App Store / launch tasks still pending:
@@ -222,6 +223,7 @@ Additional Settings backlog:
   - Complete real iOS notification delivery/grouping QA.
   - Repeat account deletion smoke QA in an iOS development build/TestFlight.
   - Re-test purchase photo sync and photo cleanup in an iOS development build/TestFlight.
+  - Re-audit App Store Privacy Labels and Privacy Policy before releasing monetization, subscription, entitlement, reporting, analytics, or savings-insight features.
 - Release QA still pending:
   - Verify native splash -> React startup splash -> app transition in an iOS development/preview/TestFlight build:
     - Confirm no white/black flash.
