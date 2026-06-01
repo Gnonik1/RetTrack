@@ -46,10 +46,6 @@ type ReminderPlan = {
   title: string;
 };
 
-type ReturnReminderPlanOptions = {
-  skipDueTodayLastDayReminder?: boolean;
-};
-
 type GroupedReturnReminderKind = Extract<
   ReminderKind,
   'return-seven-days' | 'return-three-days'
@@ -166,7 +162,7 @@ export async function schedulePurchaseReminders(
 
   return scheduleReminderPlans([
     ...getGroupedReturnReminderPlans([purchase], now),
-    ...getLastDayReturnReminderPlans(purchase, now),
+    ...getGroupedLastDayReturnReminderPlans([purchase], now),
   ]);
 }
 
@@ -203,22 +199,10 @@ export async function rescheduleAllPurchaseReminders(
   const activePurchases = purchases.filter(
     (purchase) => purchase.status === 'active',
   );
-  const dueTodayPurchases = activePurchases.filter(
-    (purchase) =>
-      isPurchaseDueToday(purchase, now),
-  );
-  const dueTodayPurchaseIds = new Set(
-    dueTodayPurchases.map((purchase) => purchase.id),
-  );
   const reminderPlans = [
     ...getGroupedReturnReminderPlans(activePurchases, now),
-    ...activePurchases.flatMap((purchase) =>
-      getLastDayReturnReminderPlans(purchase, now, {
-        skipDueTodayLastDayReminder: dueTodayPurchaseIds.has(purchase.id),
-      }),
-    ),
+    ...getGroupedLastDayReturnReminderPlans(activePurchases, now),
   ];
-  const dueTodayReminderPlan = getDueTodayReminderPlan(dueTodayPurchases, now);
   const pendingDigestAnchorDate =
     pendingPurchases.length > 0
       ? await getOrCreatePendingDigestAnchorDate(now)
@@ -230,10 +214,6 @@ export async function rescheduleAllPurchaseReminders(
         pendingDigestAnchorDate,
       )
     : [];
-
-  if (dueTodayReminderPlan) {
-    reminderPlans.push(dueTodayReminderPlan);
-  }
 
   reminderPlans.push(...pendingDigestReminderPlans);
 
@@ -455,44 +435,6 @@ function getReminderIdentifier(purchaseId: string, kind: ReminderKind) {
   return `rettrack:${purchaseId}:${kind}`;
 }
 
-function getItemName(purchase: MockPurchase) {
-  return purchase.itemName.trim() || 'this item';
-}
-
-function getLastDayReturnReminderPlans(
-  purchase: MockPurchase,
-  now: Date,
-  options: ReturnReminderPlanOptions = {},
-) {
-  const returnDate = getPurchaseReturnDate(purchase);
-
-  if (!returnDate) {
-    return [];
-  }
-
-  const itemName = getItemName(purchase);
-  const reminderPlans: ReminderPlan[] = [];
-  const lastDayReminderDate = getLastDayReminderDate(returnDate, now);
-
-  if (
-    lastDayReminderDate &&
-    !(
-      options.skipDueTodayLastDayReminder &&
-      isSameLocalDate(returnDate, now)
-    )
-  ) {
-    reminderPlans.push({
-      body: `Today is the last day to return ${itemName}.`,
-      date: lastDayReminderDate,
-      identifier: getReminderIdentifier(purchase.id, 'return-last-day'),
-      kind: 'return-last-day',
-      title: 'Last day to return',
-    });
-  }
-
-  return reminderPlans.filter((plan) => isFutureDate(plan.date, now));
-}
-
 function getGroupedReturnReminderPlans(
   purchases: MockPurchase[],
   now: Date,
@@ -566,6 +508,58 @@ function getGroupedReturnReminderBody(purchaseCount: number, daysLeft: 3 | 7) {
   }
 
   return `${purchaseCount} purchases have ${daysLeft} days left to return.`;
+}
+
+function getGroupedLastDayReturnReminderPlans(
+  purchases: MockPurchase[],
+  now: Date,
+) {
+  const groupedReminders = new Map<
+    string,
+    {
+      count: number;
+      date: Date;
+      returnDate: Date;
+    }
+  >();
+
+  for (const purchase of purchases) {
+    const returnDate = getPurchaseReturnDate(purchase);
+
+    if (!returnDate) {
+      continue;
+    }
+
+    const reminderDate = getLastDayReminderDate(returnDate, now);
+
+    if (!reminderDate || !isFutureDate(reminderDate, now)) {
+      continue;
+    }
+
+    const returnDateKey = getLocalDateKey(returnDate);
+    const groupedReminder = groupedReminders.get(returnDateKey);
+
+    if (groupedReminder) {
+      groupedReminder.count += 1;
+      continue;
+    }
+
+    groupedReminders.set(returnDateKey, {
+      count: 1,
+      date: reminderDate,
+      returnDate,
+    });
+  }
+
+  return Array.from(groupedReminders.values()).map(
+    (groupedReminder): ReminderPlan => ({
+      body: getDueTodayReminderBody(groupedReminder.count),
+      date: groupedReminder.date,
+      identifier: getDueTodayReminderIdentifier(groupedReminder.returnDate),
+      kind: 'due-today-group',
+      title: 'Last day to return',
+    }),
+  );
 }
 
 function getGroupedReturnReminderIdentifier(
@@ -724,12 +718,6 @@ function isSameLocalDate(firstDate: Date, secondDate: Date) {
   );
 }
 
-function isPurchaseDueToday(purchase: MockPurchase, now: Date) {
-  const returnDate = getPurchaseReturnDate(purchase);
-
-  return Boolean(returnDate && isSameLocalDate(returnDate, now));
-}
-
 function isBeforeQuietHourEnd(date: Date) {
   return getMinutesSinceMidnight(date) < QUIET_HOUR_END * 60;
 }
@@ -746,45 +734,12 @@ function getMinutesSinceMidnight(date: Date) {
   return date.getHours() * 60 + date.getMinutes();
 }
 
-function getDueTodayReminderPlan(
-  dueTodayPurchases: MockPurchase[],
-  now: Date,
-): ReminderPlan | null {
-  if (dueTodayPurchases.length === 0) {
-    return null;
+function getDueTodayReminderBody(purchaseCount: number) {
+  if (purchaseCount === 1) {
+    return '1 purchase is due today';
   }
 
-  const reminderDate = getDueTodayReminderDate(now);
-
-  if (!reminderDate) {
-    return null;
-  }
-
-  return {
-    body: getDueTodayReminderBody(dueTodayPurchases),
-    date: reminderDate,
-    identifier: getDueTodayReminderIdentifier(now),
-    kind: 'due-today-group',
-    title: 'Last day to return',
-  };
-}
-
-function getDueTodayReminderBody(dueTodayPurchases: MockPurchase[]) {
-  const itemNames = dueTodayPurchases.map(getItemName);
-
-  if (itemNames.length === 1) {
-    return `Today is the last day to return ${itemNames[0]}.`;
-  }
-
-  if (itemNames.length === 2) {
-    return `${itemNames[0]} and ${itemNames[1]} are due today.`;
-  }
-
-  if (itemNames.length === 3) {
-    return `${itemNames[0]}, ${itemNames[1]}, and ${itemNames[2]} are due today.`;
-  }
-
-  return `${itemNames.length} items are due today. Open RetTrack to review them.`;
+  return `${purchaseCount} purchases are due today`;
 }
 
 function getDueTodayReminderIdentifier(date: Date) {
