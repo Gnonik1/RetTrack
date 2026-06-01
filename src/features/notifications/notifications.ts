@@ -504,10 +504,10 @@ function getGroupedReturnReminderPlans(
 
 function getGroupedReturnReminderBody(purchaseCount: number, daysLeft: 3 | 7) {
   if (purchaseCount === 1) {
-    return `1 purchase has ${daysLeft} days left to return.`;
+    return `1 purchase has ${daysLeft} days left to return`;
   }
 
-  return `${purchaseCount} purchases have ${daysLeft} days left to return.`;
+  return `${purchaseCount} purchases have ${daysLeft} days left to return`;
 }
 
 function getGroupedLastDayReturnReminderPlans(
@@ -587,21 +587,21 @@ function getPendingDigestReminderPlans(
       date: anchorDate,
       identifier: getPendingDigestReminderIdentifier('initial'),
       kind: 'pending-digest-initial',
-      title: 'Pending review',
+      title: 'Decision needed',
     },
     {
       body: pendingDigestBody,
       date: getPendingFollowUpDate(anchorDate, 3),
       identifier: getPendingDigestReminderIdentifier('3d'),
       kind: 'pending-digest-three-days',
-      title: 'Pending review',
+      title: 'Decision needed',
     },
     {
       body: pendingDigestBody,
       date: getPendingFollowUpDate(anchorDate, 7),
       identifier: getPendingDigestReminderIdentifier('7d'),
       kind: 'pending-digest-seven-days',
-      title: 'Pending review',
+      title: 'Decision needed',
     },
   ];
 
@@ -610,10 +610,10 @@ function getPendingDigestReminderPlans(
 
 function getPendingDigestReminderBody(pendingCount: number) {
   if (pendingCount === 1) {
-    return '1 purchase is ready for your decision in RetTrack';
+    return '1 purchase is ready for your decision';
   }
 
-  return `${pendingCount} purchases are ready for your decision in RetTrack`;
+  return `${pendingCount} purchases are ready for your decision`;
 }
 
 function getPendingDigestReminderIdentifier(timing: 'initial' | '3d' | '7d') {
