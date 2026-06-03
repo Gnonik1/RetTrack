@@ -6,6 +6,7 @@ import { AppText } from '../../../components/AppText';
 import { theme } from '../../../constants/theme';
 
 type NotificationPermissionScreenProps = {
+  isDecisionPending?: boolean;
   isNotificationsEnabled?: boolean;
   onBack?: () => void;
   onDone?: () => void;
@@ -14,6 +15,7 @@ type NotificationPermissionScreenProps = {
 };
 
 export function NotificationPermissionScreen({
+  isDecisionPending = false,
   isNotificationsEnabled = false,
   onBack,
   onDone,
@@ -110,6 +112,7 @@ export function NotificationPermissionScreen({
         ) : (
           <>
             <AppButton
+              disabled={isDecisionPending}
               onPress={onEnableNotifications}
               style={styles.primaryActionButton}
               title="Turn on reminders"
@@ -117,8 +120,12 @@ export function NotificationPermissionScreen({
             />
             <Pressable
               accessibilityRole="button"
+              disabled={isDecisionPending}
               onPress={onNotNow}
-              style={styles.notNowButton}
+              style={[
+                styles.notNowButton,
+                isDecisionPending && styles.notNowButtonDisabled,
+              ]}
             >
               <AppText style={styles.notNowText} variant="button">
                 Not now
@@ -313,6 +320,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     minHeight: 44,
     paddingVertical: theme.spacing.sm,
+  },
+  notNowButtonDisabled: {
+    opacity: 0.55,
   },
   notNowText: {
     color: theme.colors.muted,

@@ -13,6 +13,7 @@ export default function Index() {
   const {
     hasCompletedOnboarding,
     hasHydratedSettings,
+    notificationPromptStatus,
   } = useAppSettings();
   const {
     guestPurchaseEntriesUsed,
@@ -32,8 +33,12 @@ export default function Index() {
     return <Redirect href="/purchases" />;
   }
 
-  if (isAuthenticated) {
+  if (isAuthenticated && notificationPromptStatus === 'undecided') {
     return <Redirect href="/notifications" />;
+  }
+
+  if (isAuthenticated) {
+    return <Redirect href="/purchases" />;
   }
 
   return <Redirect href="/welcome" />;

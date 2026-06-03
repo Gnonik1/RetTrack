@@ -1,5 +1,7 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { AppStartupSplash } from '../src/components/AppStartupSplash';
 import {
   cancelAllScheduledAppReminders,
   requestNotificationPermissions,
@@ -13,10 +15,14 @@ export default function NotificationsRoute() {
   const { source } = useLocalSearchParams<{ source?: string | string[] }>();
   const {
     hasCompletedOnboarding,
-    setNotificationPromptStatus,
-    setRemindersEnabled,
+    hasHydratedSettings,
+    notificationPromptStatus,
+    persistNotificationPreference,
   } = useAppSettings();
-  const { guestPurchaseEntriesUsed, purchases } = usePurchases();
+  const { guestPurchaseEntriesUsed, hasHydratedPurchases, purchases } =
+    usePurchases();
+  const [isDecisionPending, setIsDecisionPending] = useState(false);
+  const decisionPendingRef = useRef(false);
   const resolvedSource = Array.isArray(source) ? source[0] : source;
   const isGuestSource = resolvedSource === 'guest';
 
@@ -29,7 +35,7 @@ export default function NotificationsRoute() {
     router.replace('/');
   };
 
-  const continueAfterDecision = () => {
+  const continueAfterDecision = useCallback(() => {
     if (
       hasCompletedOnboarding ||
       purchases.length > 0 ||
@@ -39,35 +45,92 @@ export default function NotificationsRoute() {
       return;
     }
 
-    router.push(
+    router.replace(
       isGuestSource
         ? '/add-first-purchase?source=guest'
         : '/add-first-purchase',
     );
-  };
+  }, [
+    guestPurchaseEntriesUsed,
+    hasCompletedOnboarding,
+    isGuestSource,
+    purchases.length,
+    router,
+  ]);
 
-  const handleEnableNotifications = async () => {
-    const isGranted = await requestNotificationPermissions();
-
-    setRemindersEnabled(isGranted);
-    setNotificationPromptStatus(isGranted ? 'enabled' : 'dismissed');
-
-    if (!isGranted) {
-      await cancelAllScheduledAppReminders();
+  useEffect(() => {
+    if (
+      !hasHydratedSettings ||
+      !hasHydratedPurchases ||
+      notificationPromptStatus === 'undecided' ||
+      decisionPendingRef.current
+    ) {
+      return;
     }
 
     continueAfterDecision();
+  }, [
+    continueAfterDecision,
+    hasHydratedPurchases,
+    hasHydratedSettings,
+    notificationPromptStatus,
+  ]);
+
+  const runNotificationDecision = async (
+    applyDecision: () => Promise<void>,
+  ) => {
+    if (decisionPendingRef.current) {
+      return;
+    }
+
+    decisionPendingRef.current = true;
+    setIsDecisionPending(true);
+
+    try {
+      await applyDecision();
+      continueAfterDecision();
+    } catch {
+      decisionPendingRef.current = false;
+      setIsDecisionPending(false);
+    }
+  };
+
+  const handleEnableNotifications = async () => {
+    await runNotificationDecision(async () => {
+      const isGranted = await requestNotificationPermissions();
+
+      await persistNotificationPreference({
+        notificationPromptStatus: isGranted ? 'enabled' : 'dismissed',
+        remindersEnabled: isGranted,
+      });
+
+      if (!isGranted) {
+        await cancelAllScheduledAppReminders();
+      }
+    });
   };
 
   const handleNotNow = async () => {
-    setRemindersEnabled(false);
-    setNotificationPromptStatus('dismissed');
-    await cancelAllScheduledAppReminders();
-    continueAfterDecision();
+    await runNotificationDecision(async () => {
+      await persistNotificationPreference({
+        notificationPromptStatus: 'dismissed',
+        remindersEnabled: false,
+      });
+      await cancelAllScheduledAppReminders();
+    });
   };
+
+  if (
+    !hasHydratedSettings ||
+    !hasHydratedPurchases ||
+    notificationPromptStatus !== 'undecided'
+  ) {
+    return <AppStartupSplash />;
+  }
 
   return (
     <NotificationPermissionScreen
+      isDecisionPending={isDecisionPending}
       onBack={handleBack}
       onEnableNotifications={handleEnableNotifications}
       onNotNow={handleNotNow}

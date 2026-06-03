@@ -2397,6 +2397,14 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
             getGuestOriginAccountEntryCount(accountPurchasesWithSyncedPhotos);
           const countedGuestOriginEntries =
             await hydrateCountedGuestOriginEntries(signedInUserId);
+          const guestEntriesUsedForAccountTransfer = Math.max(
+            guestPurchaseSnapshot.guestPurchaseEntriesUsed,
+            currentGuestOriginAccountEntryCount,
+          );
+          const newlyUncountedGuestEntriesUsed = Math.max(
+            0,
+            guestEntriesUsedForAccountTransfer - countedGuestOriginEntries,
+          );
           const newlyUncountedGuestOriginEntries = Math.max(
             0,
             currentGuestOriginAccountEntryCount - countedGuestOriginEntries,
@@ -2406,6 +2414,7 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
               Boolean(migrationResult.link?.remoteId),
             ).length;
           const entriesToChargeToAccountUsage = Math.max(
+            newlyUncountedGuestEntriesUsed,
             newlyUncountedGuestOriginEntries,
             successfulMigratedGuestPurchaseCount,
           );
@@ -2454,6 +2463,7 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
             signedInUserId,
             Math.max(
               countedGuestOriginEntries,
+              guestEntriesUsedForAccountTransfer,
               currentGuestOriginAccountEntryCount,
             ),
           );

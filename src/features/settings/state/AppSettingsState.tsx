@@ -36,12 +36,20 @@ export type NotificationPromptStatus = 'dismissed' | 'enabled' | 'undecided';
 export const DEFAULT_CURRENCY: CurrencyCode = 'USD';
 const DEFAULT_NOTIFICATION_PROMPT_STATUS: NotificationPromptStatus = 'undecided';
 
+type NotificationPreference = {
+  notificationPromptStatus: NotificationPromptStatus;
+  remindersEnabled: boolean;
+};
+
 type AppSettingsStateValue = {
   completeOnboarding: () => void;
   defaultCurrency: CurrencyCode;
   hasCompletedOnboarding: boolean;
   hasHydratedSettings: boolean;
   notificationPromptStatus: NotificationPromptStatus;
+  persistNotificationPreference: (
+    preference: NotificationPreference,
+  ) => Promise<void>;
   remindersEnabled: boolean;
   setDefaultCurrency: (currency: CurrencyCode) => void;
   setNotificationPromptStatus: (status: NotificationPromptStatus) => void;
@@ -185,6 +193,19 @@ function getNotificationPromptStatusStorageKey(scopeKey: string) {
 
 function getRemindersEnabledStorageKey(scopeKey: string) {
   return `${REMINDERS_ENABLED_STORAGE_KEY_PREFIX}:${scopeKey}`;
+}
+
+async function persistNotificationPreferenceForScope(
+  scopeKey: string,
+  preference: NotificationPreference,
+) {
+  await AsyncStorage.multiSet([
+    [
+      getNotificationPromptStatusStorageKey(scopeKey),
+      preference.notificationPromptStatus,
+    ],
+    [getRemindersEnabledStorageKey(scopeKey), String(preference.remindersEnabled)],
+  ]);
 }
 
 export async function getStoredHasCompletedOnboardingForUser(userId: string) {
@@ -417,6 +438,26 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  const persistNotificationPreference = useCallback(
+    async (preference: NotificationPreference) => {
+      if (
+        appSettingsScopeKey === null ||
+        hydratedSettingsScopeKey !== appSettingsScopeKey
+      ) {
+        throw new Error('App settings must hydrate before saving preferences.');
+      }
+
+      await persistNotificationPreferenceForScope(
+        appSettingsScopeKey,
+        preference,
+      );
+
+      setNotificationPromptStatusState(preference.notificationPromptStatus);
+      setRemindersEnabledState(preference.remindersEnabled);
+    },
+    [appSettingsScopeKey, hydratedSettingsScopeKey],
+  );
+
   const value = useMemo(
     () => ({
       completeOnboarding,
@@ -424,6 +465,7 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
       hasCompletedOnboarding,
       hasHydratedSettings,
       notificationPromptStatus,
+      persistNotificationPreference,
       remindersEnabled,
       setDefaultCurrency,
       setNotificationPromptStatus,
@@ -435,6 +477,7 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
       hasCompletedOnboarding,
       hasHydratedSettings,
       notificationPromptStatus,
+      persistNotificationPreference,
       remindersEnabled,
       setDefaultCurrency,
       setNotificationPromptStatus,
