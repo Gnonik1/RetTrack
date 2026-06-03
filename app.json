@@ -15,7 +15,7 @@
     },
     "ios": {
       "bundleIdentifier": "com.gnonik.rettrack",
-      "supportsTablet": true,
+      "supportsTablet": false,
       "usesAppleSignIn": true,
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
