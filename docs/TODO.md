@@ -67,7 +67,7 @@ Profile should be refined later based on the saved Profile design direction:
 - Show full name and email.
 - Show signed-in/account status.
 - Show plan or usage information.
-- Keep Rate RetTrack visible and wire it to the App Store rating/review flow later.
+- Keep Rate RetTrack visible; verify the App Store rating/review flow after release.
 - Add tracked / returned / kept stats only when they come from real data.
 - Add last activity only when it is backed by real data.
 - Do not add fake stats.
@@ -100,6 +100,24 @@ Additional Settings backlog:
 - When auth/backend sync is implemented, update the Settings App info card from guest/local state to signed-in/sync state: Signed in, Purchases sync across devices, Version 1.0.
 - Consider storing currency as a separate structured field later instead of embedding it in the price string.
 - Post-MVP: Consider full app-wide dark mode after runtime theme support.
+
+## Post-Launch Polish / Follow-Up
+
+These are not launch blockers for build 1.0.0 (9).
+
+- Verify Rate App after RetTrack is live on the App Store:
+  - Confirm the App Store write-review URL opens correctly.
+  - Keep the fallback alert for pre-release or unavailable cases if appropriate.
+- Verify Share App after RetTrack is live on the App Store:
+  - Confirm the App Store URL opens correctly.
+  - Keep the current polished share message unless better final marketing copy is approved.
+- Improve Apple Sign In transition polish:
+  - Current behavior works, but Apple sign-in can briefly show a white or blank transition for about 1-2 seconds.
+  - Later replace this with a calm loading state if needed.
+- Revisit iPad support after the first release:
+  - First release is iPhone-only.
+  - Add real iPad support only when there is a proper iPad layout and iPad App Store screenshots.
+- Consider adding or refining Contact Support / Send Feedback rows if useful for post-launch support.
 
 ## Notifications
 
