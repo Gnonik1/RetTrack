@@ -6,25 +6,32 @@ import { AppText } from '../../../components/AppText';
 import { theme } from '../../../constants/theme';
 
 type WelcomeScreenProps = {
+  appleError?: string;
   googleError?: string;
+  isContinuingWithApple?: boolean;
   isContinuingAsGuest?: boolean;
   isContinuingWithGoogle?: boolean;
   onContinueAsGuest?: () => void;
+  onContinueWithApple?: () => void;
   onContinueWithEmail?: () => void;
   onContinueWithGoogle?: () => void;
   onSignIn?: () => void;
 };
 
 export function WelcomeScreen({
+  appleError,
   googleError,
+  isContinuingWithApple = false,
   isContinuingAsGuest = false,
   isContinuingWithGoogle = false,
   onContinueAsGuest,
+  onContinueWithApple,
   onContinueWithEmail,
   onContinueWithGoogle,
   onSignIn,
 }: WelcomeScreenProps) {
-  const isContinuing = isContinuingAsGuest || isContinuingWithGoogle;
+  const isContinuing =
+    isContinuingAsGuest || isContinuingWithApple || isContinuingWithGoogle;
 
   return (
     <AppScreen style={styles.screen}>
@@ -51,7 +58,23 @@ export function WelcomeScreen({
       </View>
 
       <View style={styles.actions}>
-        <AppButton title="Continue with Apple" variant="outline" />
+        <AppButton
+          disabled={isContinuing}
+          onPress={onContinueWithApple}
+          title={
+            isContinuingWithApple
+              ? 'Continuing with Apple...'
+              : 'Continue with Apple'
+          }
+          variant="outline"
+        />
+        {appleError ? (
+          <View style={styles.errorCard}>
+            <AppText style={styles.errorText} variant="caption">
+              {appleError}
+            </AppText>
+          </View>
+        ) : null}
         <AppButton
           disabled={isContinuing}
           onPress={onContinueWithGoogle}

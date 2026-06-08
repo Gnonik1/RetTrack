@@ -45,7 +45,7 @@ type SettingsModalContent = {
 };
 
 const SHARE_MESSAGE =
-  "I'm using RetTrack to keep track of purchases and return dates.";
+  'Track what you buy and remember return dates with RetTrack.\n\nDownload on the App Store:\nhttps://apps.apple.com/app/id6775811683';
 const PRIVACY_POLICY_URL =
   'https://gnonik1.github.io/rettrack-legal/privacy-policy/';
 const TERMS_OF_USE_URL = 'https://gnonik1.github.io/rettrack-legal/terms-of-use/';

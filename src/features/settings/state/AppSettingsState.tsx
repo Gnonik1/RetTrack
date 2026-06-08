@@ -46,6 +46,7 @@ type AppSettingsStateValue = {
   defaultCurrency: CurrencyCode;
   hasCompletedOnboarding: boolean;
   hasHydratedSettings: boolean;
+  isSettingsScopeReady: boolean;
   notificationPromptStatus: NotificationPromptStatus;
   persistNotificationPreference: (
     preference: NotificationPreference,
@@ -294,6 +295,10 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
   const [hydratedSettingsScopeKey, setHydratedSettingsScopeKey] = useState<
     string | null
   >(null);
+  const isSettingsScopeReady =
+    hasHydratedSettings &&
+    appSettingsScopeKey !== null &&
+    hydratedSettingsScopeKey === appSettingsScopeKey;
 
   useEffect(() => {
     if (appSettingsScopeKey === null) {
@@ -464,6 +469,7 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
       defaultCurrency,
       hasCompletedOnboarding,
       hasHydratedSettings,
+      isSettingsScopeReady,
       notificationPromptStatus,
       persistNotificationPreference,
       remindersEnabled,
@@ -476,6 +482,7 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
       defaultCurrency,
       hasCompletedOnboarding,
       hasHydratedSettings,
+      isSettingsScopeReady,
       notificationPromptStatus,
       persistNotificationPreference,
       remindersEnabled,

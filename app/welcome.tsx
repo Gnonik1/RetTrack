@@ -3,10 +3,37 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { WelcomeScreen } from '../src/features/onboarding/screens/WelcomeScreen';
 import { getStoredHasCompletedOnboardingForUser } from '../src/features/settings/state/AppSettingsState';
-import { signInWithGoogle, signOut } from '../src/services/authService';
+import {
+  signInWithApple,
+  signInWithGoogle,
+  signOut,
+} from '../src/services/authService';
 import { useAuth } from '../src/state/AuthState';
 
 const GUEST_ONBOARDING_ROUTE = '/notifications?source=guest';
+const AUTH_ONBOARDING_ROUTE = '/notifications?source=auth';
+
+function getAppleWelcomeErrorMessage(
+  status:
+    | 'missingToken'
+    | 'providerSetupRequired'
+    | 'unavailable'
+    | 'unknownError',
+) {
+  if (status === 'unavailable') {
+    return 'Apple sign-in is available only on supported Apple devices.';
+  }
+
+  if (status === 'missingToken') {
+    return "Apple couldn't complete account setup. Please try again.";
+  }
+
+  if (status === 'providerSetupRequired') {
+    return "Apple sign-in isn't fully set up yet. Please use email sign-up for now.";
+  }
+
+  return "We couldn't continue with Apple. Please try again.";
+}
 
 function getGoogleWelcomeErrorMessage(
   status:
@@ -30,26 +57,30 @@ function getGoogleWelcomeErrorMessage(
   return "We couldn't continue with Google. Please try again.";
 }
 
-async function getOnboardingGoogleSuccessRoute(userId?: string) {
+async function getOnboardingAuthSuccessRoute(userId?: string) {
   if (!userId) {
-    return '/notifications';
+    return AUTH_ONBOARDING_ROUTE;
   }
 
   const hasCompletedOnboarding =
     await getStoredHasCompletedOnboardingForUser(userId);
 
-  return hasCompletedOnboarding ? '/purchases' : '/notifications';
+  return hasCompletedOnboarding ? '/purchases' : AUTH_ONBOARDING_ROUTE;
 }
 
 export default function WelcomeRoute() {
   const router = useRouter();
   const { isAuthenticated, isAuthLoading } = useAuth();
+  const [appleError, setAppleError] = useState('');
   const [googleError, setGoogleError] = useState('');
   const [pendingGuestNavigation, setPendingGuestNavigation] = useState(false);
   const [hasGuestSignOutCompleted, setHasGuestSignOutCompleted] =
     useState(false);
+  const [isContinuingWithApple, setIsContinuingWithApple] = useState(false);
   const [isContinuingWithGoogle, setIsContinuingWithGoogle] = useState(false);
   const hasRequestedGuestSignOutRef = useRef(false);
+  const isContinuing =
+    pendingGuestNavigation || isContinuingWithApple || isContinuingWithGoogle;
 
   const signOutForGuestNavigation = useCallback(async () => {
     try {
@@ -64,6 +95,7 @@ export default function WelcomeRoute() {
       hasRequestedGuestSignOutRef.current = false;
       setHasGuestSignOutCompleted(false);
       setPendingGuestNavigation(false);
+      setAppleError('');
       setGoogleError("We couldn't continue as guest. Please try again.");
     }
   }, []);
@@ -116,7 +148,41 @@ export default function WelcomeRoute() {
     router,
   ]);
 
+  const handleContinueWithApple = async () => {
+    if (isContinuing) {
+      return;
+    }
+
+    setAppleError('');
+    setGoogleError('');
+    setIsContinuingWithApple(true);
+
+    try {
+      const result = await signInWithApple();
+
+      if (result.status === 'canceled') {
+        return;
+      }
+
+      if (result.status !== 'success') {
+        setAppleError(getAppleWelcomeErrorMessage(result.status));
+        return;
+      }
+
+      router.replace(await getOnboardingAuthSuccessRoute(result.data.user?.id));
+    } catch {
+      setAppleError("We couldn't continue with Apple. Please try again.");
+    } finally {
+      setIsContinuingWithApple(false);
+    }
+  };
+
   const handleContinueWithGoogle = async () => {
+    if (isContinuing) {
+      return;
+    }
+
+    setAppleError('');
     setGoogleError('');
     setIsContinuingWithGoogle(true);
 
@@ -133,7 +199,7 @@ export default function WelcomeRoute() {
       }
 
       router.replace(
-        await getOnboardingGoogleSuccessRoute(result.data.session?.user.id),
+        await getOnboardingAuthSuccessRoute(result.data.session?.user.id),
       );
     } catch {
       setGoogleError("We couldn't continue with Google. Please try again.");
@@ -143,10 +209,11 @@ export default function WelcomeRoute() {
   };
 
   const handleContinueAsGuest = () => {
-    if (pendingGuestNavigation) {
+    if (isContinuing) {
       return;
     }
 
+    setAppleError('');
     setGoogleError('');
     setHasGuestSignOutCompleted(false);
 
@@ -165,10 +232,13 @@ export default function WelcomeRoute() {
 
   return (
     <WelcomeScreen
+      appleError={appleError}
       googleError={googleError}
       isContinuingAsGuest={pendingGuestNavigation}
+      isContinuingWithApple={isContinuingWithApple}
       isContinuingWithGoogle={isContinuingWithGoogle}
       onContinueAsGuest={handleContinueAsGuest}
+      onContinueWithApple={handleContinueWithApple}
       onContinueWithEmail={() => router.push('/sign-up?source=onboarding')}
       onContinueWithGoogle={handleContinueWithGoogle}
       onSignIn={() => router.push('/sign-in?source=onboarding')}

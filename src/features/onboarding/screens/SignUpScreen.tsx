@@ -60,7 +60,7 @@ function getSignUpSource(source?: string | string[]): SignUpSource | null {
 
 function getSignUpSuccessRoute(source: SignUpSource | null) {
   if (source === 'onboarding') {
-    return '/notifications';
+    return '/notifications?source=auth';
   }
 
   if (source === 'limit') {

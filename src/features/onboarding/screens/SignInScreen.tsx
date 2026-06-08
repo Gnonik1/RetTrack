@@ -70,13 +70,13 @@ async function getSignInSuccessRoute(
 ) {
   if (source === 'onboarding') {
     if (!userId) {
-      return '/notifications';
+      return '/notifications?source=auth';
     }
 
     const hasCompletedOnboarding =
       await getStoredHasCompletedOnboardingForUser(userId);
 
-    return hasCompletedOnboarding ? '/purchases' : '/notifications';
+    return hasCompletedOnboarding ? '/purchases' : '/notifications?source=auth';
   }
 
   return '/profile';

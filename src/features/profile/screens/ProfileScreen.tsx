@@ -1,6 +1,14 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useMemo, useState } from 'react';
-import { Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import {
+  Alert,
+  Image,
+  Linking,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+} from 'react-native';
 
 import { AppButton } from '../../../components/AppButton';
 import { AppScreen } from '../../../components/AppScreen';
@@ -10,6 +18,9 @@ import { signOut } from '../../../services/authService';
 import { useAuth } from '../../../state/AuthState';
 import { ACCOUNT_ITEM_LIMIT, GUEST_ITEM_LIMIT } from '../../purchases/constants';
 import { usePurchases } from '../../purchases/state/PurchasesState';
+
+const APP_STORE_REVIEW_URL =
+  'https://apps.apple.com/app/id6775811683?action=write-review';
 
 type ProfileScreenProps = {
   onSignIn?: () => void;
@@ -95,9 +106,41 @@ function StatusBadge({
   );
 }
 
+function showReviewUnavailableAlert() {
+  Alert.alert(
+    'Review unavailable',
+    'RetTrack is not available on the App Store yet. Please try again after release.',
+  );
+}
+
+async function openRetTrackReview() {
+  try {
+    const canOpenReviewUrl = await Linking.canOpenURL(APP_STORE_REVIEW_URL);
+
+    if (!canOpenReviewUrl) {
+      showReviewUnavailableAlert();
+      return;
+    }
+
+    await Linking.openURL(APP_STORE_REVIEW_URL);
+  } catch {
+    showReviewUnavailableAlert();
+  }
+}
+
 function RateRetTrackCard() {
   return (
-    <View style={styles.ratingCard}>
+    <Pressable
+      accessibilityLabel="Rate RetTrack on the App Store"
+      accessibilityRole="button"
+      onPress={() => {
+        void openRetTrackReview();
+      }}
+      style={({ pressed }) => [
+        styles.ratingCard,
+        pressed && styles.ratingCardPressed,
+      ]}
+    >
       <AppText style={styles.ratingTitle} variant="body">
         Rate RetTrack
       </AppText>
@@ -109,7 +152,7 @@ function RateRetTrackCard() {
           Rate app
         </AppText>
       </View>
-    </View>
+    </Pressable>
   );
 }
 
@@ -821,6 +864,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.025,
     shadowRadius: 12,
     elevation: 1,
+  },
+  ratingCardPressed: {
+    opacity: 0.82,
   },
   ratingCta: {
     backgroundColor: 'rgba(255, 253, 248, 0.5)',

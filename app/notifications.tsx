@@ -9,6 +9,7 @@ import {
 import { NotificationPermissionScreen } from '../src/features/onboarding/screens/NotificationPermissionScreen';
 import { usePurchases } from '../src/features/purchases/state/PurchasesState';
 import { useAppSettings } from '../src/features/settings/state/AppSettingsState';
+import { useAuth } from '../src/state/AuthState';
 
 export default function NotificationsRoute() {
   const router = useRouter();
@@ -16,15 +17,22 @@ export default function NotificationsRoute() {
   const {
     hasCompletedOnboarding,
     hasHydratedSettings,
+    isSettingsScopeReady,
     notificationPromptStatus,
     persistNotificationPreference,
   } = useAppSettings();
+  const { isAuthenticated, isAuthLoading } = useAuth();
   const { guestPurchaseEntriesUsed, hasHydratedPurchases, purchases } =
     usePurchases();
   const [isDecisionPending, setIsDecisionPending] = useState(false);
   const decisionPendingRef = useRef(false);
   const resolvedSource = Array.isArray(source) ? source[0] : source;
+  const isAuthSource = resolvedSource === 'auth';
   const isGuestSource = resolvedSource === 'guest';
+  const canUseNotificationPreferences =
+    hasHydratedSettings &&
+    isSettingsScopeReady &&
+    (!isAuthSource || (!isAuthLoading && isAuthenticated));
 
   const handleBack = () => {
     if (router.canGoBack()) {
@@ -61,6 +69,7 @@ export default function NotificationsRoute() {
   useEffect(() => {
     if (
       !hasHydratedSettings ||
+      !canUseNotificationPreferences ||
       !hasHydratedPurchases ||
       notificationPromptStatus === 'undecided' ||
       decisionPendingRef.current
@@ -70,6 +79,7 @@ export default function NotificationsRoute() {
 
     continueAfterDecision();
   }, [
+    canUseNotificationPreferences,
     continueAfterDecision,
     hasHydratedPurchases,
     hasHydratedSettings,
@@ -79,7 +89,7 @@ export default function NotificationsRoute() {
   const runNotificationDecision = async (
     applyDecision: () => Promise<void>,
   ) => {
-    if (decisionPendingRef.current) {
+    if (decisionPendingRef.current || !canUseNotificationPreferences) {
       return;
     }
 
@@ -122,6 +132,7 @@ export default function NotificationsRoute() {
 
   if (
     !hasHydratedSettings ||
+    !canUseNotificationPreferences ||
     !hasHydratedPurchases ||
     notificationPromptStatus !== 'undecided'
   ) {
