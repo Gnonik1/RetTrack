@@ -35,6 +35,14 @@
     "plugins": [
       "expo-apple-authentication",
       [
+        "expo-image-picker",
+        {
+          "photosPermission": "RetTrack uses your photo library so you can attach selected receipt or product photos to purchase entries, such as a receipt photo for an item you may return.",
+          "cameraPermission": false,
+          "microphonePermission": false
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "backgroundColor": "#F8F8F3",
