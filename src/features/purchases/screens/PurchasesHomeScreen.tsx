@@ -675,15 +675,12 @@ export function PurchasesHomeScreen({
 }: PurchasesHomeScreenProps) {
   const { purchases, resolvePurchase } = usePurchases();
   const {
-    hasHydratedSettings,
-    notificationPromptStatus,
     remindersEnabled,
     setNotificationPromptStatus,
     setRemindersEnabled,
   } = useAppSettings();
   const [isScrollEnabled, setIsScrollEnabled] = useState(true);
   const [selectedFilter, setSelectedFilter] = useState<FilterKey>('active');
-  const hasShownNotificationPromptRef = useRef(false);
   const selectedFilterIndex = filterItems.findIndex(
     (filterItem) => filterItem.key === selectedFilter,
   );
@@ -775,20 +772,6 @@ export function PurchasesHomeScreen({
       ],
     );
   }, [remindersEnabled, turnOffReminders, turnOnReminders]);
-
-  useEffect(() => {
-    if (!hasHydratedSettings || notificationPromptStatus !== 'undecided') {
-      hasShownNotificationPromptRef.current = false;
-      return;
-    }
-
-    if (hasShownNotificationPromptRef.current) {
-      return;
-    }
-
-    hasShownNotificationPromptRef.current = true;
-    showNotificationStatus().catch(() => undefined);
-  }, [hasHydratedSettings, notificationPromptStatus, showNotificationStatus]);
 
   useEffect(() => {
     const transitionAnimation = Animated.timing(tabTransition, {
