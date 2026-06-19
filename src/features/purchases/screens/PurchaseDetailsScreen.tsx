@@ -5,6 +5,7 @@ import {
   Alert,
   FlatList,
   Image,
+  Linking,
   Modal,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
@@ -151,6 +152,24 @@ function getUniquePhotoUris(photoUris?: string[]) {
 
 function isLocalPreviewUri(photoUri: string) {
   return photoUri.startsWith('file:') || photoUri.startsWith('content:');
+}
+
+function getOpenableProductLink(productLink: string) {
+  const trimmedProductLink = productLink.trim();
+
+  if (!trimmedProductLink) {
+    return null;
+  }
+
+  if (/^https?:\/\//i.test(trimmedProductLink)) {
+    return trimmedProductLink;
+  }
+
+  if (/^[a-z][a-z0-9+.-]*:/i.test(trimmedProductLink)) {
+    return null;
+  }
+
+  return `https://${trimmedProductLink}`;
 }
 
 export function PurchaseDetailsScreen({
@@ -334,6 +353,37 @@ export function PurchaseDetailsScreen({
   const canResolveItem =
     purchaseDetails.status === 'active' || purchaseDetails.status === 'pending';
   const hasComment = Boolean(purchaseDetails.comment?.trim().length);
+  const productLink = purchaseDetails.productLink?.trim() ?? '';
+  const hasProductLink = Boolean(productLink);
+  const showProductLinkError = () => {
+    Alert.alert(
+      'Unable to open link',
+      'This product link is invalid or cannot be opened.',
+    );
+  };
+  const handleOpenProductLink = async () => {
+    const openableProductLink = getOpenableProductLink(
+      purchaseDetails.productLink ?? '',
+    );
+
+    if (!openableProductLink) {
+      showProductLinkError();
+      return;
+    }
+
+    try {
+      const canOpenProductLink = await Linking.canOpenURL(openableProductLink);
+
+      if (!canOpenProductLink) {
+        showProductLinkError();
+        return;
+      }
+
+      await Linking.openURL(openableProductLink);
+    } catch {
+      showProductLinkError();
+    }
+  };
   const handleDeletePurchase = () => {
     Alert.alert('Delete purchase?', 'This will remove this item from RetTrack.', [
       {
@@ -506,6 +556,30 @@ export function PurchaseDetailsScreen({
                 );
               })}
             </View>
+
+            {hasProductLink ? (
+              <Pressable
+                accessibilityLabel={`Open product link ${productLink}`}
+                accessibilityRole="link"
+                onPress={handleOpenProductLink}
+                style={({ pressed }) => [
+                  styles.commentBlock,
+                  pressed && styles.controlPressed,
+                ]}
+              >
+                <AppText style={styles.commentLabel} variant="caption">
+                  Product link
+                </AppText>
+                <AppText
+                  ellipsizeMode="tail"
+                  numberOfLines={1}
+                  style={styles.commentText}
+                  variant="body"
+                >
+                  {productLink}
+                </AppText>
+              </Pressable>
+            ) : null}
 
             {hasComment ? (
               <View style={styles.commentBlock}>
