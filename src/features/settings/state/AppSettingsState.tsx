@@ -6,9 +6,16 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 
+import {
+  advanceHomeReminderNudgeForEligibleDay,
+  createResetHomeReminderNudgeState,
+  loadHomeReminderNudgeState,
+  saveHomeReminderNudgeState,
+} from '../../notifications/homeReminderNudge';
 import { useAuth } from '../../../state/AuthState';
 
 export const currencyOptions = [
@@ -42,16 +49,20 @@ type NotificationPreference = {
 };
 
 type AppSettingsStateValue = {
+  appSettingsScopeKey: string | null;
   completeOnboarding: () => void;
   defaultCurrency: CurrencyCode;
   hasCompletedOnboarding: boolean;
   hasHydratedSettings: boolean;
+  isHomeReminderNudgeScopeReady: boolean;
   isSettingsScopeReady: boolean;
   notificationPromptStatus: NotificationPromptStatus;
   persistNotificationPreference: (
     preference: NotificationPreference,
   ) => Promise<void>;
+  recordEligibleHomeReminderDay: () => Promise<boolean>;
   remindersEnabled: boolean;
+  resetHomeReminderNudge: () => Promise<boolean>;
   setDefaultCurrency: (currency: CurrencyCode) => void;
   setNotificationPromptStatus: (status: NotificationPromptStatus) => void;
   setRemindersEnabled: (isEnabled: boolean) => void;
@@ -295,10 +306,29 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
   const [hydratedSettingsScopeKey, setHydratedSettingsScopeKey] = useState<
     string | null
   >(null);
+  const [
+    hydratedHomeReminderNudgeScopeKey,
+    setHydratedHomeReminderNudgeScopeKey,
+  ] = useState<string | null>(null);
+  const [
+    failedHomeReminderNudgeScopeKey,
+    setFailedHomeReminderNudgeScopeKey,
+  ] = useState<string | null>(null);
+  const appSettingsScopeKeyRef = useRef<string | null>(appSettingsScopeKey);
+  const isHomeReminderNudgeScopeReadyRef = useRef(false);
+  const isHomeReminderNudgeOperationPendingRef = useRef(false);
   const isSettingsScopeReady =
     hasHydratedSettings &&
     appSettingsScopeKey !== null &&
     hydratedSettingsScopeKey === appSettingsScopeKey;
+  const isHomeReminderNudgeScopeReady =
+    isSettingsScopeReady &&
+    hydratedHomeReminderNudgeScopeKey === appSettingsScopeKey &&
+    failedHomeReminderNudgeScopeKey !== appSettingsScopeKey;
+
+  appSettingsScopeKeyRef.current = appSettingsScopeKey;
+  isHomeReminderNudgeScopeReadyRef.current =
+    isHomeReminderNudgeScopeReady;
 
   useEffect(() => {
     if (appSettingsScopeKey === null) {
@@ -344,6 +374,49 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
       isMounted = false;
     };
   }, [appSettingsScopeKey]);
+
+  useEffect(() => {
+    if (!isSettingsScopeReady || appSettingsScopeKey === null) {
+      setHydratedHomeReminderNudgeScopeKey(null);
+      setFailedHomeReminderNudgeScopeKey(null);
+      return;
+    }
+
+    let isMounted = true;
+    const scopeKey = appSettingsScopeKey;
+
+    setHydratedHomeReminderNudgeScopeKey(null);
+    setFailedHomeReminderNudgeScopeKey(null);
+
+    const hydrateHomeReminderNudgeScope = async () => {
+      try {
+        await loadHomeReminderNudgeState(scopeKey);
+
+        if (
+          !isMounted ||
+          appSettingsScopeKeyRef.current !== scopeKey
+        ) {
+          return;
+        }
+
+        setHydratedHomeReminderNudgeScopeKey(scopeKey);
+      } catch {
+        if (
+          isMounted &&
+          appSettingsScopeKeyRef.current === scopeKey
+        ) {
+          isHomeReminderNudgeScopeReadyRef.current = false;
+          setFailedHomeReminderNudgeScopeKey(scopeKey);
+        }
+      }
+    };
+
+    hydrateHomeReminderNudgeScope();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [appSettingsScopeKey, isSettingsScopeReady]);
 
   useEffect(() => {
     if (!hasHydratedSettings) {
@@ -463,29 +536,126 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
     [appSettingsScopeKey, hydratedSettingsScopeKey],
   );
 
+  const markHomeReminderNudgeScopeFailed = useCallback((scopeKey: string) => {
+    if (appSettingsScopeKeyRef.current !== scopeKey) {
+      return;
+    }
+
+    isHomeReminderNudgeScopeReadyRef.current = false;
+    setHydratedHomeReminderNudgeScopeKey(null);
+    setFailedHomeReminderNudgeScopeKey(scopeKey);
+  }, []);
+
+  const recordEligibleHomeReminderDay = useCallback(async () => {
+    const scopeKey = appSettingsScopeKeyRef.current;
+
+    if (
+      scopeKey === null ||
+      !isHomeReminderNudgeScopeReadyRef.current ||
+      isHomeReminderNudgeOperationPendingRef.current
+    ) {
+      return false;
+    }
+
+    isHomeReminderNudgeOperationPendingRef.current = true;
+
+    try {
+      const currentState = await loadHomeReminderNudgeState(scopeKey);
+
+      if (
+        appSettingsScopeKeyRef.current !== scopeKey ||
+        !isHomeReminderNudgeScopeReadyRef.current
+      ) {
+        return false;
+      }
+
+      const result =
+        advanceHomeReminderNudgeForEligibleDay(currentState);
+
+      await saveHomeReminderNudgeState(scopeKey, result.state);
+
+      if (
+        appSettingsScopeKeyRef.current !== scopeKey ||
+        !isHomeReminderNudgeScopeReadyRef.current
+      ) {
+        return false;
+      }
+
+      return result.shouldPresent;
+    } catch {
+      markHomeReminderNudgeScopeFailed(scopeKey);
+      return false;
+    } finally {
+      isHomeReminderNudgeOperationPendingRef.current = false;
+    }
+  }, [markHomeReminderNudgeScopeFailed]);
+
+  const resetHomeReminderNudge = useCallback(async () => {
+    const scopeKey = appSettingsScopeKeyRef.current;
+
+    if (
+      scopeKey === null ||
+      !isHomeReminderNudgeScopeReadyRef.current ||
+      isHomeReminderNudgeOperationPendingRef.current
+    ) {
+      return false;
+    }
+
+    isHomeReminderNudgeOperationPendingRef.current = true;
+
+    try {
+      await saveHomeReminderNudgeState(
+        scopeKey,
+        createResetHomeReminderNudgeState(),
+      );
+
+      if (
+        appSettingsScopeKeyRef.current !== scopeKey ||
+        !isHomeReminderNudgeScopeReadyRef.current
+      ) {
+        return false;
+      }
+
+      return true;
+    } catch {
+      markHomeReminderNudgeScopeFailed(scopeKey);
+      return false;
+    } finally {
+      isHomeReminderNudgeOperationPendingRef.current = false;
+    }
+  }, [markHomeReminderNudgeScopeFailed]);
+
   const value = useMemo(
     () => ({
+      appSettingsScopeKey,
       completeOnboarding,
       defaultCurrency,
       hasCompletedOnboarding,
       hasHydratedSettings,
+      isHomeReminderNudgeScopeReady,
       isSettingsScopeReady,
       notificationPromptStatus,
       persistNotificationPreference,
+      recordEligibleHomeReminderDay,
       remindersEnabled,
+      resetHomeReminderNudge,
       setDefaultCurrency,
       setNotificationPromptStatus,
       setRemindersEnabled,
     }),
     [
+      appSettingsScopeKey,
       completeOnboarding,
       defaultCurrency,
       hasCompletedOnboarding,
       hasHydratedSettings,
+      isHomeReminderNudgeScopeReady,
       isSettingsScopeReady,
       notificationPromptStatus,
       persistNotificationPreference,
+      recordEligibleHomeReminderDay,
       remindersEnabled,
+      resetHomeReminderNudge,
       setDefaultCurrency,
       setNotificationPromptStatus,
       setRemindersEnabled,
