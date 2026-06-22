@@ -85,6 +85,7 @@ type PurchasesStateValue = {
   guestPurchaseEntriesUsed: number;
   hasHydratedPurchases: boolean;
   isGuestAddLimitReached: boolean;
+  isPurchasesScopeReady: boolean;
   purchases: MockPurchase[];
   resolvePurchase: (itemId: string, status: ResolvedPurchaseStatus) => void;
   updatePurchase: (itemId: string, input: AddPurchaseInput) => void;
@@ -2166,6 +2167,10 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
   const [hydratedPurchaseScopeKey, setHydratedPurchaseScopeKey] = useState<
     string | null
   >(null);
+  const isPurchasesScopeReady =
+    hasHydratedPurchases &&
+    purchaseScopeKey !== null &&
+    hydratedPurchaseScopeKey === purchaseScopeKey;
   const hasSkippedInitialPersistRef = useRef(false);
   const lastReminderPurchasesRef = useRef<MockPurchase[] | null>(null);
   const pendingLocalTombstonesRef = useRef<MockPurchase[]>([]);
@@ -3156,6 +3161,7 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
       guestPurchaseEntriesUsed,
       hasHydratedPurchases,
       isGuestAddLimitReached,
+      isPurchasesScopeReady,
       purchases,
       resolvePurchase,
       updatePurchase,
@@ -3169,6 +3175,7 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
       guestPurchaseEntriesUsed,
       hasHydratedPurchases,
       isGuestAddLimitReached,
+      isPurchasesScopeReady,
       purchases,
       resolvePurchase,
       updatePurchase,
