@@ -315,8 +315,12 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
     setFailedHomeReminderNudgeScopeKey,
   ] = useState<string | null>(null);
   const appSettingsScopeKeyRef = useRef<string | null>(appSettingsScopeKey);
+  const failedHomeReminderNudgeScopeKeyRef = useRef<string | null>(
+    failedHomeReminderNudgeScopeKey,
+  );
   const isHomeReminderNudgeScopeReadyRef = useRef(false);
   const isHomeReminderNudgeOperationPendingRef = useRef(false);
+  const isSettingsScopeReadyRef = useRef(false);
   const isSettingsScopeReady =
     hasHydratedSettings &&
     appSettingsScopeKey !== null &&
@@ -327,8 +331,11 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
     failedHomeReminderNudgeScopeKey !== appSettingsScopeKey;
 
   appSettingsScopeKeyRef.current = appSettingsScopeKey;
+  failedHomeReminderNudgeScopeKeyRef.current =
+    failedHomeReminderNudgeScopeKey;
   isHomeReminderNudgeScopeReadyRef.current =
     isHomeReminderNudgeScopeReady;
+  isSettingsScopeReadyRef.current = isSettingsScopeReady;
 
   useEffect(() => {
     if (appSettingsScopeKey === null) {
@@ -386,6 +393,7 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
     const scopeKey = appSettingsScopeKey;
 
     setHydratedHomeReminderNudgeScopeKey(null);
+    failedHomeReminderNudgeScopeKeyRef.current = null;
     setFailedHomeReminderNudgeScopeKey(null);
 
     const hydrateHomeReminderNudgeScope = async () => {
@@ -403,9 +411,11 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
       } catch {
         if (
           isMounted &&
-          appSettingsScopeKeyRef.current === scopeKey
+          appSettingsScopeKeyRef.current === scopeKey &&
+          !isHomeReminderNudgeOperationPendingRef.current
         ) {
           isHomeReminderNudgeScopeReadyRef.current = false;
+          failedHomeReminderNudgeScopeKeyRef.current = scopeKey;
           setFailedHomeReminderNudgeScopeKey(scopeKey);
         }
       }
@@ -542,6 +552,7 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
     }
 
     isHomeReminderNudgeScopeReadyRef.current = false;
+    failedHomeReminderNudgeScopeKeyRef.current = scopeKey;
     setHydratedHomeReminderNudgeScopeKey(null);
     setFailedHomeReminderNudgeScopeKey(scopeKey);
   }, []);
@@ -595,7 +606,8 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
 
     if (
       scopeKey === null ||
-      !isHomeReminderNudgeScopeReadyRef.current ||
+      !isSettingsScopeReadyRef.current ||
+      failedHomeReminderNudgeScopeKeyRef.current === scopeKey ||
       isHomeReminderNudgeOperationPendingRef.current
     ) {
       return false;
@@ -611,10 +623,17 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
 
       if (
         appSettingsScopeKeyRef.current !== scopeKey ||
-        !isHomeReminderNudgeScopeReadyRef.current
+        !isSettingsScopeReadyRef.current
       ) {
         return false;
       }
+
+      failedHomeReminderNudgeScopeKeyRef.current = null;
+      isHomeReminderNudgeScopeReadyRef.current = true;
+      setFailedHomeReminderNudgeScopeKey((failedScopeKey) =>
+        failedScopeKey === scopeKey ? null : failedScopeKey,
+      );
+      setHydratedHomeReminderNudgeScopeKey(scopeKey);
 
       return true;
     } catch {
