@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Animated,
+  AppState,
   Image,
   PanResponder,
   Pressable,
@@ -14,6 +15,8 @@ import {
 import { AppScreen } from '../../../components/AppScreen';
 import { AppText } from '../../../components/AppText';
 import { theme } from '../../../constants/theme';
+import { useAuth } from '../../../state/AuthState';
+import { getDelayUntilNextLocalHomeDay } from '../../notifications/homeReminderNudge';
 import {
   cancelAllScheduledAppReminders,
   getNotificationPermissionsStatus,
@@ -33,6 +36,7 @@ import {
   formatCompactDate,
   getCompactReturnDate,
   getDateSortValue,
+  getPurchaseReturnDate,
   getReturnDateUrgency,
 } from '../utils/purchaseDates';
 
@@ -671,20 +675,38 @@ function PurchaseCard({
 }
 
 export function PurchasesHomeScreen({
+  isHomeRouteSettled,
   onAddItem,
   onPurchasePress,
 }: PurchasesHomeScreenProps) {
-  const { purchases, resolvePurchase } = usePurchases();
+  const { isAuthLoading } = useAuth();
+  const { isPurchasesScopeReady, purchases, resolvePurchase } = usePurchases();
   const {
+    appSettingsScopeKey,
+    hasCompletedOnboarding,
+    hasHydratedSettings,
+    isHomeReminderNudgeScopeReady,
+    isSettingsScopeReady,
+    notificationPromptStatus,
+    recordEligibleHomeReminderDay,
     remindersEnabled,
+    resetHomeReminderNudge,
     setNotificationPromptStatus,
     setRemindersEnabled,
   } = useAppSettings();
   const [isScrollEnabled, setIsScrollEnabled] = useState(true);
   const [selectedFilter, setSelectedFilter] = useState<FilterKey>('active');
+  const [automaticNudgeEvaluationVersion, setAutomaticNudgeEvaluationVersion] =
+    useState(0);
   const selectedFilterIndex = filterItems.findIndex(
     (filterItem) => filterItem.key === selectedFilter,
   );
+  const automaticNudgeEvaluationGenerationRef = useRef(0);
+  const automaticNudgeEvaluationQueuedRef = useRef(false);
+  const isAutomaticNudgeEvaluationRunningRef = useRef(false);
+  const isAutomaticNudgeEvaluatorMountedRef = useRef(true);
+  const hasPresentedAutomaticNudgeThisForegroundRef = useRef(false);
+  const previousAppStateRef = useRef(AppState.currentState);
   const gestureLock = useRef<GestureLock>('undecided');
   const tabTransition = useRef(new Animated.Value(1)).current;
   const transitionDirection = useRef(1);
@@ -697,7 +719,43 @@ export function PurchasesHomeScreen({
     () => getVisiblePurchaseItems(purchases, selectedFilter),
     [purchases, selectedFilter],
   );
+  const hasReminderEligiblePurchase = useMemo(
+    () =>
+      purchases.some(
+        (purchase) =>
+          (purchase.status === 'active' || purchase.status === 'pending') &&
+          getPurchaseReturnDate(purchase) !== null,
+      ),
+    [purchases],
+  );
   const sectionHeading = sectionHeadings[selectedFilter];
+  const automaticNudgeContextRef = useRef({
+    appSettingsScopeKey,
+    hasCompletedOnboarding,
+    hasHydratedSettings,
+    hasReminderEligiblePurchase,
+    isAuthLoading,
+    isHomeReminderNudgeScopeReady,
+    isHomeRouteSettled,
+    isPurchasesScopeReady,
+    isSettingsScopeReady,
+    notificationPromptStatus,
+    remindersEnabled,
+  });
+
+  automaticNudgeContextRef.current = {
+    appSettingsScopeKey,
+    hasCompletedOnboarding,
+    hasHydratedSettings,
+    hasReminderEligiblePurchase,
+    isAuthLoading,
+    isHomeReminderNudgeScopeReady,
+    isHomeRouteSettled,
+    isPurchasesScopeReady,
+    isSettingsScopeReady,
+    notificationPromptStatus,
+    remindersEnabled,
+  };
   const selectFilter = useCallback(
     (nextFilter: FilterKey) => {
       if (nextFilter === selectedFilter) {
@@ -732,7 +790,52 @@ export function PurchasesHomeScreen({
     if (!isGranted) {
       await cancelAllScheduledAppReminders();
     }
+
+    return isGranted;
   }, [setNotificationPromptStatus, setRemindersEnabled]);
+
+  const silentlyResetHomeReminderNudge = useCallback(async () => {
+    try {
+      await resetHomeReminderNudge();
+    } catch {
+      // Automatic nudge cleanup must never surface an error in Home.
+    }
+  }, [resetHomeReminderNudge]);
+
+  const showAutomaticReminderNudge = useCallback(() => {
+    Alert.alert(
+      'Reminders are off',
+      'Turn on reminders before return dates and pending decisions',
+      [
+        {
+          onPress: () => {
+            turnOnReminders()
+              .then((isGranted) => {
+                if (!isGranted) {
+                  return silentlyResetHomeReminderNudge();
+                }
+
+                return undefined;
+              })
+              .catch(() => undefined);
+          },
+          text: 'Turn on reminders',
+        },
+        {
+          onPress: () => {
+            turnOffReminders();
+            void silentlyResetHomeReminderNudge();
+          },
+          style: 'cancel',
+          text: 'Not now',
+        },
+      ],
+    );
+  }, [
+    silentlyResetHomeReminderNudge,
+    turnOffReminders,
+    turnOnReminders,
+  ]);
 
   const showNotificationStatus = useCallback(async () => {
     const status = await getNotificationPermissionsStatus();
@@ -773,6 +876,186 @@ export function PurchasesHomeScreen({
       ],
     );
   }, [remindersEnabled, turnOffReminders, turnOnReminders]);
+
+  const isAutomaticNudgeContextEligible = useCallback(
+    (expectedScopeKey?: string) => {
+      const context = automaticNudgeContextRef.current;
+
+      return (
+        AppState.currentState === 'active' &&
+        context.isHomeRouteSettled &&
+        !context.isAuthLoading &&
+        context.hasHydratedSettings &&
+        context.isSettingsScopeReady &&
+        context.appSettingsScopeKey !== null &&
+        (expectedScopeKey === undefined ||
+          context.appSettingsScopeKey === expectedScopeKey) &&
+        context.isHomeReminderNudgeScopeReady &&
+        context.isPurchasesScopeReady &&
+        context.hasCompletedOnboarding &&
+        context.notificationPromptStatus !== 'undecided' &&
+        context.hasReminderEligiblePurchase &&
+        !hasPresentedAutomaticNudgeThisForegroundRef.current
+      );
+    },
+    [],
+  );
+
+  useEffect(() => {
+    isAutomaticNudgeEvaluatorMountedRef.current = true;
+    const appStateSubscription = AppState.addEventListener(
+      'change',
+      (nextAppState) => {
+        const previousAppState = previousAppStateRef.current;
+
+        previousAppStateRef.current = nextAppState;
+        automaticNudgeEvaluationGenerationRef.current += 1;
+
+        if (previousAppState !== 'active' && nextAppState === 'active') {
+          hasPresentedAutomaticNudgeThisForegroundRef.current = false;
+          setAutomaticNudgeEvaluationVersion((version) => version + 1);
+        }
+      },
+    );
+
+    return () => {
+      isAutomaticNudgeEvaluatorMountedRef.current = false;
+      automaticNudgeEvaluationGenerationRef.current += 1;
+      appStateSubscription.remove();
+    };
+  }, []);
+
+  useEffect(() => {
+    automaticNudgeEvaluationGenerationRef.current += 1;
+    const evaluationGeneration =
+      automaticNudgeEvaluationGenerationRef.current;
+    let midnightTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const runAutomaticNudgeEvaluation = async () => {
+      if (!isAutomaticNudgeContextEligible()) {
+        return;
+      }
+
+      if (isAutomaticNudgeEvaluationRunningRef.current) {
+        automaticNudgeEvaluationQueuedRef.current = true;
+        return;
+      }
+
+      isAutomaticNudgeEvaluationRunningRef.current = true;
+      const scopeKey =
+        automaticNudgeContextRef.current.appSettingsScopeKey;
+
+      if (scopeKey === null) {
+        isAutomaticNudgeEvaluationRunningRef.current = false;
+        return;
+      }
+
+      try {
+        const permissionStatus = await getNotificationPermissionsStatus();
+
+        if (
+          automaticNudgeEvaluationGenerationRef.current !==
+            evaluationGeneration ||
+          permissionStatus === null ||
+          !isAutomaticNudgeContextEligible(scopeKey)
+        ) {
+          return;
+        }
+
+        const contextAfterPermission = automaticNudgeContextRef.current;
+        const remindersEffectivelyOn =
+          contextAfterPermission.remindersEnabled &&
+          permissionStatus.granted === true;
+
+        if (remindersEffectivelyOn) {
+          return;
+        }
+
+        const shouldPresent = await recordEligibleHomeReminderDay();
+
+        if (
+          !shouldPresent ||
+          automaticNudgeEvaluationGenerationRef.current !==
+            evaluationGeneration ||
+          !isAutomaticNudgeContextEligible(scopeKey)
+        ) {
+          return;
+        }
+
+        const revalidatedPermissionStatus =
+          await getNotificationPermissionsStatus();
+
+        if (
+          automaticNudgeEvaluationGenerationRef.current !==
+            evaluationGeneration ||
+          revalidatedPermissionStatus === null ||
+          !isAutomaticNudgeContextEligible(scopeKey)
+        ) {
+          return;
+        }
+
+        const revalidatedContext = automaticNudgeContextRef.current;
+        const remindersBecameEffectivelyOn =
+          revalidatedContext.remindersEnabled &&
+          revalidatedPermissionStatus.granted === true;
+
+        if (
+          remindersBecameEffectivelyOn ||
+          !revalidatedContext.hasReminderEligiblePurchase
+        ) {
+          return;
+        }
+
+        hasPresentedAutomaticNudgeThisForegroundRef.current = true;
+        showAutomaticReminderNudge();
+      } catch {
+        // Any evaluator uncertainty fails closed without affecting Home.
+      } finally {
+        isAutomaticNudgeEvaluationRunningRef.current = false;
+
+        if (automaticNudgeEvaluationQueuedRef.current) {
+          automaticNudgeEvaluationQueuedRef.current = false;
+
+          if (isAutomaticNudgeEvaluatorMountedRef.current) {
+            setAutomaticNudgeEvaluationVersion((version) => version + 1);
+          }
+        }
+      }
+    };
+
+    if (isAutomaticNudgeContextEligible()) {
+      void runAutomaticNudgeEvaluation();
+      midnightTimer = setTimeout(
+        () =>
+          setAutomaticNudgeEvaluationVersion((version) => version + 1),
+        getDelayUntilNextLocalHomeDay() + 50,
+      );
+    }
+
+    return () => {
+      automaticNudgeEvaluationGenerationRef.current += 1;
+
+      if (midnightTimer !== null) {
+        clearTimeout(midnightTimer);
+      }
+    };
+  }, [
+    appSettingsScopeKey,
+    automaticNudgeEvaluationVersion,
+    hasCompletedOnboarding,
+    hasHydratedSettings,
+    hasReminderEligiblePurchase,
+    isAuthLoading,
+    isAutomaticNudgeContextEligible,
+    isHomeReminderNudgeScopeReady,
+    isHomeRouteSettled,
+    isPurchasesScopeReady,
+    isSettingsScopeReady,
+    notificationPromptStatus,
+    recordEligibleHomeReminderDay,
+    remindersEnabled,
+    showAutomaticReminderNudge,
+  ]);
 
   useEffect(() => {
     const transitionAnimation = Animated.timing(tabTransition, {
