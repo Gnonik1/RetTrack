@@ -37,6 +37,7 @@ import {
 } from '../utils/purchaseDates';
 
 type PurchasesHomeScreenProps = {
+  isHomeRouteSettled: boolean;
   onAddItem?: () => void;
   onPurchasePress?: (itemId: string) => void;
 };
