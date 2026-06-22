@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import { getHomeReminderNudgeStorageKey } from '../features/notifications/homeReminderNudge';
 import { cancelAllScheduledAppReminders } from '../features/notifications/notifications';
 import {
   deleteCopiedPurchasePhotoFiles,
@@ -58,6 +59,7 @@ function getAccountScopedLocalStorageKeys(userId: string) {
     `${ONBOARDING_COMPLETION_STORAGE_KEY_PREFIX}:${scopeKey}`,
     `${NOTIFICATION_PROMPT_STATUS_STORAGE_KEY_PREFIX}:${scopeKey}`,
     `${REMINDERS_ENABLED_STORAGE_KEY_PREFIX}:${scopeKey}`,
+    getHomeReminderNudgeStorageKey(scopeKey),
   ];
 }
 
