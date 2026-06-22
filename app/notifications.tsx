@@ -20,6 +20,7 @@ export default function NotificationsRoute() {
     isSettingsScopeReady,
     notificationPromptStatus,
     persistNotificationPreference,
+    resetHomeReminderNudge,
   } = useAppSettings();
   const { isAuthenticated, isAuthLoading } = useAuth();
   const { guestPurchaseEntriesUsed, hasHydratedPurchases, purchases } =
@@ -105,6 +106,14 @@ export default function NotificationsRoute() {
     }
   };
 
+  const silentlyResetHomeReminderNudge = async () => {
+    try {
+      await resetHomeReminderNudge();
+    } catch {
+      // Nudge reset must never block notification onboarding.
+    }
+  };
+
   const handleEnableNotifications = async () => {
     await runNotificationDecision(async () => {
       const isGranted = await requestNotificationPermissions();
@@ -116,6 +125,7 @@ export default function NotificationsRoute() {
 
       if (!isGranted) {
         await cancelAllScheduledAppReminders();
+        await silentlyResetHomeReminderNudge();
       }
     });
   };
@@ -127,6 +137,7 @@ export default function NotificationsRoute() {
         remindersEnabled: false,
       });
       await cancelAllScheduledAppReminders();
+      await silentlyResetHomeReminderNudge();
     });
   };
 

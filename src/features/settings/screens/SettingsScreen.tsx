@@ -383,6 +383,7 @@ export function SettingsScreen() {
   const {
     defaultCurrency,
     remindersEnabled,
+    resetHomeReminderNudge,
     setDefaultCurrency,
     setNotificationPromptStatus,
     setRemindersEnabled,
@@ -429,10 +430,19 @@ export function SettingsScreen() {
     setDefaultCurrency(currency);
   };
 
-  const turnOffReminders = () => {
+  const silentlyResetHomeReminderNudge = async () => {
+    try {
+      await resetHomeReminderNudge();
+    } catch {
+      // Nudge reset must never block reminder preference changes.
+    }
+  };
+
+  const turnOffReminders = async () => {
     setRemindersEnabled(false);
     setNotificationPromptStatus('dismissed');
     cancelAllScheduledAppReminders().catch(() => undefined);
+    await silentlyResetHomeReminderNudge();
   };
 
   const turnOnReminders = async () => {
@@ -443,16 +453,17 @@ export function SettingsScreen() {
 
     if (!isGranted) {
       await cancelAllScheduledAppReminders();
+      await silentlyResetHomeReminderNudge();
     }
   };
 
-  const handleReminderPreferenceChange = (isEnabled: boolean) => {
+  const handleReminderPreferenceChange = async (isEnabled: boolean) => {
     if (!isEnabled) {
-      turnOffReminders();
+      await turnOffReminders();
       return;
     }
 
-    turnOnReminders().catch(() => undefined);
+    await turnOnReminders().catch(() => undefined);
   };
 
   const handleShareRetTrack = async () => {
