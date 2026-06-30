@@ -45,10 +45,12 @@
 
 ## Purchases / Photos
 
-- Signed-in photo upload/sync and 3-photo account UI support are implemented:
-  - Signed-in account users can attach up to 3 photos per item.
-  - Guest mode remains limited to 1 local photo per item.
+- Signed-in photo upload/sync and photo UI support are implemented:
+  - Guest and signed-in Free users can add 1 photo per item.
+  - Existing 2-3 photo items remain visible for legacy/current synced data.
   - Signed-in local purchase photos sync to backend storage and metadata.
+  - Remote hydration cap is intentionally separate from `PRO_PHOTO_LIMIT`. If the Pro photo limit changes in the future, keep legacy/sync cap decisions explicit via `LEGACY_REMOTE_PHOTO_CAP` or a renamed successor constant.
+  - Open risk: `purchasePhotoSyncService` replacement sync is non-atomic. Current flow may involve upload/delete/update steps and should be reviewed separately before broader photo sync changes.
 - Local copied photo cleanup completed:
   - Purchase delete/edit flows now delete unreferenced app-owned copied local photo files after purchase persistence succeeds.
   - Cleanup is best-effort and does not block purchase delete/edit.
@@ -57,7 +59,7 @@
 - Re-test purchase photo behavior in an iOS development build/TestFlight before public App Store submission:
   - Re-test purchase delete/edit copied photo cleanup.
   - Re-test signed-in photo upload/sync after photo cleanup changes.
-  - Re-test account 3-photo add, replace, remove, reorder, and display behavior.
+  - Re-test Free 1-photo add/block behavior plus legacy 2-3 photo replace, remove, reorder, and display behavior.
   - Review photo permissions and iOS behavior before production release.
 
 ## Profile and Settings refinement
@@ -206,7 +208,7 @@ These are not launch blockers for build 1.0.0 (9).
   - Google account chooser fix is committed.
   - Account deletion deployment, live backend QA, and local cleanup are completed.
   - Purchase delete/edit copied local photo cleanup is completed.
-  - Signed-in photo upload/sync support and 3-photo account UI support are implemented.
+  - Signed-in photo upload/sync support and plan-ready photo limits are implemented.
 - App Store presentation completed locally:
   - App Store screenshots are approved.
   - Approved screenshot set/order:

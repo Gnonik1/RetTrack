@@ -447,7 +447,7 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
               <View style={styles.featureLine}>
                 <View style={styles.featureDot} />
                 <AppText style={styles.featureText} variant="caption">
-                  Up to 3 photos per item
+                  Photos, notes, and return dates
                 </AppText>
               </View>
             </View>
@@ -503,7 +503,7 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
                 <View style={styles.benefitRow}>
                   <View style={styles.benefitDot} />
                   <AppText style={styles.benefitText} variant="caption">
-                    Up to 3 photos per item
+                    Photos, notes, and return dates
                   </AppText>
                 </View>
                 <View style={styles.benefitRow}>

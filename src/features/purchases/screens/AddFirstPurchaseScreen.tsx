@@ -36,9 +36,8 @@ import {
 } from '../../settings/state/AppSettingsState';
 import {
   ACCOUNT_ITEM_LIMIT,
-  ACCOUNT_PHOTO_LIMIT,
+  FREE_PHOTO_LIMIT,
   GUEST_ITEM_LIMIT,
-  GUEST_PHOTO_LIMIT,
 } from '../constants';
 import type { AddPurchaseInput } from '../state/PurchasesState';
 import {
@@ -379,12 +378,8 @@ export function AddFirstPurchaseScreen({
     initialValues,
     isEditMode ? null : initialPurchaseDate,
   );
-  const photoLimit =
-    photoLimitOverride ?? (isSignedIn ? ACCOUNT_PHOTO_LIMIT : GUEST_PHOTO_LIMIT);
-  const initialPhotoUris = (initialValues?.photoUris ?? []).slice(
-    0,
-    photoLimit,
-  );
+  const photoLimit = photoLimitOverride ?? FREE_PHOTO_LIMIT;
+  const initialPhotoUris = initialValues?.photoUris ?? [];
   const [itemName, setItemName] = useState(initialValues?.itemName ?? '');
   const [store, setStore] = useState(initialValues?.store ?? '');
   const [productLink, setProductLink] = useState(
@@ -488,9 +483,9 @@ export function AddFirstPurchaseScreen({
   const draftPhotoCount = draftPhotos.length;
   const draftPhotoUri = draftPhotos[0]?.uri;
   const remainingPhotoSlots = Math.max(photoLimit - photoUris.length, 0);
-  const photoLimitCaption = photoLimit === ACCOUNT_PHOTO_LIMIT
-    ? `You can attach up to ${ACCOUNT_PHOTO_LIMIT} photos per item.`
-    : 'Guest mode supports 1 photo per item.';
+  const photoLimitCaption = `You can attach ${photoLimit} ${
+    photoLimit === 1 ? 'photo' : 'photos'
+  } per item.`;
   const photoCountLabel =
     photoUris.length === 1 ? '1 photo' : `${photoUris.length} photos`;
   const canAddAnotherPhoto = photoUris.length < photoLimit;
@@ -704,7 +699,7 @@ export function AddFirstPurchaseScreen({
 
   const getPurchaseInput = (): AddPurchaseInput => {
     const trimmedPriceAmount = priceAmount.trim();
-    const nextPhotoUris = photoUris.slice(0, photoLimit);
+    const nextPhotoUris = photoUris;
     const nextPhotoRemotePaths = getAlignedPhotoRemotePaths(
       photoRemotePaths,
       nextPhotoUris.length,
@@ -1109,24 +1104,26 @@ export function AddFirstPurchaseScreen({
         photoUris.length,
       );
       const shouldAppendPhotos = isSignedIn && photoPickerMode === 'add';
-      const appendedPhotoUris = validStoredPhotoUris.slice(
+      const appendedPhotoUris = validStoredPhotoUris;
+      const remainingSlots = Math.max(photoLimit - photoUris.length, 0);
+      const allowedAppendedPhotoUris = appendedPhotoUris.slice(
         0,
-        remainingPhotoSlots,
+        remainingSlots,
       );
       const replacementPhotoUri = validStoredPhotoUris[0];
       const nextPhotoUris = shouldAppendPhotos
-        ? [...photoUris, ...appendedPhotoUris].slice(0, photoLimit)
+        ? [...photoUris, ...allowedAppendedPhotoUris]
         : photoUris.length
           ? photoUris.map((photoUri, index) =>
               index === selectedPhotoIndex ? replacementPhotoUri : photoUri,
             )
           : replacementPhotoUri
-            ? [replacementPhotoUri].slice(0, photoLimit)
+            ? [replacementPhotoUri]
             : [];
       const nextPhotoRemotePaths = shouldAppendPhotos
         ? [
             ...currentPhotoRemotePaths,
-            ...appendedPhotoUris.map(() => null),
+            ...allowedAppendedPhotoUris.map(() => null),
           ].slice(0, nextPhotoUris.length)
         : nextPhotoUris.map((_, index) =>
             index === selectedPhotoIndex

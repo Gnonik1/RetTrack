@@ -32,9 +32,8 @@ import { useAuth } from '../../../state/AuthState';
 import { useAppSettings } from '../../settings/state/AppSettingsState';
 import {
   ACCOUNT_ITEM_LIMIT,
-  ACCOUNT_PHOTO_LIMIT,
   GUEST_ITEM_LIMIT,
-  GUEST_PHOTO_LIMIT,
+  LEGACY_REMOTE_PHOTO_CAP,
 } from '../constants';
 import {
   getMockPurchaseById,
@@ -1439,15 +1438,10 @@ function compactText(value?: string) {
   return trimmedValue ? trimmedValue : undefined;
 }
 
-function getPhotoLimit(userId?: string | null) {
-  return userId ? ACCOUNT_PHOTO_LIMIT : GUEST_PHOTO_LIMIT;
-}
-
-function compactPhotoUris(photoUris: string[] | undefined, photoLimit: number) {
+function compactPhotoUris(photoUris: string[] | undefined) {
   const compactUris = photoUris
     ?.map((photoUri) => photoUri.trim())
-    .filter(Boolean)
-    .slice(0, photoLimit);
+    .filter(Boolean);
 
   return compactUris?.length ? compactUris : undefined;
 }
@@ -1609,7 +1603,7 @@ function getCurrentAccountPhotoRows(photoRows: SupabasePurchasePhotoRow[]) {
   });
 
   for (const photoRow of sortedPhotoRows) {
-    if (currentRows.length >= ACCOUNT_PHOTO_LIMIT) {
+    if (currentRows.length >= LEGACY_REMOTE_PHOTO_CAP) {
       break;
     }
 
@@ -2846,10 +2840,7 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
     const store = compactText(input.store) ?? 'Online purchase';
     const productLink = compactText(input.productLink);
     const returnDateFields = getPurchaseDateFields(input);
-    const photoUris = compactPhotoUris(
-      input.photoUris,
-      getPhotoLimit(signedInUserId),
-    );
+    const photoUris = compactPhotoUris(input.photoUris);
     const photoRemotePaths = compactPhotoRemotePaths(
       input.photoRemotePaths,
       photoUris?.length ?? 0,
@@ -3035,10 +3026,7 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    const nextPhotoUris = compactPhotoUris(
-      input.photoUris,
-      getPhotoLimit(signedInUserId),
-    );
+    const nextPhotoUris = compactPhotoUris(input.photoUris);
     const submittedPhotoRemotePaths =
       input.photoRemotePaths === undefined
         ? undefined

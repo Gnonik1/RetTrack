@@ -2,7 +2,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 
 import {
   ACCOUNT_ITEM_LIMIT,
-  GUEST_PHOTO_LIMIT,
+  FREE_PHOTO_LIMIT,
 } from '../src/features/purchases/constants';
 import { AddFirstPurchaseScreen } from '../src/features/purchases/screens/AddFirstPurchaseScreen';
 import { usePurchases } from '../src/features/purchases/state/PurchasesState';
@@ -40,7 +40,7 @@ export default function AddFirstPurchaseRoute() {
       isSignedIn={isAuthenticated}
       onBack={handleBack}
       onLimitSignUp={() => router.push('/sign-up?source=limit')}
-      photoLimitOverride={isGuestSource ? GUEST_PHOTO_LIMIT : undefined}
+      photoLimitOverride={isGuestSource ? FREE_PHOTO_LIMIT : undefined}
       onSaveItem={(input) => {
         if (!isAuthenticated && isGuestAddLimitReached) {
           return false;
