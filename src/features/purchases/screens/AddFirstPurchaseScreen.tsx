@@ -462,11 +462,11 @@ export function AddFirstPurchaseScreen({
     isItemLimitBlockingAdd && !isLimitMessageDismissed;
   const limitTitle =
     activeLimitKind === 'account'
-      ? 'Account limit reached'
+      ? 'Purchase limit reached'
       : 'Guest limit reached';
   const limitBody =
     activeLimitKind === 'account'
-      ? `Your account includes ${ACCOUNT_ITEM_LIMIT} purchase entries.`
+      ? `Your account can keep up to ${ACCOUNT_ITEM_LIMIT} saved purchases`
       : `Guest mode includes ${GUEST_ITEM_LIMIT} purchase entries. Create an account to add more.`;
   const saveSuccessText =
     mode === 'editPurchase' ? 'Purchase updated' : 'Purchase added';

@@ -377,6 +377,22 @@ function hasSharedPurchaseIdentity(
   );
 }
 
+function getSavedPurchaseEntriesUsed(purchases: MockPurchase[]) {
+  const countedPurchaseIdentities = new Set<string>();
+
+  return getVisiblePurchases(purchases).reduce((count, purchase) => {
+    if (hasSharedPurchaseIdentity(purchase, countedPurchaseIdentities)) {
+      return count;
+    }
+
+    getPurchaseIdentityValues(purchase).forEach((value) => {
+      countedPurchaseIdentities.add(value);
+    });
+
+    return count + 1;
+  }, 0);
+}
+
 function getPurchaseIdentitySet(purchases: MockPurchase[]) {
   return new Set(purchases.flatMap(getPurchaseIdentityValues));
 }
@@ -2432,13 +2448,16 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
               remoteTotalEntryCount: remoteTotalEntryCount ?? remoteRows.length,
               storedEntriesUsed: scopedPurchaseSnapshot.guestPurchaseEntriesUsed,
             });
+          const accountSavedPurchaseEntriesUsed = getSavedPurchaseEntriesUsed(
+            visibleAccountPurchasesWithSyncedPhotos,
+          );
           const remoteHydratedSnapshot = {
             guestPurchaseEntriesUsed: reconciledAccountPurchaseEntriesUsed,
             purchases: visibleAccountPurchasesWithSyncedPhotos,
           };
           const nextLastKnownAccountCapacitySnapshot =
             getLastKnownAccountCapacitySnapshot({
-              accountEntriesUsed: reconciledAccountPurchaseEntriesUsed,
+              accountEntriesUsed: accountSavedPurchaseEntriesUsed,
               accountUserId: signedInUserId,
               guestEntriesUsedAtSnapshot:
                 guestPurchaseSnapshot.guestPurchaseEntriesUsed,
@@ -2803,7 +2822,7 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
     [markPurchaseSyncMetadata, signedInUserId],
   );
 
-  const updateLastKnownAccountCapacityAfterAccountAdd = useCallback(
+  const updateLastKnownAccountCapacityAfterAccountChange = useCallback(
     async (accountEntriesUsed: number) => {
       if (!signedInUserId) {
         return;
@@ -2874,8 +2893,8 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
     setGuestPurchaseEntriesUsed((currentEntriesUsed) => currentEntriesUsed + 1);
 
     if (signedInUserId) {
-      void updateLastKnownAccountCapacityAfterAccountAdd(
-        guestPurchaseEntriesUsed + 1,
+      void updateLastKnownAccountCapacityAfterAccountChange(
+        getSavedPurchaseEntriesUsed([datedPurchase, ...purchases]),
       );
     }
 
@@ -2883,10 +2902,10 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
 
     return datedPurchase;
   }, [
-    guestPurchaseEntriesUsed,
+    purchases,
     signedInUserId,
     syncCreatedPurchase,
-    updateLastKnownAccountCapacityAfterAccountAdd,
+    updateLastKnownAccountCapacityAfterAccountChange,
   ]);
 
   const findPurchaseById = useCallback(
@@ -2969,10 +2988,21 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
       return true;
     }
 
+    void updateLastKnownAccountCapacityAfterAccountChange(
+      getSavedPurchaseEntriesUsed(
+        purchases.filter((purchase) => purchase.id !== itemId),
+      ),
+    );
     void syncDeletedPurchase(purchaseToDelete, deletedAt);
 
     return true;
-  }, [purchases, queueCopiedPhotoCleanup, signedInUserId, syncDeletedPurchase]);
+  }, [
+    purchases,
+    queueCopiedPhotoCleanup,
+    signedInUserId,
+    syncDeletedPurchase,
+    updateLastKnownAccountCapacityAfterAccountChange,
+  ]);
 
   const resolvePurchase = useCallback(
     (itemId: string, status: ResolvedPurchaseStatus) => {
@@ -3137,10 +3167,14 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
     [guestPurchaseEntriesUsed, lastKnownAccountCapacitySnapshot],
   );
   const isGuestAddLimitReached = effectiveGuestRemaining <= 0;
+  const accountSavedPurchaseEntriesUsed = useMemo(
+    () => getSavedPurchaseEntriesUsed(purchases),
+    [purchases],
+  );
 
   const value = useMemo(
     () => ({
-      accountPurchaseEntriesUsed: guestPurchaseEntriesUsed,
+      accountPurchaseEntriesUsed: accountSavedPurchaseEntriesUsed,
       addPurchase,
       deletePurchase,
       effectiveGuestRemaining,
@@ -3155,6 +3189,7 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
       updatePurchase,
     }),
     [
+      accountSavedPurchaseEntriesUsed,
       addPurchase,
       deletePurchase,
       effectiveGuestRemaining,

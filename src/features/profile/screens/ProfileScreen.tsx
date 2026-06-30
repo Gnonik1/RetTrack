@@ -434,7 +434,7 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
               </View>
 
               <AppText style={styles.usageTitle} variant="body">
-                {accountPurchaseEntriesUsed} / {ACCOUNT_ITEM_LIMIT} purchase entries used
+                {accountPurchaseEntriesUsed} / {ACCOUNT_ITEM_LIMIT} saved purchases
               </AppText>
               <View style={styles.progressTrack}>
                 <View
@@ -497,7 +497,7 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
                 <View style={styles.benefitRow}>
                   <View style={styles.benefitDot} />
                   <AppText style={styles.benefitText} variant="caption">
-                    Up to {ACCOUNT_ITEM_LIMIT} purchase entries
+                    Up to {ACCOUNT_ITEM_LIMIT} saved purchases
                   </AppText>
                 </View>
                 <View style={styles.benefitRow}>

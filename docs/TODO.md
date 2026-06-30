@@ -32,16 +32,14 @@
 
 ## Purchases / Account Capacity QA
 
-- Stage 3 guest/account capacity boundary QA completed locally:
-  - Account 18/20 correctly limits guest remaining capacity to 2.
-  - Guest can add exactly two purchases.
-  - Third guest add is blocked with the existing limit-full UI.
-  - Guest-origin purchases are counted toward account historical usage after migration.
-  - Account reaches 20/20 after migrated guest-origin purchases are counted.
-  - Guest shows 0 remaining after sign-out from a 20/20 account.
-  - Guest add is blocked at 20/20.
+- Asymmetric Free purchase quota cleanup completed locally:
+  - Guest quota remains lifetime-created usage; delete does not free guest quota.
+  - Signed-in account quota counts visible saved purchases instead of historical created rows.
+  - Signed-in delete frees account quota because deleted/tombstoned/remote-deleted purchases no longer count.
+  - Guest-origin visible purchases still migrate/sync normally, but deleted guest lifetime usage no longer consumes signed-in saved quota.
+  - Future server-side Free enforcement should count only saved purchases where `deleted_at IS NULL`; Pro should bypass the limit when implemented. Guest remains local-only.
 - Release QA reminder:
-  - Re-test Stage 3 capacity behavior in an iOS development build/TestFlight before public App Store submission.
+  - Re-test asymmetric guest/account capacity behavior in an iOS development build/TestFlight before public App Store submission.
 
 ## Purchases / Photos
 
