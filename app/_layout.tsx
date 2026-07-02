@@ -7,6 +7,7 @@ import {
 import { StyleSheet, View } from 'react-native';
 
 import { AuthDeepLinkHandler } from '../src/components/AuthDeepLinkHandler';
+import { PlanProvider } from '../src/features/monetization/state/PlanState';
 import { configureNotificationHandler } from '../src/features/notifications/notifications';
 import { PurchasesProvider } from '../src/features/purchases/state/PurchasesState';
 import { AppSettingsProvider } from '../src/features/settings/state/AppSettingsState';
@@ -35,12 +36,14 @@ export default function RootLayout() {
         <AuthProvider>
           <AuthDeepLinkHandler />
           <AppSettingsProvider>
-            <PurchasesProvider>
-              <Stack screenOptions={{ headerShown: false }}>
-                <Stack.Screen name="welcome" options={{ animation: 'none' }} />
-                <Stack.Screen name="(tabs)" options={{ animation: 'none' }} />
-              </Stack>
-            </PurchasesProvider>
+            <PlanProvider>
+              <PurchasesProvider>
+                <Stack screenOptions={{ headerShown: false }}>
+                  <Stack.Screen name="welcome" options={{ animation: 'none' }} />
+                  <Stack.Screen name="(tabs)" options={{ animation: 'none' }} />
+                </Stack>
+              </PurchasesProvider>
+            </PlanProvider>
           </AppSettingsProvider>
         </AuthProvider>
       </View>
