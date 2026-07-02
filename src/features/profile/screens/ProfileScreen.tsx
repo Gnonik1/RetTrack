@@ -16,7 +16,7 @@ import { AppText } from '../../../components/AppText';
 import { theme } from '../../../constants/theme';
 import { signOut } from '../../../services/authService';
 import { useAuth } from '../../../state/AuthState';
-import { ACCOUNT_ITEM_LIMIT, GUEST_ITEM_LIMIT } from '../../purchases/constants';
+import { usePlan } from '../../monetization/state/PlanState';
 import { usePurchases } from '../../purchases/state/PurchasesState';
 
 const APP_STORE_REVIEW_URL =
@@ -224,6 +224,7 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
     hasHydratedPurchases,
     purchases,
   } = usePurchases();
+  const { limits } = usePlan();
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [signOutError, setSignOutError] = useState('');
   const [hasAvatarLoadError, setHasAvatarLoadError] = useState(false);
@@ -233,20 +234,22 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
     isAuthenticated && Boolean(googleAvatarUrl) && !hasAvatarLoadError;
   const accountDisplayName = profileFullName ?? userEmail ?? 'Signed in';
   const guestRemainingItems = effectiveGuestRemaining;
+  const guestPurchaseLimit = limits.guestPurchases;
+  const signedInPurchaseLimit = limits.signedInFreePurchases;
   const usagePercent = Math.min(
     100,
-    Math.round((guestPurchaseEntriesUsed / GUEST_ITEM_LIMIT) * 100),
+    Math.round((guestPurchaseEntriesUsed / guestPurchaseLimit) * 100),
   );
   const isAccountLoading =
     isAuthLoading ||
     (isAuthenticated && (isProfileLoading || !hasHydratedPurchases));
   const accountRemainingItems = Math.max(
-    ACCOUNT_ITEM_LIMIT - accountPurchaseEntriesUsed,
+    signedInPurchaseLimit - accountPurchaseEntriesUsed,
     0,
   );
   const accountUsagePercent = Math.min(
     100,
-    Math.round((accountPurchaseEntriesUsed / ACCOUNT_ITEM_LIMIT) * 100),
+    Math.round((accountPurchaseEntriesUsed / signedInPurchaseLimit) * 100),
   );
   const snapshot = useMemo(
     () =>
@@ -434,7 +437,7 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
               </View>
 
               <AppText style={styles.usageTitle} variant="body">
-                {accountPurchaseEntriesUsed} / {ACCOUNT_ITEM_LIMIT} saved purchases
+                {accountPurchaseEntriesUsed} / {signedInPurchaseLimit} saved purchases
               </AppText>
               <View style={styles.progressTrack}>
                 <View
@@ -468,7 +471,7 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
                 </View>
 
                 <AppText style={styles.usageTitle} variant="body">
-                  {guestPurchaseEntriesUsed} / {GUEST_ITEM_LIMIT} guest entries used
+                  {guestPurchaseEntriesUsed} / {guestPurchaseLimit} guest entries used
                 </AppText>
                 <View style={styles.progressTrack}>
                   <View
@@ -497,7 +500,7 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
                 <View style={styles.benefitRow}>
                   <View style={styles.benefitDot} />
                   <AppText style={styles.benefitText} variant="caption">
-                    Up to {ACCOUNT_ITEM_LIMIT} saved purchases
+                    Up to {signedInPurchaseLimit} saved purchases
                   </AppText>
                 </View>
                 <View style={styles.benefitRow}>

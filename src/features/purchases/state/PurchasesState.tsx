@@ -29,12 +29,9 @@ import {
   type SupabasePurchasePhotoRow,
 } from '../../../services/purchasePhotoSyncService';
 import { useAuth } from '../../../state/AuthState';
+import { usePlan } from '../../monetization/state/PlanState';
 import { useAppSettings } from '../../settings/state/AppSettingsState';
-import {
-  ACCOUNT_ITEM_LIMIT,
-  GUEST_ITEM_LIMIT,
-  LEGACY_REMOTE_PHOTO_CAP,
-} from '../constants';
+import { LEGACY_REMOTE_PHOTO_CAP } from '../constants';
 import {
   getMockPurchaseById,
   mockPurchases,
@@ -1339,14 +1336,18 @@ function getLastKnownAccountCapacitySnapshot({
 }
 
 function getEffectiveGuestRemaining({
+  guestPurchaseLimit,
   lastKnownAccountCapacitySnapshot,
   rawGuestEntriesUsed,
+  signedInPurchaseLimit,
 }: {
+  guestPurchaseLimit: number;
   lastKnownAccountCapacitySnapshot: LastKnownAccountCapacitySnapshot | null;
   rawGuestEntriesUsed: number;
+  signedInPurchaseLimit: number;
 }) {
   const guestTrialRemaining = Math.max(
-    GUEST_ITEM_LIMIT - rawGuestEntriesUsed,
+    guestPurchaseLimit - rawGuestEntriesUsed,
     0,
   );
 
@@ -1360,7 +1361,7 @@ function getEffectiveGuestRemaining({
     0,
   );
   const accountRemainingForGuest = Math.max(
-    ACCOUNT_ITEM_LIMIT -
+    signedInPurchaseLimit -
       lastKnownAccountCapacitySnapshot.accountEntriesUsed -
       guestUsedSinceAccountSnapshot,
     0,
@@ -2158,6 +2159,7 @@ async function syncAccountLocalPurchasePhotos(
 
 export function PurchasesProvider({ children }: { children: ReactNode }) {
   const { isAuthLoading, user } = useAuth();
+  const { limits } = usePlan();
   const { hasHydratedSettings, remindersEnabled } = useAppSettings();
   const purchaseScopeKey = useMemo(
     () => (isAuthLoading ? null : getPurchaseScopeKey(user?.id)),
@@ -3161,10 +3163,17 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
   const effectiveGuestRemaining = useMemo(
     () =>
       getEffectiveGuestRemaining({
+        guestPurchaseLimit: limits.guestPurchases,
         lastKnownAccountCapacitySnapshot,
         rawGuestEntriesUsed: guestPurchaseEntriesUsed,
+        signedInPurchaseLimit: limits.signedInFreePurchases,
       }),
-    [guestPurchaseEntriesUsed, lastKnownAccountCapacitySnapshot],
+    [
+      guestPurchaseEntriesUsed,
+      lastKnownAccountCapacitySnapshot,
+      limits.guestPurchases,
+      limits.signedInFreePurchases,
+    ],
   );
   const isGuestAddLimitReached = effectiveGuestRemaining <= 0;
   const accountSavedPurchaseEntriesUsed = useMemo(

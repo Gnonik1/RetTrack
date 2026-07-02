@@ -27,6 +27,7 @@ import { AppButton } from '../../../components/AppButton';
 import { AppScreen } from '../../../components/AppScreen';
 import { AppText } from '../../../components/AppText';
 import { theme } from '../../../constants/theme';
+import { usePlan } from '../../monetization/state/PlanState';
 import {
   DEFAULT_CURRENCY,
   currencyOptions,
@@ -34,11 +35,6 @@ import {
   isCurrencyCode,
   useAppSettings,
 } from '../../settings/state/AppSettingsState';
-import {
-  ACCOUNT_ITEM_LIMIT,
-  FREE_PHOTO_LIMIT,
-  GUEST_ITEM_LIMIT,
-} from '../constants';
 import type { AddPurchaseInput } from '../state/PurchasesState';
 import {
   parsePurchaseDate,
@@ -365,6 +361,7 @@ export function AddFirstPurchaseScreen({
   photoLimitOverride,
 }: AddFirstPurchaseScreenProps) {
   const { defaultCurrency } = useAppSettings();
+  const { limits, photoLimit: planPhotoLimit } = usePlan();
   const isEditMode = mode === 'editPurchase';
   const hasInitialPrice = Boolean(initialValues?.price?.trim());
   const hasInitialReturnDate = Boolean(
@@ -378,7 +375,7 @@ export function AddFirstPurchaseScreen({
     initialValues,
     isEditMode ? null : initialPurchaseDate,
   );
-  const photoLimit = photoLimitOverride ?? FREE_PHOTO_LIMIT;
+  const photoLimit = photoLimitOverride ?? planPhotoLimit;
   const initialPhotoUris = initialValues?.photoUris ?? [];
   const [itemName, setItemName] = useState(initialValues?.itemName ?? '');
   const [store, setStore] = useState(initialValues?.store ?? '');
@@ -466,8 +463,8 @@ export function AddFirstPurchaseScreen({
       : 'Guest limit reached';
   const limitBody =
     activeLimitKind === 'account'
-      ? `Your account can keep up to ${ACCOUNT_ITEM_LIMIT} saved purchases`
-      : `Guest mode includes ${GUEST_ITEM_LIMIT} purchase entries. Create an account to add more.`;
+      ? `Your account can keep up to ${limits.signedInFreePurchases} saved purchases`
+      : `Guest mode includes ${limits.guestPurchases} purchase entries. Create an account to add more.`;
   const saveSuccessText =
     mode === 'editPurchase' ? 'Purchase updated' : 'Purchase added';
   const datePickerTitle =
