@@ -16,8 +16,13 @@ import { AppText } from '../../../components/AppText';
 import { theme } from '../../../constants/theme';
 import { signOut } from '../../../services/authService';
 import { useAuth } from '../../../state/AuthState';
+import {
+  getPlanAccessSubject,
+  getProFeatureAccess,
+} from '../../monetization/access/planAccess';
 import { usePlan } from '../../monetization/state/PlanState';
 import { usePurchases } from '../../purchases/state/PurchasesState';
+import { exportPurchasesCsv } from '../../purchases/utils/purchaseCsvExport';
 
 const APP_STORE_REVIEW_URL =
   'https://apps.apple.com/app/id6775811683?action=write-review';
@@ -209,6 +214,43 @@ function CurrentSnapshotCard({ snapshot }: { snapshot: SnapshotCounts }) {
   );
 }
 
+function CsvExportCard({
+  disabled,
+  onPress,
+}: {
+  disabled: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityLabel="Export CSV"
+      accessibilityRole="button"
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.csvExportCard,
+        pressed && !disabled && styles.csvExportCardPressed,
+        disabled && styles.csvExportCardDisabled,
+      ]}
+    >
+      <View style={styles.csvExportCopy}>
+        <AppText style={styles.csvExportTitle} variant="body">
+          Export CSV
+        </AppText>
+        <AppText
+          numberOfLines={1}
+          style={styles.csvExportBody}
+          variant="caption"
+        >
+          Download purchases as a spreadsheet
+        </AppText>
+      </View>
+
+      <View style={styles.csvExportChevron} />
+    </Pressable>
+  );
+}
+
 export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
   const {
     isAuthenticated,
@@ -224,8 +266,9 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
     hasHydratedPurchases,
     purchases,
   } = usePurchases();
-  const { limits } = usePlan();
+  const { isPro, limits } = usePlan();
   const [isSigningOut, setIsSigningOut] = useState(false);
+  const [isExportingCsv, setIsExportingCsv] = useState(false);
   const [signOutError, setSignOutError] = useState('');
   const [hasAvatarLoadError, setHasAvatarLoadError] = useState(false);
   const userEmail = user?.email;
@@ -284,6 +327,8 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
   );
   const shouldShowSnapshot =
     !isAccountLoading && hasHydratedPurchases && purchases.length > 0;
+  const shouldShowCsvExport =
+    !isAccountLoading && isAuthenticated && isPro;
   const accountName = isAccountLoading
     ? 'Checking account'
     : isAuthenticated
@@ -320,6 +365,58 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
       setSignOutError("We couldn't sign you out. Please try again.");
     } finally {
       setIsSigningOut(false);
+    }
+  };
+
+  const handleCsvExportPress = async () => {
+    if (isExportingCsv) {
+      return;
+    }
+
+    const subject = getPlanAccessSubject({
+      isAuthenticated,
+      isPro,
+    });
+    const access = getProFeatureAccess({
+      feature: 'csvExport',
+      subject,
+    });
+
+    if (!access.allowed) {
+      return;
+    }
+
+    setIsExportingCsv(true);
+
+    try {
+      const result = await exportPurchasesCsv(purchases);
+
+      if (result.ok) {
+        return;
+      }
+
+      if (result.reason === 'empty') {
+        Alert.alert(
+          'Nothing to export',
+          'Add a purchase before exporting your CSV',
+        );
+        return;
+      }
+
+      if (result.reason === 'sharingUnavailable') {
+        Alert.alert(
+          'Sharing unavailable',
+          'CSV export is ready, but sharing is not available on this device',
+        );
+        return;
+      }
+
+      Alert.alert(
+        'Export failed',
+        'Something went wrong while creating your CSV',
+      );
+    } finally {
+      setIsExportingCsv(false);
     }
   };
 
@@ -522,6 +619,13 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
           ) : null}
 
           {shouldShowSnapshot ? <CurrentSnapshotCard snapshot={snapshot} /> : null}
+
+          {shouldShowCsvExport ? (
+            <CsvExportCard
+              disabled={isExportingCsv}
+              onPress={handleCsvExportPress}
+            />
+          ) : null}
 
           {!isAccountLoading && isAuthenticated ? <RateRetTrackCard /> : null}
         </View>
@@ -758,6 +862,59 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     paddingBottom: 110,
     paddingTop: theme.spacing.xs,
+  },
+  csvExportBody: {
+    color: theme.colors.muted,
+    fontSize: 12,
+    lineHeight: 16,
+    marginTop: 2,
+  },
+  csvExportCard: {
+    alignItems: 'center',
+    alignSelf: 'stretch',
+    backgroundColor: '#FFFDF8',
+    borderColor: 'rgba(92, 111, 82, 0.13)',
+    borderRadius: 18,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 8,
+    minHeight: 58,
+    paddingHorizontal: 19,
+    paddingVertical: 11,
+    shadowColor: theme.colors.greenDark,
+    shadowOffset: {
+      height: 4,
+      width: 0,
+    },
+    shadowOpacity: 0.015,
+    shadowRadius: 8,
+    elevation: 0,
+  },
+  csvExportCardDisabled: {
+    opacity: 0.56,
+  },
+  csvExportCardPressed: {
+    opacity: 0.82,
+  },
+  csvExportChevron: {
+    borderColor: '#7F8778',
+    borderRightWidth: 1.2,
+    borderTopWidth: 1.2,
+    height: 7,
+    opacity: 0.42,
+    transform: [{ rotate: '45deg' }],
+    width: 7,
+  },
+  csvExportCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  csvExportTitle: {
+    color: theme.colors.text,
+    fontSize: 15,
+    fontWeight: theme.fontWeight.medium,
+    lineHeight: 19,
   },
   featureDot: {
     backgroundColor: theme.colors.muted,
