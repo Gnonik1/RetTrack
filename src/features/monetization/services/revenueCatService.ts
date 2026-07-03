@@ -3,6 +3,12 @@ import Purchases, { type CustomerInfo } from 'react-native-purchases';
 export { type CustomerInfo };
 
 export const PRO_ENTITLEMENT_ID = 'pro';
+export const supportsRevenueCatCustomerInfoCacheInvalidation =
+  typeof Purchases.invalidateCustomerInfoCache === 'function';
+
+export type RefreshRevenueCatCustomerInfoOptions = {
+  forceRefresh?: boolean;
+};
 
 let hasConfiguredRevenueCat = false;
 let configuredUserId: string | null = null;
@@ -58,11 +64,21 @@ export async function configureRevenueCatForUser(
 }
 
 export async function fetchRevenueCatCustomerInfo(): Promise<CustomerInfo | null> {
+  return refreshRevenueCatCustomerInfo();
+}
+
+export async function refreshRevenueCatCustomerInfo({
+  forceRefresh = false,
+}: RefreshRevenueCatCustomerInfoOptions = {}): Promise<CustomerInfo | null> {
   if (!hasConfiguredRevenueCat || configuredUserId === null) {
     return null;
   }
 
   try {
+    if (forceRefresh && supportsRevenueCatCustomerInfoCacheInvalidation) {
+      await Purchases.invalidateCustomerInfoCache();
+    }
+
     return await Purchases.getCustomerInfo();
   } catch {
     return null;
