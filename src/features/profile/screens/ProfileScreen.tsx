@@ -1,7 +1,9 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import { useEffect, useMemo, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
+  Animated,
   Image,
   Linking,
   Pressable,
@@ -9,6 +11,7 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
+import Svg, { Path } from 'react-native-svg';
 
 import { AppButton } from '../../../components/AppButton';
 import { AppScreen } from '../../../components/AppScreen';
@@ -70,6 +73,79 @@ function getProgressStyle(percent: number) {
   return {
     width: `${percent}%` as `${number}%`,
   };
+}
+
+function ProSparkleIcon() {
+  return (
+    <Svg
+      accessibilityElementsHidden
+      focusable={false}
+      height={12}
+      viewBox="0 0 12 12"
+      width={12}
+    >
+      <Path
+        d="M6 0.8 7.45 4.55 11.2 6 7.45 7.45 6 11.2 4.55 7.45 0.8 6 4.55 4.55 6 0.8Z"
+        fill={theme.colors.amber}
+      />
+    </Svg>
+  );
+}
+
+const SHIMMER_BAND_WIDTH = 90;
+
+function ProHairlineShimmer({ cardWidth }: { cardWidth: number }) {
+  const shimmerProgress = useRef(new Animated.Value(0)).current;
+
+  useFocusEffect(
+    useCallback(() => {
+      if (cardWidth <= 0) {
+        return;
+      }
+
+      shimmerProgress.setValue(0);
+
+      const shimmerAnimation = Animated.timing(shimmerProgress, {
+        duration: 900,
+        toValue: 1,
+        useNativeDriver: true,
+      });
+
+      shimmerAnimation.start();
+
+      return () => {
+        shimmerAnimation.stop();
+      };
+    }, [cardWidth, shimmerProgress]),
+  );
+
+  const shimmerTranslateX = shimmerProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-SHIMMER_BAND_WIDTH, cardWidth],
+  });
+
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[
+        styles.proUsageShimmerWrap,
+        { transform: [{ translateX: shimmerTranslateX }] },
+      ]}
+    >
+      <LinearGradient
+        colors={[
+          'rgba(255, 255, 255, 0)',
+          'rgba(255, 255, 255, 0.95)',
+          'rgba(255, 255, 255, 0.95)',
+          'rgba(255, 255, 255, 0)',
+        ]}
+        end={{ x: 1, y: 0 }}
+        locations={[0, 0.4, 0.6, 1]}
+        start={{ x: 0, y: 0 }}
+        style={styles.proUsageShimmerGradient}
+      />
+    </Animated.View>
+  );
 }
 
 function StatusBadge({
@@ -271,6 +347,7 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
   const [isExportingCsv, setIsExportingCsv] = useState(false);
   const [signOutError, setSignOutError] = useState('');
   const [hasAvatarLoadError, setHasAvatarLoadError] = useState(false);
+  const [proUsageCardWidth, setProUsageCardWidth] = useState(0);
   const userEmail = user?.email;
   const googleAvatarUrl = getUserAvatarUrl(user?.user_metadata);
   const shouldShowAvatarImage =
@@ -294,6 +371,10 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
     100,
     Math.round((accountPurchaseEntriesUsed / signedInPurchaseLimit) * 100),
   );
+  const proSavedPurchaseCountLabel =
+    accountPurchaseEntriesUsed === 1
+      ? '1 saved purchase'
+      : `${accountPurchaseEntriesUsed} saved purchases`;
   const snapshot = useMemo(
     () =>
       purchases.reduce<SnapshotCounts>(
@@ -329,6 +410,16 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
     !isAccountLoading && hasHydratedPurchases && purchases.length > 0;
   const shouldShowCsvExport =
     !isAccountLoading && isAuthenticated && isPro;
+  const statusBadgeLabel = isAccountLoading
+    ? 'Checking'
+    : isAuthenticated
+      ? 'Signed in'
+      : 'Guest mode';
+  const statusBadgeTone: 'guest' | 'loading' | 'signedIn' = isAccountLoading
+    ? 'loading'
+    : isAuthenticated
+      ? 'signedIn'
+      : 'guest';
   const accountName = isAccountLoading
     ? 'Checking account'
     : isAuthenticated
@@ -474,22 +565,7 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
             </View>
 
             <View style={styles.identityContent}>
-              <StatusBadge
-                label={
-                  isAccountLoading
-                    ? 'Checking'
-                    : isAuthenticated
-                      ? 'Signed in'
-                      : 'Guest mode'
-                }
-                tone={
-                  isAccountLoading
-                    ? 'loading'
-                    : isAuthenticated
-                      ? 'signedIn'
-                      : 'guest'
-                }
-              />
+              <StatusBadge label={statusBadgeLabel} tone={statusBadgeTone} />
               <AppText
                 numberOfLines={2}
                 style={styles.accountName}
@@ -521,36 +597,91 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
           </View>
 
           {!isAccountLoading && isAuthenticated ? (
-            <View style={styles.usageCard}>
-              <View style={styles.usageHeader}>
-                <AppText style={styles.usageLabel} variant="caption">
-                  Account usage
+            isPro ? (
+              <View style={styles.proUsageCardWrapper}>
+                <LinearGradient
+                  colors={['#2F442F', '#415C3D', '#314832']}
+                  end={{ x: 1, y: 1 }}
+                  onLayout={(event) => {
+                    setProUsageCardWidth(event.nativeEvent.layout.width);
+                  }}
+                  start={{ x: 0, y: 0 }}
+                  style={[styles.usageCard, styles.proUsageCard]}
+                >
+                  <View pointerEvents="none" style={styles.proUsageBlobOuter} />
+                  <View pointerEvents="none" style={styles.proUsageBlobMid} />
+                  <View pointerEvents="none" style={styles.proUsageBlobInner} />
+                  <View pointerEvents="none" style={styles.proUsageAccent} />
+                  <ProHairlineShimmer cardWidth={proUsageCardWidth} />
+                  <View style={styles.usageHeader}>
+                    <AppText
+                      style={[styles.usageLabel, styles.proUsageLabel]}
+                      variant="caption"
+                    >
+                      Account usage
+                    </AppText>
+                    <View style={styles.proUsagePillWrapper}>
+                      <View pointerEvents="none" style={styles.proUsagePillGlowOuter} />
+                      <View pointerEvents="none" style={styles.proUsagePillGlowMid} />
+                      <View pointerEvents="none" style={styles.proUsagePillGlowInner} />
+                      <View
+                        style={[
+                          styles.proIdentityPill,
+                          styles.proUsagePill,
+                          styles.proUsagePillOnDark,
+                        ]}
+                      >
+                        <ProSparkleIcon />
+                        <AppText
+                          style={styles.proIdentityPillText}
+                          variant="caption"
+                        >
+                          Pro
+                        </AppText>
+                      </View>
+                    </View>
+                  </View>
+
+                  <AppText style={styles.proUsageTitle} variant="body">
+                    {proSavedPurchaseCountLabel}
+                  </AppText>
+                  <AppText style={styles.proUsageCount} variant="caption">
+                    No limit with RetTrack Pro
+                  </AppText>
+                </LinearGradient>
+              </View>
+            ) : (
+              <View style={styles.usageCard}>
+                <View style={styles.usageHeader}>
+                  <AppText style={styles.usageLabel} variant="caption">
+                    Account usage
+                  </AppText>
+                  <View style={styles.remainingPill}>
+                    <AppText style={styles.remainingText} variant="caption">
+                      {accountRemainingItems} remaining
+                    </AppText>
+                  </View>
+                </View>
+
+                <AppText style={styles.usageTitle} variant="body">
+                  {accountPurchaseEntriesUsed} / {signedInPurchaseLimit} saved purchases
                 </AppText>
-                <View style={styles.remainingPill}>
-                  <AppText style={styles.remainingText} variant="caption">
-                    {accountRemainingItems} remaining
+                <View style={styles.progressTrack}>
+                  <View
+                    style={[
+                      styles.progressFill,
+                      getProgressStyle(accountUsagePercent),
+                    ]}
+                  />
+                </View>
+                <View style={styles.featureLine}>
+                  <View style={styles.featureDot} />
+                  <AppText style={styles.featureText} variant="caption">
+                    Photos, notes, and return dates
                   </AppText>
                 </View>
               </View>
-
-              <AppText style={styles.usageTitle} variant="body">
-                {accountPurchaseEntriesUsed} / {signedInPurchaseLimit} saved purchases
-              </AppText>
-              <View style={styles.progressTrack}>
-                <View
-                  style={[
-                    styles.progressFill,
-                    getProgressStyle(accountUsagePercent),
-                  ]}
-                />
-              </View>
-              <View style={styles.featureLine}>
-                <View style={styles.featureDot} />
-                <AppText style={styles.featureText} variant="caption">
-                  Photos, notes, and return dates
-                </AppText>
-              </View>
-            </View>
+            )
           ) : null}
 
           {!isAccountLoading && !isAuthenticated ? (
@@ -985,6 +1116,158 @@ const styles = StyleSheet.create({
   },
   profileCardLoading: {
     minHeight: 548,
+  },
+  proIdentityPill: {
+    backgroundColor: '#FFF6E5',
+    borderColor: '#D6C28F',
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    shadowColor: theme.colors.greenDark,
+    shadowOffset: {
+      height: 3,
+      width: 0,
+    },
+    shadowOpacity: 0.035,
+    shadowRadius: 8,
+    elevation: 1,
+  },
+  proIdentityPillText: {
+    color: '#604B25',
+    fontSize: 11,
+    fontWeight: theme.fontWeight.semibold,
+    lineHeight: 14,
+  },
+  proUsageAccent: {
+    backgroundColor: theme.colors.amber,
+    height: 2,
+    left: -1,
+    opacity: 0.85,
+    position: 'absolute',
+    right: -1,
+    top: -1,
+  },
+  proUsageBlobInner: {
+    backgroundColor: 'rgba(255, 255, 255, 0.26)',
+    borderRadius: 26,
+    bottom: -26,
+    height: 52,
+    position: 'absolute',
+    right: -26,
+    width: 52,
+  },
+  proUsageBlobMid: {
+    backgroundColor: 'rgba(255, 255, 255, 0.18)',
+    borderRadius: 32,
+    bottom: -32,
+    height: 64,
+    position: 'absolute',
+    right: -32,
+    width: 64,
+  },
+  proUsageBlobOuter: {
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    borderRadius: 40,
+    bottom: -40,
+    height: 80,
+    position: 'absolute',
+    right: -40,
+    width: 80,
+  },
+  proUsageCard: {
+    borderColor: 'rgba(255, 255, 255, 0.14)',
+    elevation: 0,
+    marginTop: 0,
+    overflow: 'hidden',
+    paddingBottom: 18,
+    paddingTop: 19,
+    shadowOpacity: 0,
+  },
+  proUsageCardWrapper: {
+    alignSelf: 'stretch',
+    backgroundColor: '#2F442F',
+    borderRadius: 22,
+    elevation: 6,
+    marginTop: 20,
+    shadowColor: '#0F1A0F',
+    shadowOffset: {
+      height: 16,
+      width: 0,
+    },
+    shadowOpacity: 0.24,
+    shadowRadius: 16,
+  },
+  proUsageCount: {
+    color: theme.colors.sage,
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: 7,
+    opacity: 0.78,
+  },
+  proUsageLabel: {
+    color: 'rgba(255, 255, 255, 0.7)',
+  },
+  proUsagePill: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 5,
+    paddingHorizontal: 9,
+  },
+  proUsagePillGlowInner: {
+    backgroundColor: 'rgba(199, 146, 62, 0.24)',
+    borderRadius: theme.radius.pill,
+    bottom: -3,
+    left: -3,
+    position: 'absolute',
+    right: -3,
+    top: -3,
+  },
+  proUsagePillGlowMid: {
+    backgroundColor: 'rgba(199, 146, 62, 0.16)',
+    borderRadius: theme.radius.pill,
+    bottom: -7,
+    left: -7,
+    position: 'absolute',
+    right: -7,
+    top: -7,
+  },
+  proUsagePillGlowOuter: {
+    backgroundColor: 'rgba(199, 146, 62, 0.1)',
+    borderRadius: theme.radius.pill,
+    bottom: -11,
+    left: -11,
+    position: 'absolute',
+    right: -11,
+    top: -11,
+  },
+  proUsagePillOnDark: {
+    borderColor: 'rgba(255, 246, 229, 0.62)',
+    elevation: 0,
+    position: 'relative',
+    shadowOpacity: 0,
+    zIndex: 1,
+  },
+  proUsagePillWrapper: {
+    position: 'relative',
+  },
+  proUsageShimmerGradient: {
+    flex: 1,
+  },
+  proUsageShimmerWrap: {
+    height: 3,
+    left: 0,
+    position: 'absolute',
+    top: -1.5,
+    width: SHIMMER_BAND_WIDTH,
+  },
+  proUsageTitle: {
+    color: '#FFFDF7',
+    fontSize: 24,
+    fontWeight: theme.fontWeight.medium,
+    letterSpacing: 0.4,
+    lineHeight: 30,
+    marginTop: 16,
   },
   progressFill: {
     backgroundColor: theme.colors.greenDark,

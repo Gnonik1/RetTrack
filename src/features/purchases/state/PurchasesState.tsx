@@ -1915,23 +1915,6 @@ async function syncPendingLinkedAccountDeletes(
   );
 }
 
-function getActiveToPendingPurchaseIds(
-  previousPurchases: MockPurchase[],
-  nextPurchases: MockPurchase[],
-) {
-  const previousStatusById = new Map(
-    previousPurchases.map((purchase) => [purchase.id, purchase.status]),
-  );
-
-  return nextPurchases
-    .filter(
-      (purchase) =>
-        purchase.status === 'pending' &&
-        previousStatusById.get(purchase.id) === 'active',
-    )
-    .map((purchase) => purchase.id);
-}
-
 function getSyncedPurchaseMetadata(remoteId: string, syncedAt = new Date()) {
   return {
     lastSyncedAt: syncedAt.toISOString(),
@@ -3133,11 +3116,7 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    const previousPurchases = lastReminderPurchasesRef.current;
     const purchasesSnapshot = purchases;
-    const immediatePendingPurchaseIds = previousPurchases
-      ? getActiveToPendingPurchaseIds(previousPurchases, purchasesSnapshot)
-      : [];
 
     lastReminderPurchasesRef.current = purchasesSnapshot;
 
@@ -3145,7 +3124,6 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
       .catch(() => undefined)
       .then(() =>
         rescheduleAllPurchaseReminders(purchasesSnapshot, {
-          immediatePendingPurchaseIds,
           remindersEnabled,
         }),
       )

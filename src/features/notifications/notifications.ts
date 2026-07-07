@@ -57,7 +57,6 @@ type GroupedReturnReminderDefinition = {
 };
 
 type RescheduleAllPurchaseRemindersOptions = {
-  immediatePendingPurchaseIds?: string[];
   remindersEnabled?: boolean;
 };
 
