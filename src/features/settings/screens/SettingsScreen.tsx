@@ -1,7 +1,8 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { type ReactNode, useState } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 import {
+  Animated,
   Image,
   Linking,
   Pressable,
@@ -21,6 +22,7 @@ import {
   cancelAllScheduledAppReminders,
   requestNotificationPermissions,
 } from '../../notifications/notifications';
+import { usePlan } from '../../monetization/state/PlanState';
 import { useAuth } from '../../../state/AuthState';
 import {
   currencyOptions,
@@ -378,20 +380,354 @@ function FooterMark() {
   );
 }
 
+const INTERACTIVE_RETURN_REMINDER_OFFSETS = [
+  { label: '1 day before', offset: 1 },
+  { label: '3 days before', offset: 3 },
+  { label: '7 days before', offset: 7 },
+] as const;
+
+const FIXED_RETURN_REMINDER_OFFSETS: number[] =
+  INTERACTIVE_RETURN_REMINDER_OFFSETS.map(({ offset }) => offset);
+
+// No existing setting bounds the number of days between a purchase and its
+// return date, so cap the custom "days before" reminder at 45 days — a generous
+// buffer over the ~30-day return windows most retailers offer, without allowing
+// unrealistic values.
+const MIN_CUSTOM_REMINDER_OFFSET = 1;
+const MAX_CUSTOM_REMINDER_OFFSET = 45;
+const DEFAULT_CUSTOM_REMINDER_OFFSET = 10;
+const STEPPER_REVEAL_DURATION = 200;
+const STEPPER_REVEAL_MAX_HEIGHT = 96;
+
+function formatReminderOffsetLabel(offset: number) {
+  return `${offset} ${offset === 1 ? 'day' : 'days'} before`;
+}
+
+function ReturnReminderChips({
+  offsets,
+  onChange,
+  remindersEnabled,
+}: {
+  offsets: number[];
+  onChange: (offsets: number[]) => void;
+  remindersEnabled: boolean;
+}) {
+  const [customReminderOffset, setCustomReminderOffset] = useState<
+    number | null
+  >(
+    () =>
+      offsets.find(
+        (value) => !FIXED_RETURN_REMINDER_OFFSETS.includes(value),
+      ) ?? null,
+  );
+  const [isStepperOpen, setIsStepperOpen] = useState(false);
+  const [stepperValue, setStepperValue] = useState(
+    () => customReminderOffset ?? DEFAULT_CUSTOM_REMINDER_OFFSET,
+  );
+  const stepperReveal = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    // Same Animated.timing + interpolate reveal pattern the tab transition in
+    // PurchasesHomeScreen uses; height can't run on the native driver.
+    const revealAnimation = Animated.timing(stepperReveal, {
+      duration: STEPPER_REVEAL_DURATION,
+      toValue: isStepperOpen ? 1 : 0,
+      useNativeDriver: false,
+    });
+
+    revealAnimation.start();
+
+    return () => {
+      revealAnimation.stop();
+    };
+  }, [isStepperOpen, stepperReveal]);
+
+  const toggleReturnReminderOffset = (offset: number) => {
+    if (offsets.includes(offset)) {
+      // Keep at least one "days before" interval selected: tapping the last
+      // remaining selected chip is a no-op rather than clearing the list.
+      if (offsets.length <= 1) {
+        return;
+      }
+
+      onChange(offsets.filter((value) => value !== offset));
+      return;
+    }
+
+    onChange([...offsets, offset].sort((first, second) => second - first));
+  };
+
+  const openStepper = () => {
+    setStepperValue(customReminderOffset ?? DEFAULT_CUSTOM_REMINDER_OFFSET);
+    setIsStepperOpen(true);
+  };
+
+  const adjustStepperValue = (delta: number) => {
+    setStepperValue((current) =>
+      Math.min(
+        MAX_CUSTOM_REMINDER_OFFSET,
+        Math.max(MIN_CUSTOM_REMINDER_OFFSET, current + delta),
+      ),
+    );
+  };
+
+  const confirmCustomOffset = () => {
+    // Drop any prior custom value (and any accidental duplicate of the new one),
+    // then add the new custom offset selected-by-default. Fixed presets already
+    // in the draft are left untouched.
+    const nextOffsets = offsets.filter(
+      (value) => value !== customReminderOffset && value !== stepperValue,
+    );
+    nextOffsets.push(stepperValue);
+
+    setCustomReminderOffset(stepperValue);
+    setIsStepperOpen(false);
+    onChange(nextOffsets.sort((first, second) => second - first));
+  };
+
+  const deleteCustomOffset = () => {
+    if (customReminderOffset === null) {
+      return;
+    }
+
+    // Mirror toggle's "keep >=1 selected" guard: refuse to delete when the
+    // custom offset is the only selected reminder.
+    if (offsets.length === 1 && offsets[0] === customReminderOffset) {
+      return;
+    }
+
+    onChange(offsets.filter((value) => value !== customReminderOffset));
+    setCustomReminderOffset(null);
+  };
+
+  const isStepperValueFixedPreset =
+    FIXED_RETURN_REMINDER_OFFSETS.includes(stepperValue);
+  const isStepperAtMinimum = stepperValue <= MIN_CUSTOM_REMINDER_OFFSET;
+  const isStepperAtMaximum = stepperValue >= MAX_CUSTOM_REMINDER_OFFSET;
+  const isCustomSelected =
+    customReminderOffset !== null && offsets.includes(customReminderOffset);
+  const isCustomOnlySelected =
+    customReminderOffset !== null &&
+    offsets.length === 1 &&
+    offsets[0] === customReminderOffset;
+
+  return (
+    <View
+      style={[
+        styles.returnReminderSection,
+        !remindersEnabled && styles.returnReminderSectionDisabled,
+      ]}
+    >
+      <AppText style={styles.modalSecondaryBody} variant="caption">
+        Remind me
+      </AppText>
+      <View style={styles.returnReminderChips}>
+        <View
+          style={[
+            styles.returnReminderChip,
+            styles.returnReminderChipSelected,
+            styles.returnReminderChipLocked,
+          ]}
+        >
+          <AppText
+            style={[
+              styles.returnReminderChipText,
+              styles.returnReminderChipTextSelected,
+            ]}
+            variant="caption"
+          >
+            Day of
+          </AppText>
+        </View>
+        {INTERACTIVE_RETURN_REMINDER_OFFSETS.map(({ label, offset }) => {
+          const isSelected = offsets.includes(offset);
+
+          return (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ selected: isSelected }}
+              key={offset}
+              onPress={() => toggleReturnReminderOffset(offset)}
+              style={({ pressed }) => [
+                styles.returnReminderChip,
+                isSelected && styles.returnReminderChipSelectedInteractive,
+                pressed && styles.returnReminderChipPressed,
+              ]}
+            >
+              <AppText
+                style={[
+                  styles.returnReminderChipText,
+                  isSelected && styles.returnReminderChipTextSelectedInteractive,
+                ]}
+                variant="caption"
+              >
+                {label}
+              </AppText>
+            </Pressable>
+          );
+        })}
+        {customReminderOffset !== null && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{ selected: isCustomSelected }}
+            onPress={() => toggleReturnReminderOffset(customReminderOffset)}
+            style={({ pressed }) => [
+              styles.returnReminderChip,
+              styles.returnReminderChipCustom,
+              isCustomSelected && styles.returnReminderChipSelectedInteractive,
+              pressed && styles.returnReminderChipPressed,
+            ]}
+          >
+            <AppText
+              style={[
+                styles.returnReminderChipText,
+                isCustomSelected &&
+                  styles.returnReminderChipTextSelectedInteractive,
+              ]}
+              variant="caption"
+            >
+              {formatReminderOffsetLabel(customReminderOffset)}
+            </AppText>
+            <Pressable
+              accessibilityLabel="Remove custom reminder"
+              accessibilityRole="button"
+              accessibilityState={{ disabled: isCustomOnlySelected }}
+              disabled={isCustomOnlySelected}
+              onPress={deleteCustomOffset}
+              style={[
+                styles.returnReminderChipDelete,
+                isCustomOnlySelected && styles.returnReminderChipDeleteDisabled,
+              ]}
+            >
+              <AppText
+                style={[
+                  styles.returnReminderChipDeleteLabel,
+                  isCustomSelected &&
+                    styles.returnReminderChipTextSelectedInteractive,
+                ]}
+                variant="caption"
+              >
+                ×
+              </AppText>
+            </Pressable>
+          </Pressable>
+        )}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ expanded: isStepperOpen }}
+          onPress={openStepper}
+          style={({ pressed }) => [
+            styles.returnReminderChip,
+            pressed && styles.returnReminderChipPressed,
+          ]}
+        >
+          <AppText style={styles.returnReminderChipText} variant="caption">
+            + Custom
+          </AppText>
+        </Pressable>
+      </View>
+      <Animated.View
+        style={[
+          styles.returnReminderStepperWrapper,
+          {
+            maxHeight: stepperReveal.interpolate({
+              inputRange: [0, 1],
+              outputRange: [0, STEPPER_REVEAL_MAX_HEIGHT],
+            }),
+            opacity: stepperReveal,
+          },
+        ]}
+      >
+        <View style={styles.returnReminderStepper}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{ disabled: isStepperAtMinimum }}
+            disabled={isStepperAtMinimum}
+            onPress={() => adjustStepperValue(-1)}
+            style={({ pressed }) => [
+              styles.returnReminderStepperButton,
+              isStepperAtMinimum && styles.returnReminderStepperButtonDisabled,
+              pressed && styles.returnReminderChipPressed,
+            ]}
+          >
+            <AppText
+              style={styles.returnReminderStepperButtonLabel}
+              variant="caption"
+            >
+              −
+            </AppText>
+          </Pressable>
+          <AppText style={styles.returnReminderStepperValue} variant="caption">
+            {formatReminderOffsetLabel(stepperValue)}
+          </AppText>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{ disabled: isStepperAtMaximum }}
+            disabled={isStepperAtMaximum}
+            onPress={() => adjustStepperValue(1)}
+            style={({ pressed }) => [
+              styles.returnReminderStepperButton,
+              isStepperAtMaximum && styles.returnReminderStepperButtonDisabled,
+              pressed && styles.returnReminderChipPressed,
+            ]}
+          >
+            <AppText
+              style={styles.returnReminderStepperButtonLabel}
+              variant="caption"
+            >
+              +
+            </AppText>
+          </Pressable>
+          <Pressable
+            accessibilityLabel="Confirm custom reminder"
+            accessibilityRole="button"
+            accessibilityState={{ disabled: isStepperValueFixedPreset }}
+            disabled={isStepperValueFixedPreset}
+            onPress={confirmCustomOffset}
+            style={({ pressed }) => [
+              styles.returnReminderStepperConfirm,
+              isStepperValueFixedPreset &&
+                styles.returnReminderStepperConfirmDisabled,
+              pressed && styles.returnReminderChipPressed,
+            ]}
+          >
+            <AppText
+              style={styles.returnReminderStepperConfirmLabel}
+              variant="caption"
+            >
+              ✓
+            </AppText>
+          </Pressable>
+        </View>
+        {isStepperValueFixedPreset && (
+          <AppText style={styles.returnReminderStepperHint} variant="caption">
+            Already available above
+          </AppText>
+        )}
+      </Animated.View>
+    </View>
+  );
+}
+
 export function SettingsScreen() {
   const router = useRouter();
   const {
     defaultCurrency,
     remindersEnabled,
     resetHomeReminderNudge,
+    returnReminderOffsets,
     setDefaultCurrency,
     setNotificationPromptStatus,
     setRemindersEnabled,
+    setReturnReminderOffsets,
   } = useAppSettings();
   const { isAuthenticated, isAuthLoading } = useAuth();
+  const { isPro } = usePlan();
   const [activeModal, setActiveModal] = useState<SettingsModalKey | null>(null);
   const [deleteAccountError, setDeleteAccountError] = useState('');
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [reminderOffsetsDraft, setReminderOffsetsDraft] =
+    useState<number[]>(returnReminderOffsets);
   const modalContent =
     activeModal === 'deleteAccount'
       ? getDeleteAccountModalContent({ isAuthenticated, isAuthLoading })
@@ -424,6 +760,23 @@ export function SettingsScreen() {
   const openDeleteAccountModal = () => {
     setDeleteAccountError('');
     setActiveModal('deleteAccount');
+  };
+
+  const openNotificationsModal = () => {
+    // Seed the draft from the committed setting each time the sheet opens, so
+    // an earlier unsaved edit never persists across opens.
+    setReminderOffsetsDraft(returnReminderOffsets);
+    setActiveModal('notifications');
+  };
+
+  const handleNotificationsDone = () => {
+    // Commit the draft only for Pro (the only users who can edit it), then
+    // close. Any non-Done close leaves the committed setting untouched.
+    if (isPro) {
+      setReturnReminderOffsets(reminderOffsetsDraft);
+    }
+
+    closeModal();
   };
 
   const handleCurrencySelect = (currency: CurrencyCode) => {
@@ -548,7 +901,7 @@ export function SettingsScreen() {
             <SettingsRow
               detail={remindersEnabled ? 'Reminders are on' : 'Reminders are off'}
               icon={<BellIcon />}
-              onPress={() => setActiveModal('notifications')}
+              onPress={openNotificationsModal}
               title="Notifications"
               tone="sage"
             />
@@ -655,20 +1008,32 @@ export function SettingsScreen() {
               ]}
             />
             <AppText
-              style={[styles.modalTitle, isDeleteModal && styles.destructiveTitle]}
+              style={[
+                styles.modalTitle,
+                isDeleteModal && styles.destructiveTitle,
+                isNotificationsModal && styles.notificationsModalTitle,
+              ]}
               variant="title"
             >
               {modalContent.title}
             </AppText>
-            <AppText
-              style={[
-                styles.modalBody,
-                isCurrencyModal && styles.currencyModalBody,
-              ]}
-              variant="body"
-            >
-              {modalContent.body}
-            </AppText>
+            {isNotificationsModal && isPro ? (
+              <ReturnReminderChips
+                offsets={reminderOffsetsDraft}
+                onChange={setReminderOffsetsDraft}
+                remindersEnabled={remindersEnabled}
+              />
+            ) : (
+              <AppText
+                style={[
+                  styles.modalBody,
+                  isCurrencyModal && styles.currencyModalBody,
+                ]}
+                variant="body"
+              >
+                {modalContent.body}
+              </AppText>
+            )}
             {isCurrencyModal ? (
               <>
                 <View style={styles.currencyOptions}>
@@ -808,7 +1173,9 @@ export function SettingsScreen() {
                   </>
                 ) : (
                   <AppButton
-                    onPress={closeModal}
+                    onPress={
+                      isNotificationsModal ? handleNotificationsDone : closeModal
+                    }
                     style={styles.modalButton}
                     title="Done"
                   />
@@ -1280,6 +1647,9 @@ const styles = StyleSheet.create({
     lineHeight: 28,
     textAlign: 'center',
   },
+  notificationsModalTitle: {
+    color: theme.colors.greenDark,
+  },
   row: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -1382,6 +1752,140 @@ const styles = StyleSheet.create({
   },
   reminderPreferenceSwitch: {
     transform: [{ scaleX: 0.9 }, { scaleY: 0.9 }],
+  },
+  returnReminderChip: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.card,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  returnReminderChipCustom: {
+    flexDirection: 'row',
+    gap: 4,
+    paddingRight: 10,
+  },
+  returnReminderChipDelete: {
+    alignItems: 'center',
+    height: 18,
+    justifyContent: 'center',
+    marginLeft: 2,
+    width: 18,
+  },
+  returnReminderChipDeleteDisabled: {
+    opacity: 0.4,
+  },
+  returnReminderChipDeleteLabel: {
+    color: '#747A70',
+    fontSize: 15,
+    fontWeight: theme.fontWeight.semibold,
+    lineHeight: 16,
+  },
+  returnReminderChipLocked: {
+    opacity: 0.7,
+  },
+  returnReminderChipPressed: {
+    opacity: 0.82,
+  },
+  returnReminderChipSelected: {
+    backgroundColor: theme.colors.sage,
+    borderColor: '#D8E3D0',
+  },
+  returnReminderChipSelectedInteractive: {
+    backgroundColor: theme.colors.green,
+    borderColor: '#D8E3D0',
+  },
+  returnReminderChipText: {
+    color: '#747A70',
+    fontSize: 13,
+    fontWeight: theme.fontWeight.semibold,
+    lineHeight: 17,
+  },
+  returnReminderChipTextSelected: {
+    color: theme.colors.greenDark,
+  },
+  returnReminderChipTextSelectedInteractive: {
+    color: theme.colors.card,
+  },
+  returnReminderChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    justifyContent: 'center',
+    marginTop: 12,
+  },
+  returnReminderSection: {
+    marginTop: 6,
+  },
+  returnReminderSectionDisabled: {
+    opacity: 0.5,
+  },
+  returnReminderStepper: {
+    alignItems: 'center',
+    alignSelf: 'center',
+    backgroundColor: theme.colors.card,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 6,
+    justifyContent: 'center',
+    marginTop: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
+  returnReminderStepperButton: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.sage,
+    borderRadius: theme.radius.pill,
+    height: 30,
+    justifyContent: 'center',
+    width: 30,
+  },
+  returnReminderStepperButtonDisabled: {
+    opacity: 0.4,
+  },
+  returnReminderStepperButtonLabel: {
+    color: theme.colors.greenDark,
+    fontSize: 16,
+    fontWeight: theme.fontWeight.semibold,
+    lineHeight: 18,
+  },
+  returnReminderStepperConfirm: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.green,
+    borderRadius: theme.radius.pill,
+    height: 30,
+    justifyContent: 'center',
+    width: 30,
+  },
+  returnReminderStepperConfirmDisabled: {
+    opacity: 0.4,
+  },
+  returnReminderStepperConfirmLabel: {
+    color: theme.colors.card,
+    fontSize: 14,
+    fontWeight: theme.fontWeight.semibold,
+    lineHeight: 16,
+  },
+  returnReminderStepperHint: {
+    color: '#747A70',
+    fontSize: 12,
+    marginTop: 6,
+    textAlign: 'center',
+  },
+  returnReminderStepperValue: {
+    color: theme.colors.greenDark,
+    fontSize: 13,
+    fontWeight: theme.fontWeight.semibold,
+    minWidth: 96,
+    textAlign: 'center',
+  },
+  returnReminderStepperWrapper: {
+    overflow: 'hidden',
   },
   screen: {
     paddingBottom: 0,

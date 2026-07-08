@@ -30,7 +30,10 @@ import {
 } from '../../../services/purchasePhotoSyncService';
 import { useAuth } from '../../../state/AuthState';
 import { usePlan } from '../../monetization/state/PlanState';
-import { useAppSettings } from '../../settings/state/AppSettingsState';
+import {
+  DEFAULT_RETURN_REMINDER_OFFSETS,
+  useAppSettings,
+} from '../../settings/state/AppSettingsState';
 import { LEGACY_REMOTE_PHOTO_CAP } from '../constants';
 import {
   getMockPurchaseById,
@@ -2142,8 +2145,9 @@ async function syncAccountLocalPurchasePhotos(
 
 export function PurchasesProvider({ children }: { children: ReactNode }) {
   const { isAuthLoading, user } = useAuth();
-  const { limits } = usePlan();
-  const { hasHydratedSettings, remindersEnabled } = useAppSettings();
+  const { isPro, limits } = usePlan();
+  const { hasHydratedSettings, remindersEnabled, returnReminderOffsets } =
+    useAppSettings();
   const purchaseScopeKey = useMemo(
     () => (isAuthLoading ? null : getPurchaseScopeKey(user?.id)),
     [isAuthLoading, user?.id],
@@ -3124,6 +3128,12 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
       .catch(() => undefined)
       .then(() =>
         rescheduleAllPurchaseReminders(purchasesSnapshot, {
+          // Gate custom intervals on Pro at the scheduling boundary: a
+          // downgraded former-Pro user falls back to the default [7, 3]
+          // regardless of any stale offsets left in their storage.
+          reminderOffsets: isPro
+            ? returnReminderOffsets
+            : DEFAULT_RETURN_REMINDER_OFFSETS,
           remindersEnabled,
         }),
       )
@@ -3133,9 +3143,11 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
     hasHydratedPurchases,
     hasHydratedSettings,
     hydratedPurchaseScopeKey,
+    isPro,
     purchaseScopeKey,
     purchases,
     remindersEnabled,
+    returnReminderOffsets,
   ]);
 
   const effectiveGuestRemaining = useMemo(

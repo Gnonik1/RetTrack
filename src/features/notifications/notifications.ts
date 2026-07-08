@@ -26,6 +26,15 @@ const LEGACY_PENDING_DIGEST_BODY_PATTERNS = [
 const QUIET_HOUR_END = 10;
 const QUIET_HOUR_START = 22;
 
+// Grouped return reminders are identified by their offset day-count. Any
+// day-count is supported via the generic `return-${n}-days` form; the legacy
+// 7- and 3-day offsets keep their original word-form kind strings so existing
+// scheduled identifiers and notification payloads stay byte-for-byte identical.
+type GroupedReturnReminderKind =
+  | 'return-seven-days'
+  | 'return-three-days'
+  | `return-${number}-days`;
+
 type ReminderKind =
   | 'due-today-group'
   | 'pending-digest-initial'
@@ -35,8 +44,7 @@ type ReminderKind =
   | 'pending-three-days'
   | 'pending-seven-days'
   | 'return-last-day'
-  | 'return-three-days'
-  | 'return-seven-days';
+  | GroupedReturnReminderKind;
 
 type ReminderPlan = {
   body: string;
@@ -46,30 +54,40 @@ type ReminderPlan = {
   title: string;
 };
 
-type GroupedReturnReminderKind = Extract<
-  ReminderKind,
-  'return-seven-days' | 'return-three-days'
->;
-
 type GroupedReturnReminderDefinition = {
-  daysLeft: 3 | 7;
+  daysLeft: number;
   kind: GroupedReturnReminderKind;
 };
 
 type RescheduleAllPurchaseRemindersOptions = {
+  reminderOffsets?: number[];
   remindersEnabled?: boolean;
 };
 
-const GROUPED_RETURN_REMINDER_DEFINITIONS: GroupedReturnReminderDefinition[] = [
-  {
-    daysLeft: 7,
-    kind: 'return-seven-days',
-  },
-  {
-    daysLeft: 3,
-    kind: 'return-three-days',
-  },
-];
+// The exact current production offsets. Any caller that omits `reminderOffsets`
+// schedules these two — and only these two — identical to prior behavior.
+const DEFAULT_RETURN_REMINDER_OFFSETS: number[] = [7, 3];
+
+function getReturnReminderKind(daysLeft: number): GroupedReturnReminderKind {
+  if (daysLeft === 7) {
+    return 'return-seven-days';
+  }
+
+  if (daysLeft === 3) {
+    return 'return-three-days';
+  }
+
+  return `return-${daysLeft}-days`;
+}
+
+function getGroupedReturnReminderDefinitions(
+  reminderOffsets: number[],
+): GroupedReturnReminderDefinition[] {
+  return reminderOffsets.map((daysLeft) => ({
+    daysLeft,
+    kind: getReturnReminderKind(daysLeft),
+  }));
+}
 
 let hasConfiguredNotificationHandler = false;
 
@@ -141,7 +159,7 @@ export async function cancelPurchaseReminders(purchaseId: string) {
 
 export async function schedulePurchaseReminders(
   purchase: MockPurchase,
-  options: { remindersEnabled?: boolean } = {},
+  options: { reminderOffsets?: number[]; remindersEnabled?: boolean } = {},
 ) {
   await cancelPurchaseReminders(purchase.id);
 
@@ -160,7 +178,7 @@ export async function schedulePurchaseReminders(
   const now = new Date();
 
   return scheduleReminderPlans([
-    ...getGroupedReturnReminderPlans([purchase], now),
+    ...getGroupedReturnReminderPlans([purchase], now, options.reminderOffsets),
     ...getGroupedLastDayReturnReminderPlans([purchase], now),
   ]);
 }
@@ -199,7 +217,11 @@ export async function rescheduleAllPurchaseReminders(
     (purchase) => purchase.status === 'active',
   );
   const reminderPlans = [
-    ...getGroupedReturnReminderPlans(activePurchases, now),
+    ...getGroupedReturnReminderPlans(
+      activePurchases,
+      now,
+      options.reminderOffsets,
+    ),
     ...getGroupedLastDayReturnReminderPlans(activePurchases, now),
   ];
   const pendingDigestAnchorDate =
@@ -417,10 +439,12 @@ async function getStoredPendingDigestAnchorDate() {
   }
 }
 
-function getPurchaseReminderIdentifiers(purchaseId: string) {
+function getPurchaseReminderIdentifiers(
+  purchaseId: string,
+  reminderOffsets: number[] = DEFAULT_RETURN_REMINDER_OFFSETS,
+) {
   const kinds: ReminderKind[] = [
-    'return-seven-days',
-    'return-three-days',
+    ...reminderOffsets.map(getReturnReminderKind),
     'return-last-day',
     'pending-now',
     'pending-three-days',
@@ -437,13 +461,16 @@ function getReminderIdentifier(purchaseId: string, kind: ReminderKind) {
 function getGroupedReturnReminderPlans(
   purchases: MockPurchase[],
   now: Date,
+  reminderOffsets: number[] = DEFAULT_RETURN_REMINDER_OFFSETS,
 ) {
+  const reminderDefinitions =
+    getGroupedReturnReminderDefinitions(reminderOffsets);
   const groupedReminders = new Map<
     string,
     {
       count: number;
       date: Date;
-      daysLeft: 3 | 7;
+      daysLeft: number;
       kind: GroupedReturnReminderKind;
     }
   >();
@@ -455,7 +482,7 @@ function getGroupedReturnReminderPlans(
       continue;
     }
 
-    for (const reminderDefinition of GROUPED_RETURN_REMINDER_DEFINITIONS) {
+    for (const reminderDefinition of reminderDefinitions) {
       const reminderDate = getReturnReminderDate(
         returnDate,
         reminderDefinition.daysLeft,
@@ -501,7 +528,7 @@ function getGroupedReturnReminderPlans(
   );
 }
 
-function getGroupedReturnReminderBody(purchaseCount: number, daysLeft: 3 | 7) {
+function getGroupedReturnReminderBody(purchaseCount: number, daysLeft: number) {
   if (purchaseCount === 1) {
     return `1 purchase has ${daysLeft} days left to return`;
   }
@@ -804,12 +831,18 @@ function getDateTrigger(date: Date): Notifications.DateTriggerInput {
   return trigger;
 }
 
+// Grouped return reminders share a single date-keyed identifier of the form
+// `rettrack:return-<offset>-days:<dateKey>` (e.g. `return-seven-days`,
+// `return-14-days`) and are never tied to one purchase id, so every offset
+// value must be recognized here rather than a fixed 7/3 pair.
+const GROUPED_RETURN_REMINDER_IDENTIFIER_PATTERN =
+  /^rettrack:return-[^:]+-days:/;
+
 function getPurchaseIdFromReminderIdentifier(identifier: string) {
   if (
     identifier.startsWith('rettrack:due-today:') ||
     identifier.startsWith('rettrack:pending-digest:') ||
-    identifier.startsWith('rettrack:return-seven-days:') ||
-    identifier.startsWith('rettrack:return-three-days:')
+    GROUPED_RETURN_REMINDER_IDENTIFIER_PATTERN.test(identifier)
   ) {
     return null;
   }

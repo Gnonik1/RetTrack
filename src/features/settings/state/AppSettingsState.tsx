@@ -42,6 +42,10 @@ export type NotificationPromptStatus = 'dismissed' | 'enabled' | 'undecided';
 
 export const DEFAULT_CURRENCY: CurrencyCode = 'USD';
 const DEFAULT_NOTIFICATION_PROMPT_STATUS: NotificationPromptStatus = 'undecided';
+// Pro-configurable "days before return" reminder offsets. Mirrors the
+// notifications default; the last-day ("Day of") reminder is always on and is
+// tracked separately, so it is not part of this list.
+export const DEFAULT_RETURN_REMINDER_OFFSETS: number[] = [7, 3];
 
 type NotificationPreference = {
   notificationPromptStatus: NotificationPromptStatus;
@@ -63,9 +67,11 @@ type AppSettingsStateValue = {
   recordEligibleHomeReminderDay: () => Promise<boolean>;
   remindersEnabled: boolean;
   resetHomeReminderNudge: () => Promise<boolean>;
+  returnReminderOffsets: number[];
   setDefaultCurrency: (currency: CurrencyCode) => void;
   setNotificationPromptStatus: (status: NotificationPromptStatus) => void;
   setRemindersEnabled: (isEnabled: boolean) => void;
+  setReturnReminderOffsets: (offsets: number[]) => void;
 };
 
 const APP_SETTINGS_STORAGE_KEY = 'rettrack:app-settings:v1';
@@ -77,6 +83,8 @@ const NOTIFICATION_PROMPT_STATUS_STORAGE_KEY_PREFIX =
   `${APP_SETTINGS_STORAGE_KEY}:notificationPromptStatus`;
 const REMINDERS_ENABLED_STORAGE_KEY_PREFIX =
   `${APP_SETTINGS_STORAGE_KEY}:remindersEnabled`;
+const RETURN_REMINDER_OFFSETS_STORAGE_KEY_PREFIX =
+  `${APP_SETTINGS_STORAGE_KEY}:returnReminderOffsets`;
 
 const AppSettingsStateContext = createContext<AppSettingsStateValue | undefined>(
   undefined,
@@ -154,6 +162,29 @@ function parseStoredNotificationPromptStatus(value: string | null) {
   }
 }
 
+function parseStoredReturnReminderOffsets(value: string | null) {
+  if (value === null) {
+    return null;
+  }
+
+  try {
+    const parsedValue: unknown = JSON.parse(value);
+
+    if (!Array.isArray(parsedValue)) {
+      return null;
+    }
+
+    const offsets = parsedValue.filter(
+      (entry): entry is number =>
+        typeof entry === 'number' && Number.isInteger(entry) && entry >= 0,
+    );
+
+    return offsets.length > 0 ? offsets : null;
+  } catch {
+    return null;
+  }
+}
+
 function parseStoredAppSettings(value: string | null) {
   if (value === null) {
     return null;
@@ -207,6 +238,10 @@ function getRemindersEnabledStorageKey(scopeKey: string) {
   return `${REMINDERS_ENABLED_STORAGE_KEY_PREFIX}:${scopeKey}`;
 }
 
+function getReturnReminderOffsetsStorageKey(scopeKey: string) {
+  return `${RETURN_REMINDER_OFFSETS_STORAGE_KEY_PREFIX}:${scopeKey}`;
+}
+
 async function persistNotificationPreferenceForScope(
   scopeKey: string,
   preference: NotificationPreference,
@@ -234,17 +269,21 @@ async function hydrateAppSettingsScope(scopeKey: string) {
   const notificationPromptStatusStorageKey =
     getNotificationPromptStatusStorageKey(scopeKey);
   const remindersEnabledStorageKey = getRemindersEnabledStorageKey(scopeKey);
+  const returnReminderOffsetsStorageKey =
+    getReturnReminderOffsetsStorageKey(scopeKey);
   const [
     storedDefaultCurrency,
     storedOnboardingCompletion,
     storedNotificationPromptStatus,
     storedRemindersEnabled,
+    storedReturnReminderOffsets,
     storedLegacySettings,
   ] = await Promise.all([
     AsyncStorage.getItem(DEFAULT_CURRENCY_STORAGE_KEY),
     AsyncStorage.getItem(onboardingCompletionStorageKey),
     AsyncStorage.getItem(notificationPromptStatusStorageKey),
     AsyncStorage.getItem(remindersEnabledStorageKey),
+    AsyncStorage.getItem(returnReminderOffsetsStorageKey),
     AsyncStorage.getItem(APP_SETTINGS_STORAGE_KEY),
   ]);
   const legacySettings = parseStoredAppSettings(storedLegacySettings);
@@ -286,6 +325,9 @@ async function hydrateAppSettingsScope(scopeKey: string) {
       parseStoredBoolean(storedRemindersEnabled) ??
       legacySettings?.remindersEnabled ??
       false,
+    returnReminderOffsets:
+      parseStoredReturnReminderOffsets(storedReturnReminderOffsets) ??
+      DEFAULT_RETURN_REMINDER_OFFSETS,
   };
 }
 
@@ -302,6 +344,9 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
   const [notificationPromptStatus, setNotificationPromptStatusState] =
     useState<NotificationPromptStatus>(DEFAULT_NOTIFICATION_PROMPT_STATUS);
   const [remindersEnabled, setRemindersEnabledState] = useState(false);
+  const [returnReminderOffsets, setReturnReminderOffsetsState] = useState<
+    number[]
+  >(DEFAULT_RETURN_REMINDER_OFFSETS);
   const [hasHydratedSettings, setHasHydratedSettings] = useState(false);
   const [hydratedSettingsScopeKey, setHydratedSettingsScopeKey] = useState<
     string | null
@@ -358,12 +403,14 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
         setHasCompletedOnboardingState(nextSettings.hasCompletedOnboarding);
         setNotificationPromptStatusState(nextSettings.notificationPromptStatus);
         setRemindersEnabledState(nextSettings.remindersEnabled);
+        setReturnReminderOffsetsState(nextSettings.returnReminderOffsets);
       } catch {
         if (isMounted) {
           setDefaultCurrencyState(DEFAULT_CURRENCY);
           setHasCompletedOnboardingState(false);
           setNotificationPromptStatusState(DEFAULT_NOTIFICATION_PROMPT_STATUS);
           setRemindersEnabledState(false);
+          setReturnReminderOffsetsState(DEFAULT_RETURN_REMINDER_OFFSETS);
         }
       } finally {
         if (isMounted) {
@@ -495,6 +542,28 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
     }
 
     AsyncStorage.setItem(
+      getReturnReminderOffsetsStorageKey(appSettingsScopeKey),
+      JSON.stringify(returnReminderOffsets),
+    ).catch(() => {
+      // Scoped return reminder offsets persistence is best-effort.
+    });
+  }, [
+    appSettingsScopeKey,
+    hasHydratedSettings,
+    hydratedSettingsScopeKey,
+    returnReminderOffsets,
+  ]);
+
+  useEffect(() => {
+    if (
+      !hasHydratedSettings ||
+      appSettingsScopeKey === null ||
+      hydratedSettingsScopeKey !== appSettingsScopeKey
+    ) {
+      return;
+    }
+
+    AsyncStorage.setItem(
       getNotificationPromptStatusStorageKey(appSettingsScopeKey),
       notificationPromptStatus,
     ).catch(() => {
@@ -517,6 +586,10 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
 
   const setRemindersEnabled = useCallback((isEnabled: boolean) => {
     setRemindersEnabledState(isEnabled);
+  }, []);
+
+  const setReturnReminderOffsets = useCallback((offsets: number[]) => {
+    setReturnReminderOffsetsState(offsets);
   }, []);
 
   const setNotificationPromptStatus = useCallback(
@@ -658,9 +731,11 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
       recordEligibleHomeReminderDay,
       remindersEnabled,
       resetHomeReminderNudge,
+      returnReminderOffsets,
       setDefaultCurrency,
       setNotificationPromptStatus,
       setRemindersEnabled,
+      setReturnReminderOffsets,
     }),
     [
       appSettingsScopeKey,
@@ -675,9 +750,11 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
       recordEligibleHomeReminderDay,
       remindersEnabled,
       resetHomeReminderNudge,
+      returnReminderOffsets,
       setDefaultCurrency,
       setNotificationPromptStatus,
       setRemindersEnabled,
+      setReturnReminderOffsets,
     ],
   );
 
