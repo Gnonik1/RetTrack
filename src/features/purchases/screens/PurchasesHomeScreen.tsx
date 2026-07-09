@@ -1,5 +1,12 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import {
   Alert,
   Animated,
@@ -9,6 +16,8 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Text,
+  TextInput,
   View,
 } from 'react-native';
 
@@ -22,6 +31,7 @@ import {
   getNotificationPermissionsStatus,
   requestNotificationPermissions,
 } from '../../notifications/notifications';
+import { usePlan } from '../../monetization/state/PlanState';
 import { useAppSettings } from '../../settings/state/AppSettingsState';
 import {
   purchaseStatusLabels,
@@ -38,6 +48,7 @@ import {
   getDateSortValue,
   getPurchaseReturnDate,
   getReturnDateUrgency,
+  parsePurchaseDate,
 } from '../utils/purchaseDates';
 
 type PurchasesHomeScreenProps = {
@@ -71,6 +82,7 @@ type GestureLock = 'horizontal' | 'undecided' | 'vertical';
 
 const GESTURE_LOCK_DISTANCE = 14;
 const HORIZONTAL_LOCK_RATIO = 1.5;
+const SEARCH_DEBOUNCE_MS = 180;
 const SWIPE_COMPLETION_DISTANCE = 58;
 const TAB_TRANSITION_DISTANCE = 12;
 const TAB_TRANSITION_DURATION = 170;
@@ -100,6 +112,11 @@ const sectionHeadings: Record<
     title: 'Returned',
   },
 };
+
+const GLOBAL_SEARCH_SECTION_HEADING = {
+  meta: 'RECENT FIRST',
+  title: 'All purchases',
+} as const;
 
 const emptyStateContent: Record<
   FilterKey,
@@ -362,6 +379,105 @@ function getVisiblePurchaseItems(
   return filteredItems;
 }
 
+function matchesSearchQuery(
+  item: MockPurchase,
+  normalizedQuery: string,
+  includeComment: boolean,
+) {
+  if (!normalizedQuery) {
+    return true;
+  }
+
+  const searchableValues = [item.itemName, item.store];
+
+  if (includeComment) {
+    searchableValues.push(item.comment ?? '');
+  }
+
+  return searchableValues.some((value) =>
+    value.toLowerCase().includes(normalizedQuery),
+  );
+}
+
+// Advanced (Pro) global-search recency key. Prefer resolvedAt when present,
+// then fall back to purchaseDateISO, then returnDateISO — most-recent-first.
+function getRecencySortValue(item: MockPurchase) {
+  const resolvedDate = getResolvedDateFromValue(item.resolvedAt);
+
+  if (resolvedDate) {
+    return resolvedDate.getTime();
+  }
+
+  const purchaseDate = parsePurchaseDate({ dateISO: item.purchaseDateISO });
+
+  if (purchaseDate) {
+    return purchaseDate.getTime();
+  }
+
+  const returnDate =
+    parsePurchaseDate({ dateISO: item.returnDateISO }) ??
+    getPurchaseReturnDate(item);
+
+  if (returnDate) {
+    return returnDate.getTime();
+  }
+
+  return 0;
+}
+
+function getGlobalSearchResults(
+  purchases: MockPurchase[],
+  normalizedQuery: string,
+) {
+  return purchases
+    .filter((item) => matchesSearchQuery(item, normalizedQuery, true))
+    .sort(
+      (firstItem, secondItem) =>
+        getRecencySortValue(secondItem) - getRecencySortValue(firstItem),
+    );
+}
+
+function getHighlightedContent(text: string, query?: string): ReactNode {
+  const normalizedQuery = query?.trim().toLowerCase();
+
+  if (!normalizedQuery) {
+    return text;
+  }
+
+  const segments: ReactNode[] = [];
+  let remainingText = text;
+  let segmentIndex = 0;
+
+  while (remainingText.length > 0) {
+    const matchIndex = remainingText.toLowerCase().indexOf(normalizedQuery);
+
+    if (matchIndex === -1) {
+      segments.push(remainingText);
+      break;
+    }
+
+    if (matchIndex > 0) {
+      segments.push(remainingText.slice(0, matchIndex));
+    }
+
+    const matchText = remainingText.slice(
+      matchIndex,
+      matchIndex + normalizedQuery.length,
+    );
+
+    segments.push(
+      <Text key={`search-match-${segmentIndex}`} style={styles.searchMatchHighlight}>
+        {matchText}
+      </Text>,
+    );
+
+    segmentIndex += 1;
+    remainingText = remainingText.slice(matchIndex + normalizedQuery.length);
+  }
+
+  return segments;
+}
+
 function NotificationBell() {
   return (
     <View style={styles.bellIcon} accessibilityElementsHidden>
@@ -547,10 +663,12 @@ function getGestureLock(dx: number, dy: number): GestureLock {
 }
 
 function PurchaseCard({
+  highlightQuery,
   item,
   onPress,
   onResolveItem,
 }: {
+  highlightQuery?: string;
   item: MockPurchase;
   onPress?: () => void;
   onResolveItem?: (itemId: string, status: ResolvedPurchaseStatus) => void;
@@ -584,7 +702,7 @@ function PurchaseCard({
           <View style={styles.itemCopy}>
             <View style={styles.itemNameRow}>
               <AppText style={styles.itemName} variant="body">
-                {item.itemName}
+                {getHighlightedContent(item.itemName, highlightQuery)}
               </AppText>
 
               <View style={[styles.statusPill, getStatusPillStyle(item.status)]}>
@@ -601,7 +719,7 @@ function PurchaseCard({
             </View>
 
             <AppText style={styles.storeName} variant="caption">
-              {item.store}
+              {getHighlightedContent(item.store, highlightQuery)}
             </AppText>
 
             {isResolvedCard ? (
@@ -694,13 +812,40 @@ export function PurchasesHomeScreen({
     setNotificationPromptStatus,
     setRemindersEnabled,
   } = useAppSettings();
+  const { features } = usePlan();
+  const isAdvancedSearchEnabled = features.advancedSearch;
   const [isScrollEnabled, setIsScrollEnabled] = useState(true);
   const [selectedFilter, setSelectedFilter] = useState<FilterKey>('active');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
   const [automaticNudgeEvaluationVersion, setAutomaticNudgeEvaluationVersion] =
     useState(0);
   const selectedFilterIndex = filterItems.findIndex(
     (filterItem) => filterItem.key === selectedFilter,
   );
+
+  useEffect(() => {
+    const debounceTimer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, SEARCH_DEBOUNCE_MS);
+
+    return () => {
+      clearTimeout(debounceTimer);
+    };
+  }, [searchQuery]);
+
+  const trimmedSearchQuery = debouncedSearchQuery.trim();
+  const normalizedSearchQuery = trimmedSearchQuery.toLowerCase();
+  const hasActiveSearchQuery = normalizedSearchQuery.length > 0;
+  // Advanced tier only: an active query switches to cross-status global search.
+  // Baseline (Free/Guest) never sets this true, so it stays tab-scoped.
+  const isGlobalSearchActive = isAdvancedSearchEnabled && hasActiveSearchQuery;
+  const searchHighlightQuery = isGlobalSearchActive
+    ? trimmedSearchQuery
+    : undefined;
+  const searchPlaceholder = isAdvancedSearchEnabled
+    ? 'Search all purchases'
+    : 'Search name or store';
   const automaticNudgeEvaluationGenerationRef = useRef(0);
   const automaticNudgeEvaluationQueuedRef = useRef(false);
   const isAutomaticNudgeEvaluationRunningRef = useRef(false);
@@ -715,10 +860,30 @@ export function PurchasesHomeScreen({
     [purchases],
   );
   const greeting = getTimeAwareGreeting();
-  const visiblePurchaseItems = useMemo(
-    () => getVisiblePurchaseItems(purchases, selectedFilter),
-    [purchases, selectedFilter],
-  );
+  const visiblePurchaseItems = useMemo(() => {
+    // Advanced tier: while a query is active, ignore the selected tab and match
+    // across every status, sorted by the shared recency rule.
+    if (isAdvancedSearchEnabled && normalizedSearchQuery) {
+      return getGlobalSearchResults(purchases, normalizedSearchQuery);
+    }
+
+    // Baseline tier: keep the tab-scoped list, then narrow within the tab by
+    // name/store only (no comment, no cross-tab behavior).
+    const tabScopedItems = getVisiblePurchaseItems(purchases, selectedFilter);
+
+    if (!normalizedSearchQuery) {
+      return tabScopedItems;
+    }
+
+    return tabScopedItems.filter((item) =>
+      matchesSearchQuery(item, normalizedSearchQuery, false),
+    );
+  }, [
+    isAdvancedSearchEnabled,
+    normalizedSearchQuery,
+    purchases,
+    selectedFilter,
+  ]);
   const hasReminderEligiblePurchase = useMemo(
     () =>
       purchases.some(
@@ -728,7 +893,9 @@ export function PurchasesHomeScreen({
       ),
     [purchases],
   );
-  const sectionHeading = sectionHeadings[selectedFilter];
+  const sectionHeading = isGlobalSearchActive
+    ? GLOBAL_SEARCH_SECTION_HEADING
+    : sectionHeadings[selectedFilter];
   const automaticNudgeContextRef = useRef({
     appSettingsScopeKey,
     hasCompletedOnboarding,
@@ -758,7 +925,8 @@ export function PurchasesHomeScreen({
   };
   const selectFilter = useCallback(
     (nextFilter: FilterKey) => {
-      if (nextFilter === selectedFilter) {
+      // Tabs are inert during Pro global search (press disabled + swipe ignored).
+      if (isGlobalSearchActive || nextFilter === selectedFilter) {
         return;
       }
 
@@ -772,7 +940,7 @@ export function PurchasesHomeScreen({
       tabTransition.setValue(0);
       setSelectedFilter(nextFilter);
     },
-    [selectedFilter, selectedFilterIndex, tabTransition],
+    [isGlobalSearchActive, selectedFilter, selectedFilterIndex, tabTransition],
   );
 
   const turnOffReminders = useCallback(() => {
@@ -1204,6 +1372,7 @@ export function PurchasesHomeScreen({
 
       <ScrollView
         contentContainerStyle={styles.content}
+        keyboardDismissMode="on-drag"
         scrollEnabled={isScrollEnabled}
         showsVerticalScrollIndicator={false}
         style={styles.scroll}
@@ -1261,13 +1430,54 @@ export function PurchasesHomeScreen({
           </View>
         </LinearGradient>
 
-        <View style={styles.segmentedFilter}>
+        <View style={styles.searchField}>
+          <View accessibilityElementsHidden style={styles.searchIcon}>
+            <View style={styles.searchIconGlass} />
+            <View style={styles.searchIconHandle} />
+          </View>
+          <TextInput
+            accessibilityLabel="Search purchases"
+            autoCapitalize="none"
+            autoCorrect={false}
+            onChangeText={setSearchQuery}
+            placeholder={searchPlaceholder}
+            placeholderTextColor="#8A9082"
+            returnKeyType="search"
+            selectionColor={theme.colors.green}
+            style={styles.searchInput}
+            value={searchQuery}
+          />
+          {searchQuery.length > 0 ? (
+            <Pressable
+              accessibilityLabel="Clear search"
+              accessibilityRole="button"
+              hitSlop={10}
+              onPress={() => setSearchQuery('')}
+              style={({ pressed }) => [
+                styles.searchClear,
+                pressed && styles.searchClearPressed,
+              ]}
+            >
+              <AppText style={styles.searchClearText} variant="caption">
+                ×
+              </AppText>
+            </Pressable>
+          ) : null}
+        </View>
+
+        <View
+          style={[
+            styles.segmentedFilter,
+            isGlobalSearchActive && styles.segmentedFilterDimmed,
+          ]}
+        >
           {filterItems.map((filterItem) => {
             const isSelected = filterItem.key === selectedFilter;
 
             return (
               <Pressable
                 accessibilityRole="button"
+                disabled={isGlobalSearchActive}
                 key={filterItem.key}
                 onPress={() => selectFilter(filterItem.key)}
                 style={({ pressed }) => [
@@ -1307,13 +1517,22 @@ export function PurchasesHomeScreen({
 
             <View style={styles.itemList}>
               {visiblePurchaseItems.length === 0 ? (
-                <PurchaseEmptyState
-                  onAddItem={onAddItem}
-                  selectedFilter={selectedFilter}
-                />
+                hasActiveSearchQuery ? (
+                  <View style={styles.emptyStateCard}>
+                    <AppText style={styles.searchEmptyText} variant="body">
+                      No matches for “{trimmedSearchQuery}”
+                    </AppText>
+                  </View>
+                ) : (
+                  <PurchaseEmptyState
+                    onAddItem={onAddItem}
+                    selectedFilter={selectedFilter}
+                  />
+                )
               ) : (
                 visiblePurchaseItems.map((item) => (
                   <PurchaseCard
+                    highlightQuery={searchHighlightQuery}
                     item={item}
                     key={item.id}
                     onResolveItem={resolvePurchase}
@@ -1646,6 +1865,90 @@ const styles = StyleSheet.create({
   },
   filterTextSelected: {
     color: theme.colors.greenDark,
+  },
+  segmentedFilterDimmed: {
+    opacity: 0.5,
+  },
+  searchField: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.card,
+    borderColor: 'rgba(91, 105, 82, 0.13)',
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 9,
+    marginTop: 20,
+    minHeight: 48,
+    paddingHorizontal: 16,
+    paddingVertical: 4,
+    shadowColor: theme.colors.greenDark,
+    shadowOffset: {
+      height: 8,
+      width: 0,
+    },
+    shadowOpacity: 0.045,
+    shadowRadius: 18,
+    elevation: 1,
+  },
+  searchIcon: {
+    height: 16,
+    position: 'relative',
+    width: 16,
+  },
+  searchIconGlass: {
+    borderColor: '#747A70',
+    borderRadius: theme.radius.pill,
+    borderWidth: 1.6,
+    height: 11,
+    width: 11,
+  },
+  searchIconHandle: {
+    backgroundColor: '#747A70',
+    borderRadius: theme.radius.pill,
+    bottom: 0,
+    height: 2,
+    position: 'absolute',
+    right: 0,
+    transform: [{ rotate: '45deg' }],
+    width: 6,
+  },
+  searchInput: {
+    ...theme.typography.input,
+    color: theme.colors.text,
+    flex: 1,
+    fontSize: 15,
+    lineHeight: 20,
+    minHeight: 40,
+    padding: 0,
+    paddingVertical: 0,
+  },
+  searchClear: {
+    alignItems: 'center',
+    height: 22,
+    justifyContent: 'center',
+    width: 22,
+  },
+  searchClearPressed: {
+    opacity: theme.press.pressedOpacity,
+  },
+  searchClearText: {
+    color: '#747A70',
+    fontSize: 18,
+    fontWeight: theme.fontWeight.semibold,
+    lineHeight: 20,
+  },
+  searchMatchHighlight: {
+    // Applied over both itemName (semibold) and storeName (regular), so the
+    // weight bump stays: it is the only contrast lever on storeName.
+    color: theme.colors.greenDark,
+    fontWeight: theme.fontWeight.bold,
+  },
+  searchEmptyText: {
+    color: '#111A14',
+    fontSize: 15,
+    fontWeight: theme.fontWeight.semibold,
+    lineHeight: 21,
+    textAlign: 'center',
   },
   swipeContent: {
     flexGrow: 1,
