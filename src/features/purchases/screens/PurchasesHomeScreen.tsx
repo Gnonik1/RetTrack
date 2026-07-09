@@ -20,6 +20,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import Svg, { Path } from 'react-native-svg';
 
 import { AppScreen } from '../../../components/AppScreen';
 import { AppText } from '../../../components/AppText';
@@ -83,6 +84,9 @@ type GestureLock = 'horizontal' | 'undecided' | 'vertical';
 const GESTURE_LOCK_DISTANCE = 14;
 const HORIZONTAL_LOCK_RATIO = 1.5;
 const SEARCH_DEBOUNCE_MS = 180;
+const SORT_CHEVRON_COLOR = '#858B80';
+const SORT_MENU_ANCHOR_GAP = 8;
+const SORT_MENU_FADE_DURATION = 160;
 const SWIPE_COMPLETION_DISTANCE = 58;
 const TAB_TRANSITION_DISTANCE = 12;
 const TAB_TRANSITION_DURATION = 170;
@@ -117,6 +121,53 @@ const GLOBAL_SEARCH_SECTION_HEADING = {
   meta: 'RECENT FIRST',
   title: 'All purchases',
 } as const;
+
+type SortKey = 'priceHighToLow' | 'priceLowToHigh' | 'recent' | 'storeAZ';
+
+type AlternativeSortKey = Exclude<SortKey, 'recent'>;
+
+const alternativeSortOptions = [
+  {
+    key: 'priceHighToLow',
+    label: 'Price: High to Low',
+  },
+  {
+    key: 'priceLowToHigh',
+    label: 'Price: Low to High',
+  },
+  {
+    key: 'storeAZ',
+    label: 'Store: A-Z',
+  },
+] as const satisfies ReadonlyArray<{ key: AlternativeSortKey; label: string }>;
+
+// Meta labels for the alternative sorts only. 'recent' deliberately has no
+// entry: it keeps the tab's own meta ("NEAREST FIRST" on Active), which is what
+// that tab's existing order actually is.
+const sortMetaLabels: Record<AlternativeSortKey, string> = {
+  priceHighToLow: 'PRICE: HIGH TO LOW',
+  priceLowToHigh: 'PRICE: LOW TO HIGH',
+  storeAZ: 'STORE: A-Z',
+};
+
+// 'pending' is the one tab whose meta describes urgency rather than an order —
+// it has no sort at all, it is insertion order — so its meta cannot be reused
+// as a menu label the way "NEAREST FIRST" / "RECENT FIRST" can.
+const PENDING_DEFAULT_SORT_LABEL = 'Default order';
+
+function toSentenceCase(metaLabel: string) {
+  const lowerCased = metaLabel.toLowerCase();
+
+  return `${lowerCased.charAt(0).toUpperCase()}${lowerCased.slice(1)}`;
+}
+
+function getDefaultSortOptionLabel(selectedFilter: FilterKey) {
+  if (selectedFilter === 'pending') {
+    return PENDING_DEFAULT_SORT_LABEL;
+  }
+
+  return toSentenceCase(sectionHeadings[selectedFilter].meta);
+}
 
 const emptyStateContent: Record<
   FilterKey,
@@ -379,6 +430,87 @@ function getVisiblePurchaseItems(
   return filteredItems;
 }
 
+// Prices are written as `${CurrencyCode} ${amount}` (e.g. "USD 180"), but the
+// amount half is free text from a decimal-pad input, so it can carry grouping
+// separators ("USD 1,299.50"), a comma decimal mark ("USD 1299,50"), a bare
+// decimal ("USD .50"), or a stray symbol the form re-prefixes ("USD $180").
+// Take the first numeric run and infer the separators from its own shape.
+const PRICE_NUMBER_PATTERN = /[.,]?\d[\d.,]*/;
+
+function getPriceSortValue(item: MockPurchase) {
+  const priceText = item.price?.trim();
+
+  if (!priceText) {
+    return null;
+  }
+
+  const match = PRICE_NUMBER_PATTERN.exec(priceText);
+
+  if (!match) {
+    return null;
+  }
+
+  const digits = match[0].replace(/[.,]+$/, '');
+  const separatorIndex = Math.max(
+    digits.lastIndexOf(','),
+    digits.lastIndexOf('.'),
+  );
+  const fraction = separatorIndex === -1 ? '' : digits.slice(separatorIndex + 1);
+  // A trailing run of 1-2 digits is a decimal mark; anything longer ("1,299")
+  // is thousands grouping.
+  const hasDecimalMark = fraction.length > 0 && fraction.length <= 2;
+  const normalized = hasDecimalMark
+    ? `${digits.slice(0, separatorIndex).replace(/[.,]/g, '')}.${fraction}`
+    : digits.replace(/[.,]/g, '');
+  const value = Number(normalized);
+
+  return Number.isFinite(value) ? value : null;
+}
+
+function comparePricesByDirection(
+  firstItem: MockPurchase,
+  secondItem: MockPurchase,
+  isDescending: boolean,
+) {
+  const firstValue = getPriceSortValue(firstItem);
+  const secondValue = getPriceSortValue(secondItem);
+
+  // Missing/unparseable prices sink to the bottom in both directions, so the
+  // direction flip below never applies to them.
+  if (firstValue === null || secondValue === null) {
+    if (firstValue === secondValue) {
+      return 0;
+    }
+
+    return firstValue === null ? 1 : -1;
+  }
+
+  return isDescending ? secondValue - firstValue : firstValue - secondValue;
+}
+
+// Layered on top of getVisiblePurchaseItems, never in place of it: 'recent'
+// returns that list untouched, and Array.sort is stable, so ties in the other
+// sorts still fall back to the tab's existing order.
+function getSortedPurchaseItems(items: MockPurchase[], sortKey: SortKey) {
+  if (sortKey === 'recent') {
+    return items;
+  }
+
+  if (sortKey === 'storeAZ') {
+    return [...items].sort((firstItem, secondItem) =>
+      firstItem.store.localeCompare(secondItem.store, undefined, {
+        sensitivity: 'base',
+      }),
+    );
+  }
+
+  const isDescending = sortKey === 'priceHighToLow';
+
+  return [...items].sort((firstItem, secondItem) =>
+    comparePricesByDirection(firstItem, secondItem, isDescending),
+  );
+}
+
 function matchesSearchQuery(
   item: MockPurchase,
   normalizedQuery: string,
@@ -476,6 +608,23 @@ function getHighlightedContent(text: string, query?: string): ReactNode {
   }
 
   return segments;
+}
+
+// Drawn rather than typeset: the previous "▾" is U+25BE, a Geometric Shapes
+// glyph that resolves through a fallback symbol font, so its size and weight
+// rendered inconsistently across platforms. A Path has none of that risk.
+function SortChevronIcon() {
+  return (
+    <Svg
+      accessibilityElementsHidden
+      focusable={false}
+      height={5}
+      viewBox="0 0 8 5"
+      width={8}
+    >
+      <Path d="M0 0 8 0 4 5Z" fill={SORT_CHEVRON_COLOR} />
+    </Svg>
+  );
 }
 
 function NotificationBell() {
@@ -814,10 +963,15 @@ export function PurchasesHomeScreen({
   } = useAppSettings();
   const { features } = usePlan();
   const isAdvancedSearchEnabled = features.advancedSearch;
+  const isAdvancedSortingEnabled = features.advancedSorting;
   const [isScrollEnabled, setIsScrollEnabled] = useState(true);
   const [selectedFilter, setSelectedFilter] = useState<FilterKey>('active');
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
+  const [sortKey, setSortKey] = useState<SortKey>('recent');
+  const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
+  const [isSortMenuMounted, setIsSortMenuMounted] = useState(false);
+  const [sortMenuAnchor, setSortMenuAnchor] = useState({ right: 0, top: 0 });
   const [automaticNudgeEvaluationVersion, setAutomaticNudgeEvaluationVersion] =
     useState(0);
   const selectedFilterIndex = filterItems.findIndex(
@@ -846,6 +1000,29 @@ export function PurchasesHomeScreen({
   const searchPlaceholder = isAdvancedSearchEnabled
     ? 'Search all purchases'
     : 'Search name or store';
+  // Baseline (Free/Guest) is pinned to 'recent', so the tab-scoped list keeps
+  // exactly its existing order. The picker is additionally hidden during Pro
+  // global search, which carries its own cross-status recency order.
+  const activeSortKey: SortKey = isAdvancedSortingEnabled ? sortKey : 'recent';
+  const isSortPickerEnabled = isAdvancedSortingEnabled && !isGlobalSearchActive;
+  const defaultSortOptionLabel = getDefaultSortOptionLabel(selectedFilter);
+  const sortMenuOptions = useMemo(
+    () => [
+      {
+        key: 'recent' as const,
+        label: defaultSortOptionLabel,
+      },
+      ...alternativeSortOptions,
+    ],
+    [defaultSortOptionLabel],
+  );
+
+  useEffect(() => {
+    if (!isSortPickerEnabled) {
+      setIsSortMenuOpen(false);
+    }
+  }, [isSortPickerEnabled]);
+
   const automaticNudgeEvaluationGenerationRef = useRef(0);
   const automaticNudgeEvaluationQueuedRef = useRef(false);
   const isAutomaticNudgeEvaluationRunningRef = useRef(false);
@@ -854,6 +1031,9 @@ export function PurchasesHomeScreen({
   const previousAppStateRef = useRef(AppState.currentState);
   const gestureLock = useRef<GestureLock>('undecided');
   const tabTransition = useRef(new Animated.Value(1)).current;
+  const sortMenuFade = useRef(new Animated.Value(0)).current;
+  const sortMenuOverlayRef = useRef<View | null>(null);
+  const sortTriggerRef = useRef<View | null>(null);
   const transitionDirection = useRef(1);
   const attentionSummary = useMemo(
     () => getAttentionSummary(purchases),
@@ -872,13 +1052,17 @@ export function PurchasesHomeScreen({
     const tabScopedItems = getVisiblePurchaseItems(purchases, selectedFilter);
 
     if (!normalizedSearchQuery) {
-      return tabScopedItems;
+      return getSortedPurchaseItems(tabScopedItems, activeSortKey);
     }
 
-    return tabScopedItems.filter((item) =>
-      matchesSearchQuery(item, normalizedSearchQuery, false),
+    return getSortedPurchaseItems(
+      tabScopedItems.filter((item) =>
+        matchesSearchQuery(item, normalizedSearchQuery, false),
+      ),
+      activeSortKey,
     );
   }, [
+    activeSortKey,
     isAdvancedSearchEnabled,
     normalizedSearchQuery,
     purchases,
@@ -896,6 +1080,12 @@ export function PurchasesHomeScreen({
   const sectionHeading = isGlobalSearchActive
     ? GLOBAL_SEARCH_SECTION_HEADING
     : sectionHeadings[selectedFilter];
+  // The meta label is the active-sort indicator. 'recent' falls through to the
+  // heading's own meta, so Free/Guest and global search read exactly as before.
+  const sectionMetaLabel =
+    isGlobalSearchActive || activeSortKey === 'recent'
+      ? sectionHeading.meta
+      : sortMetaLabels[activeSortKey];
   const automaticNudgeContextRef = useRef({
     appSettingsScopeKey,
     hasCompletedOnboarding,
@@ -939,6 +1129,9 @@ export function PurchasesHomeScreen({
       tabTransition.stopAnimation();
       tabTransition.setValue(0);
       setSelectedFilter(nextFilter);
+      // Every tab change (press and swipe) lands here, so a Price/Store sort is
+      // never carried silently into a tab the user did not choose it for.
+      setSortKey('recent');
     },
     [isGlobalSearchActive, selectedFilter, selectedFilterIndex, tabTransition],
   );
@@ -1239,6 +1432,73 @@ export function PurchasesHomeScreen({
     };
   }, [selectedFilter, tabTransition]);
 
+  useEffect(() => {
+    if (!isSortMenuMounted) {
+      return;
+    }
+
+    // Same Animated.timing pattern as the tab transition above, run in both
+    // directions: the menu stays mounted until the fade-out actually finishes.
+    const fadeAnimation = Animated.timing(sortMenuFade, {
+      duration: SORT_MENU_FADE_DURATION,
+      toValue: isSortMenuOpen ? 1 : 0,
+      useNativeDriver: true,
+    });
+
+    fadeAnimation.start(({ finished }) => {
+      if (finished && !isSortMenuOpen) {
+        setIsSortMenuMounted(false);
+      }
+    });
+
+    return () => {
+      fadeAnimation.stop();
+    };
+  }, [isSortMenuMounted, isSortMenuOpen, sortMenuFade]);
+
+  const openSortMenu = useCallback(() => {
+    const triggerNode = sortTriggerRef.current;
+    const overlayNode = sortMenuOverlayRef.current;
+
+    if (!triggerNode || !overlayNode) {
+      return;
+    }
+
+    // Both measurements are in window space, so subtracting one from the other
+    // converts the trigger's position into the overlay's own coordinates —
+    // no assumptions about AppScreen's safe-area inset or horizontal padding.
+    overlayNode.measureInWindow((overlayX, overlayY, overlayWidth) => {
+      triggerNode.measureInWindow(
+        (triggerX, triggerY, triggerWidth, triggerHeight) => {
+          setSortMenuAnchor({
+            right: Math.max(overlayX + overlayWidth - (triggerX + triggerWidth), 0),
+            top: Math.max(
+              triggerY - overlayY + triggerHeight + SORT_MENU_ANCHOR_GAP,
+              0,
+            ),
+          });
+          setIsSortMenuMounted(true);
+          setIsSortMenuOpen(true);
+        },
+      );
+    });
+  }, []);
+
+  const closeSortMenu = useCallback(() => {
+    setIsSortMenuOpen(false);
+  }, []);
+
+  const sortChevronAnimatedStyle = {
+    transform: [
+      {
+        rotate: sortMenuFade.interpolate({
+          inputRange: [0, 1],
+          outputRange: ['0deg', '180deg'],
+        }),
+      },
+    ],
+  };
+
   const tabContentAnimatedStyle = {
     opacity: tabTransition.interpolate({
       inputRange: [0, 1],
@@ -1510,9 +1770,32 @@ export function PurchasesHomeScreen({
               <AppText style={styles.sectionTitle} variant="caption">
                 {sectionHeading.title}
               </AppText>
-              <AppText style={styles.sectionMeta} variant="caption">
-                {sectionHeading.meta}
-              </AppText>
+              {isSortPickerEnabled ? (
+                <Pressable
+                  accessibilityHint="Choose how purchases are sorted"
+                  accessibilityLabel={`Sort: ${sectionMetaLabel}`}
+                  accessibilityRole="button"
+                  accessibilityState={{ expanded: isSortMenuOpen }}
+                  hitSlop={12}
+                  onPress={openSortMenu}
+                  ref={sortTriggerRef}
+                  style={({ pressed }) => [
+                    styles.sectionMetaTrigger,
+                    pressed && styles.sectionMetaTriggerPressed,
+                  ]}
+                >
+                  <AppText style={styles.sectionMeta} variant="caption">
+                    {sectionMetaLabel}
+                  </AppText>
+                  <Animated.View style={sortChevronAnimatedStyle}>
+                    <SortChevronIcon />
+                  </Animated.View>
+                </Pressable>
+              ) : (
+                <AppText style={styles.sectionMeta} variant="caption">
+                  {sectionHeading.meta}
+                </AppText>
+              )}
             </View>
 
             <View style={styles.itemList}>
@@ -1544,6 +1827,70 @@ export function PurchasesHomeScreen({
           </Animated.View>
         </View>
       </ScrollView>
+
+      {/* Always mounted so the popover can measure against it; box-none keeps
+          it inert (and the screen undimmed) whenever the menu is closed. */}
+      <View
+        pointerEvents="box-none"
+        ref={sortMenuOverlayRef}
+        style={styles.sortMenuOverlay}
+      >
+        {isSortMenuMounted ? (
+          <>
+            <Pressable
+              accessibilityLabel="Close sort options"
+              accessibilityRole="button"
+              onPress={closeSortMenu}
+              style={styles.sortMenuDismissArea}
+            />
+            <Animated.View
+              style={[
+                styles.sortMenuCard,
+                {
+                  opacity: sortMenuFade,
+                  right: sortMenuAnchor.right,
+                  top: sortMenuAnchor.top,
+                },
+              ]}
+            >
+              {sortMenuOptions.map(({ key, label }) => {
+                const isSelected = key === activeSortKey;
+
+                return (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: isSelected }}
+                    key={key}
+                    onPress={() => {
+                      setSortKey(key);
+                      closeSortMenu();
+                    }}
+                    style={({ pressed }) => [
+                      styles.sortMenuOption,
+                      isSelected && styles.sortMenuOptionSelected,
+                      pressed && styles.sortMenuOptionPressed,
+                    ]}
+                  >
+                    <AppText
+                      style={[
+                        styles.sortMenuOptionLabel,
+                        isSelected && styles.sortMenuOptionLabelSelected,
+                      ]}
+                      variant="body"
+                    >
+                      {label}
+                    </AppText>
+
+                    {isSelected ? (
+                      <View style={styles.sortMenuSelectedDot} />
+                    ) : null}
+                  </Pressable>
+                );
+              })}
+            </Animated.View>
+          </>
+        ) : null}
+      </View>
     </AppScreen>
   );
 }
@@ -1968,6 +2315,88 @@ const styles = StyleSheet.create({
     ...theme.typography.capsMeta,
     color: '#858B80',
     lineHeight: 15,
+  },
+  // Neutral card/border pill, deliberately not theme.colors.sage: sage reads as
+  // "selected" on the sort rows and the currency picker, and the trigger is not
+  // a selection. Quiet enough to stay a discoverability cue, not a button.
+  sectionMetaTrigger: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.card,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 3,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  sectionMetaTriggerPressed: {
+    opacity: 0.82,
+  },
+  sortMenuOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 20,
+  },
+  // Transparent on purpose — a popover dismiss target, not a modal scrim.
+  sortMenuDismissArea: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  // The amber Pro hairline is a 2px top *border*, not an absolutely-positioned
+  // bar: a border follows borderRadius on its own, so it cannot overhang the
+  // rounded corners and needs no overflow:'hidden' — which on iOS would clip
+  // this card's own shadow away. (ProfileScreen's proUsageAccent has to clip,
+  // so its shadow lives on a separate proUsageCardWrapper.)
+  sortMenuCard: {
+    backgroundColor: '#FFFDF8',
+    borderColor: '#E3E5DD',
+    borderRadius: 18,
+    borderTopColor: theme.colors.amber,
+    borderTopWidth: 2,
+    borderWidth: 1,
+    elevation: 6,
+    maxWidth: 220,
+    minWidth: 168,
+    padding: 6,
+    position: 'absolute',
+    shadowColor: theme.colors.greenDark,
+    shadowOffset: {
+      height: 10,
+      width: 0,
+    },
+    shadowOpacity: 0.14,
+    shadowRadius: 20,
+  },
+  sortMenuOption: {
+    alignItems: 'center',
+    borderRadius: 12,
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'space-between',
+    minHeight: 40,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
+  sortMenuOptionLabel: {
+    color: theme.colors.greenDark,
+    fontSize: 14,
+    fontWeight: theme.fontWeight.medium,
+    lineHeight: 19,
+  },
+  sortMenuOptionLabelSelected: {
+    fontWeight: theme.fontWeight.semibold,
+  },
+  sortMenuOptionPressed: {
+    opacity: 0.82,
+  },
+  sortMenuOptionSelected: {
+    backgroundColor: theme.colors.sage,
+  },
+  sortMenuSelectedDot: {
+    backgroundColor: theme.colors.greenDark,
+    borderRadius: theme.radius.pill,
+    height: 6,
+    opacity: 0.76,
+    width: 6,
   },
   itemList: {
     gap: 12,
