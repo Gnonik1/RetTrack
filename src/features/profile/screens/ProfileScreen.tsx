@@ -41,6 +41,17 @@ type SnapshotCounts = {
   returned: number;
 };
 
+type CurrencyTotals = Record<string, number>;
+
+type SpendingInsights = {
+  activeTotals: CurrencyTotals;
+  hasData: boolean;
+  isMultiCurrency: boolean;
+  keptTotals: CurrencyTotals;
+  returnRatePercent: number | null;
+  returnedTotals: CurrencyTotals;
+};
+
 function getAccountInitial(fullName?: string | null, email?: string) {
   const trimmedFullName = fullName?.trim();
   const trimmedEmail = email?.trim();
@@ -73,6 +84,100 @@ function getProgressStyle(percent: number) {
   return {
     width: `${percent}%` as `${number}%`,
   };
+}
+
+// Prices are stored as `${CurrencyCode} ${amount}` (e.g. "USD 180"). Grouping the
+// money metrics by currency needs both halves. PurchasesHomeScreen already parses
+// the amount for price sorting, but that helper is file-local there and returns only
+// the number (not the code), so the small numeric-normalization is duplicated here —
+// adapted to also read the code — rather than extracted, which would mean editing the
+// out-of-scope Home screen for no other shared caller.
+const PROFILE_PRICE_NUMBER_PATTERN = /[.,]?\d[\d.,]*/;
+
+function parsePurchaseAmount(priceText: string): number | null {
+  const match = PROFILE_PRICE_NUMBER_PATTERN.exec(priceText);
+
+  if (!match) {
+    return null;
+  }
+
+  const digits = match[0].replace(/[.,]+$/, '');
+  const separatorIndex = Math.max(
+    digits.lastIndexOf(','),
+    digits.lastIndexOf('.'),
+  );
+  const fraction = separatorIndex === -1 ? '' : digits.slice(separatorIndex + 1);
+  // A trailing run of 1-2 digits is a decimal mark; anything longer ("1,299") is
+  // thousands grouping.
+  const hasDecimalMark = fraction.length > 0 && fraction.length <= 2;
+  const normalized = hasDecimalMark
+    ? `${digits.slice(0, separatorIndex).replace(/[.,]/g, '')}.${fraction}`
+    : digits.replace(/[.,]/g, '');
+  const value = Number(normalized);
+
+  return Number.isFinite(value) ? value : null;
+}
+
+function parsePurchasePrice(
+  priceText?: string,
+): { code: string; value: number } | null {
+  const trimmed = priceText?.trim();
+
+  if (!trimmed) {
+    return null;
+  }
+
+  const value = parsePurchaseAmount(trimmed);
+
+  if (value === null) {
+    return null;
+  }
+
+  const codeMatch = /^[A-Za-z]{2,}/.exec(trimmed);
+
+  return {
+    code: codeMatch ? codeMatch[0].toUpperCase() : '',
+    value,
+  };
+}
+
+function formatInsightAmount(value: number): string {
+  if (Number.isInteger(value)) {
+    return String(value);
+  }
+
+  // Sums of decimal-pad prices can be fractional; keep at most 2 decimals and drop
+  // a trailing ".00" / ".50" zero so whole sums read as "450", not "450.00".
+  return value.toFixed(2).replace(/\.?0+$/, '');
+}
+
+function formatMoneyBucket(
+  totals: CurrencyTotals,
+  isMultiCurrency: boolean,
+): string {
+  const codes = Object.keys(totals)
+    .filter((code) => totals[code] > 0)
+    .sort();
+
+  if (codes.length === 0) {
+    return '0';
+  }
+
+  if (!isMultiCurrency) {
+    const [code] = codes;
+
+    // One currency across the whole card: show the ISO code with the amount. We
+    // keep the code rather than mapping to a "$" glyph — the data stores codes and a
+    // code→symbol table would be wrong for a non-USD single-currency user.
+    return code
+      ? `${code} ${formatInsightAmount(totals[code])}`
+      : formatInsightAmount(totals[code]);
+  }
+
+  // Multiple currencies: list each separately, never summed across codes.
+  return codes
+    .map((code) => `${code} ${formatInsightAmount(totals[code])}`)
+    .join(' · ');
 }
 
 function ProSparkleIcon() {
@@ -290,6 +395,99 @@ function CurrentSnapshotCard({ snapshot }: { snapshot: SnapshotCounts }) {
   );
 }
 
+function SpendingInsightsCard({ insights }: { insights: SpendingInsights }) {
+  const returnRateLabel =
+    insights.returnRatePercent === null
+      ? '—'
+      : `${insights.returnRatePercent}%`;
+
+  return (
+    <View style={[styles.snapshotCard, styles.insightsHairline]}>
+      <View style={styles.snapshotHeader}>
+        <View style={styles.snapshotTitleBlock}>
+          <AppText style={styles.snapshotTitle} variant="caption">
+            Spending insights
+          </AppText>
+        </View>
+      </View>
+
+      <View style={styles.snapshotGrid}>
+        <View style={[styles.snapshotItem, styles.snapshotItemReturned]}>
+          <View style={[styles.snapshotAccent, styles.snapshotAccentReturned]} />
+          <AppText
+            adjustsFontSizeToFit
+            numberOfLines={1}
+            style={[styles.snapshotValue, styles.insightsValue]}
+            variant="body"
+          >
+            {formatMoneyBucket(insights.returnedTotals, insights.isMultiCurrency)}
+          </AppText>
+          <AppText
+            style={[styles.snapshotLabel, styles.snapshotLabelReturned]}
+            variant="caption"
+          >
+            Returned value
+          </AppText>
+        </View>
+        <View style={[styles.snapshotItem, styles.snapshotItemOpen]}>
+          <View style={[styles.snapshotAccent, styles.snapshotAccentOpen]} />
+          <AppText
+            adjustsFontSizeToFit
+            numberOfLines={1}
+            style={[styles.snapshotValue, styles.insightsValue]}
+            variant="body"
+          >
+            {formatMoneyBucket(insights.activeTotals, insights.isMultiCurrency)}
+          </AppText>
+          <AppText
+            style={[styles.snapshotLabel, styles.snapshotLabelOpen]}
+            variant="caption"
+          >
+            Open value
+          </AppText>
+        </View>
+      </View>
+
+      <View style={styles.snapshotGrid}>
+        <View style={[styles.snapshotItem, styles.snapshotItemKept]}>
+          <View style={[styles.snapshotAccent, styles.snapshotAccentKept]} />
+          <AppText
+            adjustsFontSizeToFit
+            numberOfLines={1}
+            style={[styles.snapshotValue, styles.insightsValue]}
+            variant="body"
+          >
+            {formatMoneyBucket(insights.keptTotals, insights.isMultiCurrency)}
+          </AppText>
+          <AppText
+            style={[styles.snapshotLabel, styles.snapshotLabelKept]}
+            variant="caption"
+          >
+            Kept value
+          </AppText>
+        </View>
+        <View style={styles.snapshotItem}>
+          <View style={[styles.snapshotAccent, styles.insightsAccentRate]} />
+          <AppText
+            adjustsFontSizeToFit
+            numberOfLines={1}
+            style={[styles.snapshotValue, styles.insightsValue]}
+            variant="body"
+          >
+            {returnRateLabel}
+          </AppText>
+          <AppText
+            style={[styles.snapshotLabel, styles.insightsLabelRate]}
+            variant="caption"
+          >
+            Return rate
+          </AppText>
+        </View>
+      </View>
+    </View>
+  );
+}
+
 function CsvExportCard({
   disabled,
   onPress,
@@ -305,6 +503,7 @@ function CsvExportCard({
       onPress={onPress}
       style={({ pressed }) => [
         styles.csvExportCard,
+        styles.insightsHairline,
         pressed && !disabled && styles.csvExportCardPressed,
         disabled && styles.csvExportCardDisabled,
       ]}
@@ -408,6 +607,59 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
   );
   const shouldShowSnapshot =
     !isAccountLoading && hasHydratedPurchases && purchases.length > 0;
+  const spendingInsights = useMemo<SpendingInsights>(() => {
+    const returnedTotals: CurrencyTotals = {};
+    const activeTotals: CurrencyTotals = {};
+    const keptTotals: CurrencyTotals = {};
+    const currencyCodes = new Set<string>();
+    let returnedCount = 0;
+    let keptCount = 0;
+    let openCount = 0;
+
+    for (const purchase of purchases) {
+      let bucket: CurrencyTotals;
+
+      // Mirror the Purchase status card's buckets: 'returned' and 'kept' are their
+      // own tiles, everything else ('active' + 'pending') is the "Open" bucket.
+      if (purchase.status === 'returned') {
+        bucket = returnedTotals;
+        returnedCount += 1;
+      } else if (purchase.status === 'kept') {
+        bucket = keptTotals;
+        keptCount += 1;
+      } else {
+        bucket = activeTotals;
+        openCount += 1;
+      }
+
+      const parsedPrice = parsePurchasePrice(purchase.price);
+
+      if (parsedPrice) {
+        bucket[parsedPrice.code] = (bucket[parsedPrice.code] ?? 0) + parsedPrice.value;
+        currencyCodes.add(parsedPrice.code);
+      }
+    }
+
+    const resolvedCount = returnedCount + keptCount;
+
+    return {
+      activeTotals,
+      hasData: returnedCount + keptCount + openCount > 0,
+      isMultiCurrency: currencyCodes.size > 1,
+      keptTotals,
+      returnRatePercent:
+        resolvedCount === 0
+          ? null
+          : Math.round((returnedCount / resolvedCount) * 100),
+      returnedTotals,
+    };
+  }, [purchases]);
+  const shouldShowSpendingInsights =
+    !isAccountLoading &&
+    isAuthenticated &&
+    isPro &&
+    hasHydratedPurchases &&
+    spendingInsights.hasData;
   const shouldShowCsvExport =
     !isAccountLoading && isAuthenticated && isPro;
   const statusBadgeLabel = isAccountLoading
@@ -751,6 +1003,10 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
 
           {shouldShowSnapshot ? <CurrentSnapshotCard snapshot={snapshot} /> : null}
 
+          {shouldShowSpendingInsights ? (
+            <SpendingInsightsCard insights={spendingInsights} />
+          ) : null}
+
           {shouldShowCsvExport ? (
             <CsvExportCard
               disabled={isExportingCsv}
@@ -1091,6 +1347,30 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
     flexDirection: 'row',
     gap: 15,
+  },
+  insightsAccentRate: {
+    backgroundColor: theme.colors.amber,
+  },
+  // Shared Pro-card hairline — the two-tier Pro marker: the hero Account usage card
+  // keeps the pill + hairline, every other Pro card (Spending insights, CSV export)
+  // gets the hairline only. Matches the sort menu's mechanism: a 2px amber top
+  // *border* layered on the card's normal 1px border. A border follows borderRadius
+  // on its own, so it needs no overflow:'hidden' (which would clip the card's shadow)
+  // — unlike proUsageAccent, an absolute bar that must clip.
+  insightsHairline: {
+    borderTopColor: theme.colors.amber,
+    borderTopWidth: 2,
+  },
+  insightsLabelRate: {
+    color: theme.colors.amber,
+  },
+  // Scoped override for the insights money tiles only (Purchase status keeps the
+  // larger snapshotValue): a smaller value gives multi-currency strings
+  // ("GEL 300 · USD 239") room, paired with numberOfLines={1} + adjustsFontSizeToFit
+  // so a long value shrinks to fit rather than clipping silently.
+  insightsValue: {
+    fontSize: 15,
+    lineHeight: 20,
   },
   profileCard: {
     alignSelf: 'stretch',

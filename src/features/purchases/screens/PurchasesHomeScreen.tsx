@@ -467,6 +467,21 @@ function getPriceSortValue(item: MockPurchase) {
   return Number.isFinite(value) ? value : null;
 }
 
+// The leading letters of a price string are its currency code ("USD 180" -> "USD"),
+// used only by the currency-grouped price view below. Returns null when the price has
+// no parseable amount at all (those items sink to a trailing "No price" group, matching
+// comparePricesByDirection's sink-to-end rule) and '' when there is an amount but no
+// recognizable code (bucketed into a neutral "Other" group).
+function getPriceCurrencyCode(item: MockPurchase): string | null {
+  if (getPriceSortValue(item) === null) {
+    return null;
+  }
+
+  const codeMatch = /^[A-Za-z]{2,}/.exec(item.price?.trim() ?? '');
+
+  return codeMatch ? codeMatch[0].toUpperCase() : '';
+}
+
 function comparePricesByDirection(
   firstItem: MockPurchase,
   secondItem: MockPurchase,
@@ -509,6 +524,116 @@ function getSortedPurchaseItems(items: MockPurchase[], sortKey: SortKey) {
   return [...items].sort((firstItem, secondItem) =>
     comparePricesByDirection(firstItem, secondItem, isDescending),
   );
+}
+
+// Neutral section keys/labels for the two non-currency buckets the grouped view can
+// produce: a price with no recognizable currency code, and no parseable price at all
+// (the latter always sinks to the very end).
+const CODELESS_CURRENCY_GROUP_KEY = ' codeless';
+const CODELESS_CURRENCY_GROUP_LABEL = 'Other';
+const NO_PRICE_GROUP_KEY = ' no-price';
+const NO_PRICE_GROUP_LABEL = 'No price';
+
+type CurrencyGroup = {
+  items: MockPurchase[];
+  key: string;
+  label: string;
+};
+
+// One rendered row of the grouped price view: a quiet currency header or a purchase
+// card. Flattened from CurrencyGroup[] so the existing item list can render a single
+// interleaved array (headers + cards) with one map, leaving the flat non-grouped render
+// path untouched.
+type PurchaseListRow =
+  | { kind: 'header'; key: string; label: string }
+  | { kind: 'item'; item: MockPurchase; key: string };
+
+// The grouped counterpart to the flat price sort above, used only when a price sort is
+// active and the visible set spans more than one currency (see the render gate). Raw
+// amounts in different currencies are not comparable, so the list is split into one
+// section per currency instead of interleaving them. Sections are ordered by their own
+// leading price in the active direction; if two share that leading value they fall back
+// to the section's summed total, then to first-appearance order (never an alphabetical
+// reshuffle). Within a section the existing comparePricesByDirection does the ordering —
+// every item shares a code, so it reduces to a plain by-amount sort. Items with no
+// parseable price collect into a single trailing section.
+function getCurrencyGroups(
+  items: MockPurchase[],
+  isDescending: boolean,
+): CurrencyGroup[] {
+  const itemsByCode = new Map<string, MockPurchase[]>();
+  const codeEncounterOrder: string[] = [];
+  const noPriceItems: MockPurchase[] = [];
+
+  for (const item of items) {
+    const code = getPriceCurrencyCode(item);
+
+    if (code === null) {
+      noPriceItems.push(item);
+      continue;
+    }
+
+    const existing = itemsByCode.get(code);
+
+    if (existing) {
+      existing.push(item);
+    } else {
+      itemsByCode.set(code, [item]);
+      codeEncounterOrder.push(code);
+    }
+  }
+
+  const rankedGroups = codeEncounterOrder.map((code, encounterIndex) => {
+    const groupItems = itemsByCode.get(code) ?? [];
+    const sortedItems = [...groupItems].sort((firstItem, secondItem) =>
+      comparePricesByDirection(firstItem, secondItem, isDescending),
+    );
+
+    return {
+      code,
+      encounterIndex,
+      // Same-currency amounts are directly comparable, so the leading price is the
+      // first item after the in-direction sort, and the total sums the group.
+      leading: getPriceSortValue(sortedItems[0]) ?? 0,
+      sortedItems,
+      total: groupItems.reduce(
+        (sum, groupItem) => sum + (getPriceSortValue(groupItem) ?? 0),
+        0,
+      ),
+    };
+  });
+
+  rankedGroups.sort((firstGroup, secondGroup) => {
+    if (firstGroup.leading !== secondGroup.leading) {
+      return isDescending
+        ? secondGroup.leading - firstGroup.leading
+        : firstGroup.leading - secondGroup.leading;
+    }
+
+    if (firstGroup.total !== secondGroup.total) {
+      return isDescending
+        ? secondGroup.total - firstGroup.total
+        : firstGroup.total - secondGroup.total;
+    }
+
+    return firstGroup.encounterIndex - secondGroup.encounterIndex;
+  });
+
+  const groups: CurrencyGroup[] = rankedGroups.map((group) => ({
+    items: group.sortedItems,
+    key: group.code === '' ? CODELESS_CURRENCY_GROUP_KEY : group.code,
+    label: group.code === '' ? CODELESS_CURRENCY_GROUP_LABEL : group.code,
+  }));
+
+  if (noPriceItems.length > 0) {
+    groups.push({
+      items: noPriceItems,
+      key: NO_PRICE_GROUP_KEY,
+      label: NO_PRICE_GROUP_LABEL,
+    });
+  }
+
+  return groups;
 }
 
 function matchesSearchQuery(
@@ -1068,6 +1193,51 @@ export function PurchasesHomeScreen({
     purchases,
     selectedFilter,
   ]);
+  // Currency-grouped rows for the visible list, non-null ONLY when a price sort is
+  // active AND the visible set spans more than one distinct currency code. In every
+  // other case (Recent, Store, single-currency, active search) this stays null and the
+  // list renders flat, byte-identical to before.
+  const groupedPurchaseRows = useMemo<PurchaseListRow[] | null>(() => {
+    if (
+      isGlobalSearchActive ||
+      (activeSortKey !== 'priceHighToLow' && activeSortKey !== 'priceLowToHigh')
+    ) {
+      return null;
+    }
+
+    const distinctCurrencyCodes = new Set<string>();
+
+    for (const item of visiblePurchaseItems) {
+      const code = getPriceCurrencyCode(item);
+
+      if (code) {
+        distinctCurrencyCodes.add(code);
+      }
+    }
+
+    if (distinctCurrencyCodes.size <= 1) {
+      return null;
+    }
+
+    const rows: PurchaseListRow[] = [];
+
+    for (const group of getCurrencyGroups(
+      visiblePurchaseItems,
+      activeSortKey === 'priceHighToLow',
+    )) {
+      rows.push({
+        key: `currency-${group.key}`,
+        kind: 'header',
+        label: group.label,
+      });
+
+      for (const item of group.items) {
+        rows.push({ item, key: item.id, kind: 'item' });
+      }
+    }
+
+    return rows;
+  }, [activeSortKey, isGlobalSearchActive, visiblePurchaseItems]);
   const hasReminderEligiblePurchase = useMemo(
     () =>
       purchases.some(
@@ -1812,6 +1982,26 @@ export function PurchasesHomeScreen({
                     selectedFilter={selectedFilter}
                   />
                 )
+              ) : groupedPurchaseRows ? (
+                groupedPurchaseRows.map((row) =>
+                  row.kind === 'header' ? (
+                    <AppText
+                      key={row.key}
+                      style={[styles.sectionMeta, styles.currencyGroupHeader]}
+                      variant="caption"
+                    >
+                      {row.label}
+                    </AppText>
+                  ) : (
+                    <PurchaseCard
+                      highlightQuery={searchHighlightQuery}
+                      item={row.item}
+                      key={row.key}
+                      onResolveItem={resolvePurchase}
+                      onPress={() => onPurchasePress?.(row.item.id)}
+                    />
+                  ),
+                )
               ) : (
                 visiblePurchaseItems.map((item) => (
                   <PurchaseCard
@@ -2315,6 +2505,11 @@ const styles = StyleSheet.create({
     ...theme.typography.capsMeta,
     color: '#858B80',
     lineHeight: 15,
+  },
+  // Reuses the muted section-meta caps style; only adds a hair of top spacing so each
+  // currency header reads as belonging to the group beneath it, not a heavy divider.
+  currencyGroupHeader: {
+    marginTop: 4,
   },
   // Neutral card/border pill, deliberately not theme.colors.sage: sage reads as
   // "selected" on the sort rows and the currency picker, and the trigger is not
