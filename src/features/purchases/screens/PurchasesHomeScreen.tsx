@@ -534,6 +534,13 @@ const CODELESS_CURRENCY_GROUP_LABEL = 'Other';
 const NO_PRICE_GROUP_KEY = ' no-price';
 const NO_PRICE_GROUP_LABEL = 'No price';
 
+// Approximate, fixed FX priority for the supported currencies, most-valuable to least
+// (GBP > EUR > USD > GEL). Used ONLY to order currency GROUPS whose leading price AND
+// total are exactly tied — it is a hardcoded ordinal, never a live exchange rate, and
+// never takes part in any actual price comparison within a group or across groups.
+// Lower index = more valuable; a code absent from this list sinks below every ranked one.
+const CURRENCY_TIE_PRIORITY: readonly string[] = ['GBP', 'EUR', 'USD', 'GEL'];
+
 type CurrencyGroup = {
   items: MockPurchase[];
   key: string;
@@ -553,8 +560,10 @@ type PurchaseListRow =
 // amounts in different currencies are not comparable, so the list is split into one
 // section per currency instead of interleaving them. Sections are ordered by their own
 // leading price in the active direction; if two share that leading value they fall back
-// to the section's summed total, then to first-appearance order (never an alphabetical
-// reshuffle). Within a section the existing comparePricesByDirection does the ordering —
+// to the section's summed total, and if they are fully tied on both they fall back to a
+// fixed FX-priority ranking (GBP > EUR > USD > GEL) mirrored by direction (High→Low
+// leads with the more valuable currency, Low→High with the less valuable) — never an
+// alphabetical reshuffle. Within a section the existing comparePricesByDirection does the ordering —
 // every item shares a code, so it reduces to a plain by-amount sort. Items with no
 // parseable price collect into a single trailing section.
 function getCurrencyGroups(
@@ -616,7 +625,28 @@ function getCurrencyGroups(
         : firstGroup.total - secondGroup.total;
     }
 
-    return firstGroup.encounterIndex - secondGroup.encounterIndex;
+    // Fully tied on both real price signals (equal leading price AND equal total):
+    // there is no cross-currency value signal left, so fall back to the fixed FX
+    // priority ranking. The more valuable currency's group leads on High→Low; Low→High
+    // mirrors it so the less valuable currency leads. This ordinal is a display-only
+    // tie-break and never claims a real converted value.
+    const firstRank = CURRENCY_TIE_PRIORITY.indexOf(firstGroup.code);
+    const secondRank = CURRENCY_TIE_PRIORITY.indexOf(secondGroup.code);
+    const firstRanked = firstRank !== -1;
+    const secondRanked = secondRank !== -1;
+
+    // Defensive: a code outside the ranking (shouldn't happen with the 4 supported)
+    // sinks below every ranked currency in both directions, and unranked groups keep
+    // their encounter order relative to each other.
+    if (firstRanked !== secondRanked) {
+      return firstRanked ? -1 : 1;
+    }
+
+    if (!firstRanked) {
+      return firstGroup.encounterIndex - secondGroup.encounterIndex;
+    }
+
+    return isDescending ? firstRank - secondRank : secondRank - firstRank;
   });
 
   const groups: CurrencyGroup[] = rankedGroups.map((group) => ({
