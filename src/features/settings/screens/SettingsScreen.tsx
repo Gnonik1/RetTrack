@@ -4,12 +4,15 @@ import { type ReactNode, useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Image,
+  LayoutAnimation,
   Linking,
+  Platform,
   Pressable,
   ScrollView,
   Share,
   StyleSheet,
   Switch,
+  UIManager,
   View,
 } from 'react-native';
 
@@ -29,6 +32,17 @@ import {
   type CurrencyCode,
   useAppSettings,
 } from '../state/AppSettingsState';
+
+// LayoutAnimation only smooths the reminder chip-grid reflow on Android's old
+// architecture (this app runs with newArchEnabled: false) once this experimental
+// flag is enabled. Guarded so it no-ops on iOS and on any build where the method
+// is absent; iOS drives layout animations without it.
+if (
+  Platform.OS === 'android' &&
+  UIManager.setLayoutAnimationEnabledExperimental
+) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 type SettingsModalKey =
   | 'notifications'
@@ -396,8 +410,20 @@ const FIXED_RETURN_REMINDER_OFFSETS: number[] =
 const MIN_CUSTOM_REMINDER_OFFSET = 1;
 const MAX_CUSTOM_REMINDER_OFFSET = 45;
 const DEFAULT_CUSTOM_REMINDER_OFFSET = 10;
+// Pro users can stack up to three custom "days before" reminders on top of the
+// fixed Day of / 1 / 3 / 7 presets. Three keeps the wrapped chip row inside the
+// modal while still covering staggered return windows.
+const MAX_CUSTOM_REMINDERS = 3;
 const STEPPER_REVEAL_DURATION = 200;
 const STEPPER_REVEAL_MAX_HEIGHT = 96;
+
+// One calm reflow when a custom chip is added/removed or the stepper toggles —
+// the standard easeInEaseOut preset (opacity fade on create/delete, ease on the
+// grid reflow) trimmed to 200ms to match the stepper reveal and stay subtle.
+const CHIP_LAYOUT_ANIMATION = {
+  ...LayoutAnimation.Presets.easeInEaseOut,
+  duration: 200,
+};
 
 function formatReminderOffsetLabel(offset: number) {
   return `${offset} ${offset === 1 ? 'day' : 'days'} before`;
@@ -412,17 +438,23 @@ function ReturnReminderChips({
   onChange: (offsets: number[]) => void;
   remindersEnabled: boolean;
 }) {
-  const [customReminderOffset, setCustomReminderOffset] = useState<
-    number | null
-  >(
+  // The set of custom chips that exist (each may be selected or deselected).
+  // Tracked explicitly rather than derived purely from `offsets`, because the
+  // offsets array only encodes *selected* values — it can't represent a custom
+  // chip that is present but toggled off. Keeping this separate preserves the
+  // single-slot model's two independent affordances (tap = select toggle,
+  // × = delete) for each chip. Seeded once per mount from the draft's non-preset
+  // values; the sheet remounts on every open, so it re-seeds from the committed
+  // setting each time.
+  const [customReminderOffsets, setCustomReminderOffsets] = useState<number[]>(
     () =>
-      offsets.find(
-        (value) => !FIXED_RETURN_REMINDER_OFFSETS.includes(value),
-      ) ?? null,
+      offsets
+        .filter((value) => !FIXED_RETURN_REMINDER_OFFSETS.includes(value))
+        .sort((first, second) => first - second),
   );
   const [isStepperOpen, setIsStepperOpen] = useState(false);
   const [stepperValue, setStepperValue] = useState(
-    () => customReminderOffset ?? DEFAULT_CUSTOM_REMINDER_OFFSET,
+    DEFAULT_CUSTOM_REMINDER_OFFSET,
   );
   const stepperReveal = useRef(new Animated.Value(0)).current;
 
@@ -442,10 +474,14 @@ function ReturnReminderChips({
     };
   }, [isStepperOpen, stepperReveal]);
 
+  const isCustomLimitReached =
+    customReminderOffsets.length >= MAX_CUSTOM_REMINDERS;
+
   const toggleReturnReminderOffset = (offset: number) => {
     if (offsets.includes(offset)) {
-      // Keep at least one "days before" interval selected: tapping the last
-      // remaining selected chip is a no-op rather than clearing the list.
+      // Keep at least one "days before" interval selected across presets and
+      // custom chips combined: tapping the last remaining selected chip is a
+      // no-op rather than clearing the list.
       if (offsets.length <= 1) {
         return;
       }
@@ -458,7 +494,12 @@ function ReturnReminderChips({
   };
 
   const openStepper = () => {
-    setStepperValue(customReminderOffset ?? DEFAULT_CUSTOM_REMINDER_OFFSET);
+    if (isCustomLimitReached) {
+      return;
+    }
+
+    setStepperValue(DEFAULT_CUSTOM_REMINDER_OFFSET);
+    LayoutAnimation.configureNext(CHIP_LAYOUT_ANIMATION);
     setIsStepperOpen(true);
   };
 
@@ -471,45 +512,45 @@ function ReturnReminderChips({
     );
   };
 
+  // Reject a candidate value that duplicates any fixed preset or any custom
+  // offset already added — the confirm control disables and a hint points the
+  // user to the existing chip above.
+  const isStepperValueTaken =
+    FIXED_RETURN_REMINDER_OFFSETS.includes(stepperValue) ||
+    customReminderOffsets.includes(stepperValue);
+
   const confirmCustomOffset = () => {
-    // Drop any prior custom value (and any accidental duplicate of the new one),
-    // then add the new custom offset selected-by-default. Fixed presets already
-    // in the draft are left untouched.
-    const nextOffsets = offsets.filter(
-      (value) => value !== customReminderOffset && value !== stepperValue,
+    // Add a NEW custom offset (selected by default) alongside existing presets
+    // and customs — never replace. The disabled confirm state already blocks
+    // duplicates and the over-cap case; this guard is defensive.
+    if (isCustomLimitReached || isStepperValueTaken) {
+      return;
+    }
+
+    LayoutAnimation.configureNext(CHIP_LAYOUT_ANIMATION);
+    setCustomReminderOffsets((current) =>
+      [...current, stepperValue].sort((first, second) => first - second),
     );
-    nextOffsets.push(stepperValue);
-
-    setCustomReminderOffset(stepperValue);
     setIsStepperOpen(false);
-    onChange(nextOffsets.sort((first, second) => second - first));
+    onChange([...offsets, stepperValue].sort((first, second) => second - first));
   };
 
-  const deleteCustomOffset = () => {
-    if (customReminderOffset === null) {
+  const deleteCustomOffset = (offset: number) => {
+    // Mirror toggle's "keep >=1 selected" guard: refuse to delete when this
+    // custom offset is the only selected reminder across presets and customs.
+    if (offsets.length === 1 && offsets[0] === offset) {
       return;
     }
 
-    // Mirror toggle's "keep >=1 selected" guard: refuse to delete when the
-    // custom offset is the only selected reminder.
-    if (offsets.length === 1 && offsets[0] === customReminderOffset) {
-      return;
-    }
-
-    onChange(offsets.filter((value) => value !== customReminderOffset));
-    setCustomReminderOffset(null);
+    LayoutAnimation.configureNext(CHIP_LAYOUT_ANIMATION);
+    setCustomReminderOffsets((current) =>
+      current.filter((value) => value !== offset),
+    );
+    onChange(offsets.filter((value) => value !== offset));
   };
 
-  const isStepperValueFixedPreset =
-    FIXED_RETURN_REMINDER_OFFSETS.includes(stepperValue);
   const isStepperAtMinimum = stepperValue <= MIN_CUSTOM_REMINDER_OFFSET;
   const isStepperAtMaximum = stepperValue >= MAX_CUSTOM_REMINDER_OFFSET;
-  const isCustomSelected =
-    customReminderOffset !== null && offsets.includes(customReminderOffset);
-  const isCustomOnlySelected =
-    customReminderOffset !== null &&
-    offsets.length === 1 &&
-    offsets[0] === customReminderOffset;
 
   return (
     <View
@@ -566,58 +607,71 @@ function ReturnReminderChips({
             </Pressable>
           );
         })}
-        {customReminderOffset !== null && (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityState={{ selected: isCustomSelected }}
-            onPress={() => toggleReturnReminderOffset(customReminderOffset)}
-            style={({ pressed }) => [
-              styles.returnReminderChip,
-              styles.returnReminderChipCustom,
-              isCustomSelected && styles.returnReminderChipSelectedInteractive,
-              pressed && styles.returnReminderChipPressed,
-            ]}
-          >
-            <AppText
-              style={[
-                styles.returnReminderChipText,
-                isCustomSelected &&
-                  styles.returnReminderChipTextSelectedInteractive,
-              ]}
-              variant="caption"
-            >
-              {formatReminderOffsetLabel(customReminderOffset)}
-            </AppText>
+        {customReminderOffsets.map((offset) => {
+          const isSelected = offsets.includes(offset);
+          // Deleting is blocked only when this custom chip is the single
+          // remaining selected reminder, matching the toggle guard above.
+          const isOnlySelected = offsets.length === 1 && offsets[0] === offset;
+
+          return (
             <Pressable
-              accessibilityLabel="Remove custom reminder"
               accessibilityRole="button"
-              accessibilityState={{ disabled: isCustomOnlySelected }}
-              disabled={isCustomOnlySelected}
-              onPress={deleteCustomOffset}
-              style={[
-                styles.returnReminderChipDelete,
-                isCustomOnlySelected && styles.returnReminderChipDeleteDisabled,
+              accessibilityState={{ selected: isSelected }}
+              key={offset}
+              onPress={() => toggleReturnReminderOffset(offset)}
+              style={({ pressed }) => [
+                styles.returnReminderChip,
+                styles.returnReminderChipCustom,
+                isSelected && styles.returnReminderChipSelectedInteractive,
+                pressed && styles.returnReminderChipPressed,
               ]}
             >
               <AppText
                 style={[
-                  styles.returnReminderChipDeleteLabel,
-                  isCustomSelected &&
+                  styles.returnReminderChipText,
+                  isSelected &&
                     styles.returnReminderChipTextSelectedInteractive,
                 ]}
                 variant="caption"
               >
-                ×
+                {formatReminderOffsetLabel(offset)}
               </AppText>
+              <Pressable
+                accessibilityLabel={`Remove ${formatReminderOffsetLabel(offset)} reminder`}
+                accessibilityRole="button"
+                accessibilityState={{ disabled: isOnlySelected }}
+                disabled={isOnlySelected}
+                onPress={() => deleteCustomOffset(offset)}
+                style={[
+                  styles.returnReminderChipDelete,
+                  isOnlySelected && styles.returnReminderChipDeleteDisabled,
+                ]}
+              >
+                <AppText
+                  style={[
+                    styles.returnReminderChipDeleteLabel,
+                    isSelected &&
+                      styles.returnReminderChipTextSelectedInteractive,
+                  ]}
+                  variant="caption"
+                >
+                  ×
+                </AppText>
+              </Pressable>
             </Pressable>
-          </Pressable>
-        )}
+          );
+        })}
         <Pressable
           accessibilityRole="button"
-          accessibilityState={{ expanded: isStepperOpen }}
+          accessibilityState={{
+            disabled: isCustomLimitReached,
+            expanded: isStepperOpen,
+          }}
+          disabled={isCustomLimitReached}
           onPress={openStepper}
           style={({ pressed }) => [
             styles.returnReminderChip,
+            isCustomLimitReached && styles.returnReminderChipDisabled,
             pressed && styles.returnReminderChipPressed,
           ]}
         >
@@ -626,6 +680,11 @@ function ReturnReminderChips({
           </AppText>
         </Pressable>
       </View>
+      {isCustomLimitReached && (
+        <AppText style={styles.returnReminderLimitHint} variant="caption">
+          {`Up to ${MAX_CUSTOM_REMINDERS} custom reminders`}
+        </AppText>
+      )}
       <Animated.View
         style={[
           styles.returnReminderStepperWrapper,
@@ -681,12 +740,12 @@ function ReturnReminderChips({
           <Pressable
             accessibilityLabel="Confirm custom reminder"
             accessibilityRole="button"
-            accessibilityState={{ disabled: isStepperValueFixedPreset }}
-            disabled={isStepperValueFixedPreset}
+            accessibilityState={{ disabled: isStepperValueTaken }}
+            disabled={isStepperValueTaken}
             onPress={confirmCustomOffset}
             style={({ pressed }) => [
               styles.returnReminderStepperConfirm,
-              isStepperValueFixedPreset &&
+              isStepperValueTaken &&
                 styles.returnReminderStepperConfirmDisabled,
               pressed && styles.returnReminderChipPressed,
             ]}
@@ -699,7 +758,7 @@ function ReturnReminderChips({
             </AppText>
           </Pressable>
         </View>
-        {isStepperValueFixedPreset && (
+        {isStepperValueTaken && (
           <AppText style={styles.returnReminderStepperHint} variant="caption">
             Already available above
           </AppText>
@@ -1784,6 +1843,9 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeight.semibold,
     lineHeight: 16,
   },
+  returnReminderChipDisabled: {
+    opacity: 0.4,
+  },
   returnReminderChipLocked: {
     opacity: 0.7,
   },
@@ -1816,6 +1878,12 @@ const styles = StyleSheet.create({
     gap: 8,
     justifyContent: 'center',
     marginTop: 12,
+  },
+  returnReminderLimitHint: {
+    color: '#747A70',
+    fontSize: 12,
+    marginTop: 8,
+    textAlign: 'center',
   },
   returnReminderSection: {
     marginTop: 6,
