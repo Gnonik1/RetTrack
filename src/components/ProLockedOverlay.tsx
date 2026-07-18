@@ -1,20 +1,37 @@
-import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect } from 'expo-router';
 import { type ReactNode, useCallback, useRef, useState } from 'react';
-import { Animated, Pressable, StyleSheet, View } from 'react-native';
+import { Animated, Pressable, StyleSheet, View, type ViewStyle } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 
 import { theme } from '../constants/theme';
 import { AppText } from './AppText';
 
-// Blur strength for the frosted glass over a locked preview. The blurred tiles are
-// now purely BACKGROUND texture — the CTA reads on its own opaque inner panel
-// (`ctaPanel`), never on the tiles — so this is pushed high only to render the
-// fake values as soft, unreadable shapes behind the glass. A uniform `scrim` floor
-// backs it up where expo-blur under-renders (notably Android). Shared by every
-// teaser; callers can override via the `blurIntensity` prop.
-const LOCKED_PREVIEW_BLUR_INTENSITY = 95;
+// Locked-preview value treatment — the single shared pattern every Pro teaser uses to
+// stand in for a real value it must not reveal. WHY a bar and not obscured text: no
+// real blur is available on this target (expo-blur's native BlurView renders inert
+// here at every intensity, and React Native's `filter: blur()` is unavailable on iOS
+// and New-Architecture-only — this app runs newArchEnabled: false), and textShadow
+// paints NOTHING on this target either (an on-device A/B test found a glyph WITH a
+// shadow indistinguishable from the same glyph without one). Obscured text also has a
+// product problem: a faint-but-legible "$420" reads as the user's OWN data, asserting
+// a false figure. A bar says "a value lives here and it's locked" without claiming any
+// number — the label beside it carries the meaning. Do NOT reintroduce BlurView or
+// textShadow here; both are dead on this target.
+//
+// Two styles compose: `lockedPreviewBarSlot` reserves the vertical space a value text
+// would occupy, so the tile never shrinks or shifts, and `lockedPreviewBar` is the bar
+// itself. Width is passed per tile so the bars read as different hidden values rather
+// than one uniform loading skeleton.
+export const lockedPreviewBarSlot: ViewStyle = {
+  height: 20,
+  justifyContent: 'center',
+};
+export const lockedPreviewBar: ViewStyle = {
+  backgroundColor: 'rgba(63, 81, 58, 0.14)',
+  borderRadius: 6,
+  height: 12,
+};
 
 // Upgrade pill gradient stops: a lighter gold highlight at the top over the
 // deeper amber token (`theme.colors.amber` === '#C7923E') at the bottom, for a
@@ -130,8 +147,10 @@ function UpgradePill() {
 }
 
 // Reusable "Pro teaser" treatment: renders whatever locked-preview content it
-// wraps at full fidelity, lays a real frosted BlurView over it so the preview
-// reads as desirable data behind glass, then rests a centered lock → caption →
+// wraps at full fidelity, lays a cream frosted wash (the `scrim` layer) over it so
+// the preview reads as desirable data behind glass — the value numbers are replaced
+// with shared `lockedPreviewBar` skeleton bars, since no real blur (or even
+// textShadow) paints on this target — then rests a centered lock → caption →
 // Upgrade CTA directly on that frosted panel. The whole surface is a single tap
 // target that calls `onUpgrade` — the one hook the future paywall attaches to.
 // This is the generic pattern; the pilot wraps the Spending insights shell, and
@@ -139,13 +158,11 @@ function UpgradePill() {
 // passing their own preview shell + caption.
 export function ProLockedOverlay({
   accessibilityLabel,
-  blurIntensity = LOCKED_PREVIEW_BLUR_INTENSITY,
   caption,
   children,
   onUpgrade,
 }: {
   accessibilityLabel?: string;
-  blurIntensity?: number;
   caption: string;
   children: ReactNode;
   onUpgrade: () => void;
@@ -160,18 +177,11 @@ export function ProLockedOverlay({
     >
       {/* Full-fidelity, non-interactive preview — taps fall through to the Pressable. */}
       <View pointerEvents="none">{children}</View>
-      {/* One frosted-glass layer that absolutely fills the whole wrapped card, so
-          every tile in the preview grid is obscured to the same degree and the
-          crisp CTA reads as sitting directly on the frosted panel. */}
-      <BlurView
-        experimentalBlurMethod="dimezisBlurView"
-        intensity={blurIntensity}
-        pointerEvents="none"
-        style={styles.glass}
-        tint="light"
-      />
-      {/* Uniform, edge-to-edge cream frost floor over the BACKGROUND tiles, so the
-          fake values read as soft texture even where expo-blur under-renders. */}
+      {/* Single frosted layer: a uniform, edge-to-edge cream wash that absolutely
+          fills the whole wrapped card, tinting every tile so the preview reads as
+          frosted glass and the crisp CTA sits directly on the panel. This wash
+          replaces the removed BlurView (real blur is inert on this target); the locked
+          values themselves are stood in for by `lockedPreviewBar` skeleton bars. */}
       <View pointerEvents="none" style={styles.scrim} />
       {/* FOREGROUND: the CTA (lock → subtitle → Upgrade pill) on its own cohesive
           inner panel, centered over the entire card body. The panel is near-opaque
@@ -240,15 +250,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 16,
   },
-  // The single frosted-glass layer. Absolutely fills the wrapped card so it spans
-  // the entire tile grid uniformly (no tile left readable, none double-covered),
-  // rounded to the card's own radius (20) with overflow clipping so the blur
-  // follows the card's corners.
-  glass: {
-    ...StyleSheet.absoluteFillObject,
-    borderRadius: 20,
-    overflow: 'hidden',
-  },
   lockCircle: {
     alignItems: 'center',
     backgroundColor: '#FFF6E5',
@@ -267,15 +268,16 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     width: 30,
   },
-  // Semi-opaque cream wash over the blur — the cross-platform obscuring floor.
-  // Cream (not gray) to match the card so it reads as bright frosted glass rather
-  // than a muddy disabled state; at 0.6 alpha it keeps the values from being read
-  // even where expo-blur's frost is weak or absent (notably Android), while still
-  // letting the colored tile blocks show through faintly. Edge-to-edge (rounded to
-  // the card's radius) so it reads as the panel surface, not a detached patch.
+  // Cream wash that gives the card its frosted TONE. It is not an obscuring floor —
+  // the locked values are already replaced by `lockedPreviewBar` skeleton bars, so
+  // the scrim's only job is to tint the whole surface as bright frosted glass (the
+  // BlurView is gone; real blur is inert on this target). Cream (not gray) to match
+  // the card rather than read as a muddy disabled state, at 0.35 alpha so it tints
+  // the tiles without washing out the bars. Edge-to-edge (rounded to the card's
+  // radius) so it reads as the panel surface, not a detached patch.
   scrim: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(250, 247, 240, 0.6)',
+    backgroundColor: 'rgba(250, 247, 240, 0.35)',
     borderRadius: 20,
   },
   // Primary CTA anchor. The gold gradient + shimmer fill it, so its own

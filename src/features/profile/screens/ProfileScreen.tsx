@@ -16,7 +16,11 @@ import Svg, { Path } from 'react-native-svg';
 import { AppButton } from '../../../components/AppButton';
 import { AppScreen } from '../../../components/AppScreen';
 import { AppText } from '../../../components/AppText';
-import { ProLockedOverlay } from '../../../components/ProLockedOverlay';
+import {
+  lockedPreviewBar,
+  lockedPreviewBarSlot,
+  ProLockedOverlay,
+} from '../../../components/ProLockedOverlay';
 import { theme } from '../../../constants/theme';
 import { signOut } from '../../../services/authService';
 import { useAuth } from '../../../state/AuthState';
@@ -489,25 +493,13 @@ function SpendingInsightsCard({ insights }: { insights: SpendingInsights }) {
   );
 }
 
-// Hardcoded, non-real placeholder amounts shown behind the teaser's blur. These
-// are static string literals that look like plausible insights — they are NEVER
-// derived from, and never touch, the user's real purchase data. They exist only
-// to give the frosted card the shape of "real data that's hidden" rather than an
-// empty loading state.
-const LOCKED_INSIGHTS_PREVIEW = {
-  keptValue: '$260',
-  openValue: '$1,180',
-  returnRate: '72%',
-  returnedValue: '$420',
-} as const;
-
 // Free/Guest teaser shell for Spending insights. Intentionally propless: it
-// reproduces the real card's header, hairline, and tile layout but renders the
-// fake LOCKED_INSIGHTS_PREVIEW literals where amounts would go — so no real
-// spending figure is ever constructed as an element or passed into the non-Pro
-// render path. The real SpendingInsightsCard (which formats actual totals) stays
-// Pro-gated and untouched; this shell shares only the static styles/labels and
-// hardcoded literals, never the data.
+// reproduces the real card's header, hairline, and tile layout but renders a locked
+// skeleton bar in every value slot instead of an amount — so no spending figure
+// (real OR fake) is ever constructed in the non-Pro render path, and nothing can be
+// mistaken for the user's own data. The real SpendingInsightsCard (which formats
+// actual totals) stays Pro-gated and untouched; this shell shares only the static
+// styles and labels, never the data.
 function LockedSpendingInsightsCard() {
   return (
     <View
@@ -528,14 +520,9 @@ function LockedSpendingInsightsCard() {
       <View style={styles.snapshotGrid}>
         <View style={[styles.snapshotItem, styles.snapshotItemReturned]}>
           <View style={[styles.snapshotAccent, styles.snapshotAccentReturned]} />
-          <AppText
-            adjustsFontSizeToFit
-            numberOfLines={1}
-            style={[styles.snapshotValue, styles.insightsValue]}
-            variant="body"
-          >
-            {LOCKED_INSIGHTS_PREVIEW.returnedValue}
-          </AppText>
+          <View style={lockedPreviewBarSlot}>
+            <View style={[lockedPreviewBar, { width: '52%' }]} />
+          </View>
           <AppText
             style={[styles.snapshotLabel, styles.snapshotLabelReturned]}
             variant="caption"
@@ -545,14 +532,9 @@ function LockedSpendingInsightsCard() {
         </View>
         <View style={[styles.snapshotItem, styles.snapshotItemOpen]}>
           <View style={[styles.snapshotAccent, styles.snapshotAccentOpen]} />
-          <AppText
-            adjustsFontSizeToFit
-            numberOfLines={1}
-            style={[styles.snapshotValue, styles.insightsValue]}
-            variant="body"
-          >
-            {LOCKED_INSIGHTS_PREVIEW.openValue}
-          </AppText>
+          <View style={lockedPreviewBarSlot}>
+            <View style={[lockedPreviewBar, { width: '70%' }]} />
+          </View>
           <AppText
             style={[styles.snapshotLabel, styles.snapshotLabelOpen]}
             variant="caption"
@@ -565,14 +547,9 @@ function LockedSpendingInsightsCard() {
       <View style={styles.snapshotGrid}>
         <View style={[styles.snapshotItem, styles.snapshotItemKept]}>
           <View style={[styles.snapshotAccent, styles.snapshotAccentKept]} />
-          <AppText
-            adjustsFontSizeToFit
-            numberOfLines={1}
-            style={[styles.snapshotValue, styles.insightsValue]}
-            variant="body"
-          >
-            {LOCKED_INSIGHTS_PREVIEW.keptValue}
-          </AppText>
+          <View style={lockedPreviewBarSlot}>
+            <View style={[lockedPreviewBar, { width: '52%' }]} />
+          </View>
           <AppText
             style={[styles.snapshotLabel, styles.snapshotLabelKept]}
             variant="caption"
@@ -582,14 +559,9 @@ function LockedSpendingInsightsCard() {
         </View>
         <View style={styles.snapshotItem}>
           <View style={[styles.snapshotAccent, styles.insightsAccentRate]} />
-          <AppText
-            adjustsFontSizeToFit
-            numberOfLines={1}
-            style={[styles.snapshotValue, styles.insightsValue]}
-            variant="body"
-          >
-            {LOCKED_INSIGHTS_PREVIEW.returnRate}
-          </AppText>
+          <View style={lockedPreviewBarSlot}>
+            <View style={[lockedPreviewBar, { width: '42%' }]} />
+          </View>
           <AppText
             style={[styles.snapshotLabel, styles.insightsLabelRate]}
             variant="caption"
