@@ -16,6 +16,7 @@ import Svg, { Path } from 'react-native-svg';
 import { AppButton } from '../../../components/AppButton';
 import { AppScreen } from '../../../components/AppScreen';
 import { AppText } from '../../../components/AppText';
+import { ProLockedOverlay } from '../../../components/ProLockedOverlay';
 import { theme } from '../../../constants/theme';
 import { signOut } from '../../../services/authService';
 import { useAuth } from '../../../state/AuthState';
@@ -488,6 +489,119 @@ function SpendingInsightsCard({ insights }: { insights: SpendingInsights }) {
   );
 }
 
+// Hardcoded, non-real placeholder amounts shown behind the teaser's blur. These
+// are static string literals that look like plausible insights — they are NEVER
+// derived from, and never touch, the user's real purchase data. They exist only
+// to give the frosted card the shape of "real data that's hidden" rather than an
+// empty loading state.
+const LOCKED_INSIGHTS_PREVIEW = {
+  keptValue: '$260',
+  openValue: '$1,180',
+  returnRate: '72%',
+  returnedValue: '$420',
+} as const;
+
+// Free/Guest teaser shell for Spending insights. Intentionally propless: it
+// reproduces the real card's header, hairline, and tile layout but renders the
+// fake LOCKED_INSIGHTS_PREVIEW literals where amounts would go — so no real
+// spending figure is ever constructed as an element or passed into the non-Pro
+// render path. The real SpendingInsightsCard (which formats actual totals) stays
+// Pro-gated and untouched; this shell shares only the static styles/labels and
+// hardcoded literals, never the data.
+function LockedSpendingInsightsCard() {
+  return (
+    <View
+      style={[
+        styles.snapshotCard,
+        styles.insightsHairline,
+        styles.lockedInsightsCard,
+      ]}
+    >
+      <View style={styles.snapshotHeader}>
+        <View style={styles.snapshotTitleBlock}>
+          <AppText style={styles.snapshotTitle} variant="caption">
+            Spending insights
+          </AppText>
+        </View>
+      </View>
+
+      <View style={styles.snapshotGrid}>
+        <View style={[styles.snapshotItem, styles.snapshotItemReturned]}>
+          <View style={[styles.snapshotAccent, styles.snapshotAccentReturned]} />
+          <AppText
+            adjustsFontSizeToFit
+            numberOfLines={1}
+            style={[styles.snapshotValue, styles.insightsValue]}
+            variant="body"
+          >
+            {LOCKED_INSIGHTS_PREVIEW.returnedValue}
+          </AppText>
+          <AppText
+            style={[styles.snapshotLabel, styles.snapshotLabelReturned]}
+            variant="caption"
+          >
+            Returned value
+          </AppText>
+        </View>
+        <View style={[styles.snapshotItem, styles.snapshotItemOpen]}>
+          <View style={[styles.snapshotAccent, styles.snapshotAccentOpen]} />
+          <AppText
+            adjustsFontSizeToFit
+            numberOfLines={1}
+            style={[styles.snapshotValue, styles.insightsValue]}
+            variant="body"
+          >
+            {LOCKED_INSIGHTS_PREVIEW.openValue}
+          </AppText>
+          <AppText
+            style={[styles.snapshotLabel, styles.snapshotLabelOpen]}
+            variant="caption"
+          >
+            Open value
+          </AppText>
+        </View>
+      </View>
+
+      <View style={styles.snapshotGrid}>
+        <View style={[styles.snapshotItem, styles.snapshotItemKept]}>
+          <View style={[styles.snapshotAccent, styles.snapshotAccentKept]} />
+          <AppText
+            adjustsFontSizeToFit
+            numberOfLines={1}
+            style={[styles.snapshotValue, styles.insightsValue]}
+            variant="body"
+          >
+            {LOCKED_INSIGHTS_PREVIEW.keptValue}
+          </AppText>
+          <AppText
+            style={[styles.snapshotLabel, styles.snapshotLabelKept]}
+            variant="caption"
+          >
+            Kept value
+          </AppText>
+        </View>
+        <View style={styles.snapshotItem}>
+          <View style={[styles.snapshotAccent, styles.insightsAccentRate]} />
+          <AppText
+            adjustsFontSizeToFit
+            numberOfLines={1}
+            style={[styles.snapshotValue, styles.insightsValue]}
+            variant="body"
+          >
+            {LOCKED_INSIGHTS_PREVIEW.returnRate}
+          </AppText>
+          <AppText
+            style={[styles.snapshotLabel, styles.insightsLabelRate]}
+            variant="caption"
+          >
+            Return rate
+          </AppText>
+        </View>
+      </View>
+    </View>
+  );
+}
+
 function CsvExportCard({
   disabled,
   onPress,
@@ -608,6 +722,21 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
   const shouldShowSnapshot =
     !isAccountLoading && hasHydratedPurchases && purchases.length > 0;
   const spendingInsights = useMemo<SpendingInsights>(() => {
+    // Free/Guest never see real amounts — the teaser renders dummy bars — and
+    // nothing downstream reads these totals unless isPro. Short-circuit so no
+    // purchase price is even parsed or summed for non-Pro users. For Pro this
+    // guard is skipped and the computation below is byte-identical to before.
+    if (!isPro) {
+      return {
+        activeTotals: {},
+        hasData: false,
+        isMultiCurrency: false,
+        keptTotals: {},
+        returnRatePercent: null,
+        returnedTotals: {},
+      };
+    }
+
     const returnedTotals: CurrencyTotals = {};
     const activeTotals: CurrencyTotals = {};
     const keptTotals: CurrencyTotals = {};
@@ -653,13 +782,17 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
           : Math.round((returnedCount / resolvedCount) * 100),
       returnedTotals,
     };
-  }, [purchases]);
+  }, [isPro, purchases]);
   const shouldShowSpendingInsights =
     !isAccountLoading &&
     isAuthenticated &&
     isPro &&
     hasHydratedPurchases &&
     spendingInsights.hasData;
+  // Both non-Pro states (guest and signed-in-free) get the same locked teaser —
+  // showing dummy shapes needs no purchase data, so it is not gated on hydration
+  // or hasData, only on a resolved, non-Pro account.
+  const shouldShowSpendingInsightsTeaser = !isAccountLoading && !isPro;
   const shouldShowCsvExport =
     !isAccountLoading && isAuthenticated && isPro;
   const statusBadgeLabel = isAccountLoading
@@ -709,6 +842,14 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
     } finally {
       setIsSigningOut(false);
     }
+  };
+
+  const handleUpgradePress = () => {
+    // Single integration point for the Pro paywall, shared by every ProLockedOverlay
+    // teaser. The paywall screen isn't built yet, so this surfaces a lightweight
+    // "coming soon" notice; replace this body with paywall navigation
+    // (e.g. router.push('/paywall')) once that screen exists.
+    Alert.alert('RetTrack Pro', 'Spending insights and more are coming soon.');
   };
 
   const handleCsvExportPress = async () => {
@@ -1005,6 +1146,15 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
 
           {shouldShowSpendingInsights ? (
             <SpendingInsightsCard insights={spendingInsights} />
+          ) : null}
+
+          {shouldShowSpendingInsightsTeaser ? (
+            <ProLockedOverlay
+              caption="Unlock spending insights with Pro"
+              onUpgrade={handleUpgradePress}
+            >
+              <LockedSpendingInsightsCard />
+            </ProLockedOverlay>
           ) : null}
 
           {shouldShowCsvExport ? (
@@ -1371,6 +1521,12 @@ const styles = StyleSheet.create({
   insightsValue: {
     fontSize: 15,
     lineHeight: 20,
+  },
+  // The teaser shell owns no outer spacing — ProLockedOverlay's wrapper supplies
+  // the top rhythm, so the frosted glass + badge cover the card exactly with no
+  // margin seam.
+  lockedInsightsCard: {
+    marginTop: 0,
   },
   profileCard: {
     alignSelf: 'stretch',
