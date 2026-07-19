@@ -27,6 +27,7 @@ import { useAuth } from '../../../state/AuthState';
 import {
   getPlanAccessSubject,
   getProFeatureAccess,
+  type ProFeatureKey,
 } from '../../monetization/access/planAccess';
 import { usePlan } from '../../monetization/state/PlanState';
 import { usePurchases } from '../../purchases/state/PurchasesState';
@@ -867,6 +868,29 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
     Alert.alert('RetTrack Pro', 'Spending insights and more are coming soon.');
   };
 
+  // Shared gate for locked Pro surfaces (Spending insights teaser, CSV export row).
+  // The guest/Free split lives HERE only: guest → sign-in first (RevenueCat's App
+  // User ID is the Supabase user id, so a Guest has no account for an entitlement to
+  // attach to — they must sign in before any purchase flow), signed-in Free → the
+  // paywall integration point. A Pro subject yields recommendedAction 'allow', so
+  // neither branch fires (no-op); callers that need the export gate check allowed.
+  const handleProFeaturePress = (feature: ProFeatureKey) => {
+    const subject = getPlanAccessSubject({
+      isAuthenticated,
+      isPro,
+    });
+    const access = getProFeatureAccess({
+      feature,
+      subject,
+    });
+
+    if (access.recommendedAction === 'showSignInRequired') {
+      onSignIn?.();
+    } else if (access.recommendedAction === 'showPaywall') {
+      handleUpgradePress();
+    }
+  };
+
   const handleCsvExportPress = async () => {
     if (isExportingCsv) {
       return;
@@ -882,16 +906,10 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
     });
 
     if (!access.allowed) {
-      // Non-Pro taps route through the plan-access decision instead of exporting:
-      // guest → the sign-in-required path (onSignIn; no Guest Pro purchase in v1),
-      // signed-in Free → the paywall (handleUpgradePress). Matches planAccess.ts's
-      // guestRequiresAccountDecision ('showSignInRequired') and
-      // signedInFreeRequiresProDecision ('showPaywall').
-      if (access.recommendedAction === 'showSignInRequired') {
-        onSignIn?.();
-      } else if (access.recommendedAction === 'showPaywall') {
-        handleUpgradePress();
-      }
+      // Non-Pro taps route through the shared plan-access gate instead of exporting
+      // (guest → sign-in, signed-in Free → paywall). Same split as the Spending
+      // insights teaser; the routing lives once, in handleProFeaturePress.
+      handleProFeaturePress('csvExport');
 
       return;
     }
@@ -1177,7 +1195,7 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
           {shouldShowSpendingInsightsTeaser ? (
             <ProLockedOverlay
               caption="Unlock spending insights with Pro"
-              onUpgrade={handleUpgradePress}
+              onUpgrade={() => handleProFeaturePress('spendingInsights')}
             >
               <LockedSpendingInsightsCard />
             </ProLockedOverlay>
