@@ -574,11 +574,46 @@ function LockedSpendingInsightsCard() {
   );
 }
 
+// Minimal amber lock mark for the CSV export row's trailing slot when the feature
+// is locked (Free/Guest). ProLockedOverlay's LockGlyph is NOT exported, so this is
+// a small local shape in the same visual language (amber, understated) rather than
+// reaching into that module. Pro users keep the chevron (csvExportChevron).
+function CsvExportLockGlyph() {
+  return (
+    <Svg
+      accessibilityElementsHidden
+      focusable={false}
+      height={14}
+      viewBox="0 0 16 16"
+      width={14}
+    >
+      <Path
+        d="M5.2 7 V5.5 A2.8 2.8 0 0 1 10.8 5.5 V7"
+        fill="none"
+        stroke={theme.colors.amber}
+        strokeLinecap="round"
+        strokeWidth={1.7}
+      />
+      <Path
+        d="M5.3 7 H10.7 A1.3 1.3 0 0 1 12 8.3 V11.7 A1.3 1.3 0 0 1 10.7 13 H5.3 A1.3 1.3 0 0 1 4 11.7 V8.3 A1.3 1.3 0 0 1 5.3 7 Z"
+        fill={theme.colors.amber}
+      />
+    </Svg>
+  );
+}
+
+// The `locked` (Free/Guest) row keeps the title + subtitle fully crisp — they are
+// the upsell copy, never dimmed or scrimmed — and only swaps the trailing chevron
+// for the amber lock. It is never given csvExportCardDisabled: the row must read as
+// tappable (its tap routes to sign-in/paywall through the plan-access model). The
+// unlocked (Pro) row is byte-identical to before: chevron + the real export handler.
 function CsvExportCard({
   disabled,
+  locked,
   onPress,
 }: {
   disabled: boolean;
+  locked: boolean;
   onPress: () => void;
 }) {
   return (
@@ -590,6 +625,7 @@ function CsvExportCard({
       style={({ pressed }) => [
         styles.csvExportCard,
         styles.insightsHairline,
+        locked && styles.csvExportCardLocked,
         pressed && !disabled && styles.csvExportCardPressed,
         disabled && styles.csvExportCardDisabled,
       ]}
@@ -600,14 +636,18 @@ function CsvExportCard({
         </AppText>
         <AppText
           numberOfLines={1}
-          style={styles.csvExportBody}
+          style={
+            locked
+              ? [styles.csvExportBody, styles.csvExportBodyLocked]
+              : styles.csvExportBody
+          }
           variant="caption"
         >
           Download purchases as a spreadsheet
         </AppText>
       </View>
 
-      <View style={styles.csvExportChevron} />
+      {locked ? <CsvExportLockGlyph /> : <View style={styles.csvExportChevron} />}
     </Pressable>
   );
 }
@@ -765,8 +805,11 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
   // showing dummy shapes needs no purchase data, so it is not gated on hydration
   // or hasData, only on a resolved, non-Pro account.
   const shouldShowSpendingInsightsTeaser = !isAccountLoading && !isPro;
-  const shouldShowCsvExport =
-    !isAccountLoading && isAuthenticated && isPro;
+  // CSV export renders for everyone once the account resolves. Non-Pro users
+  // (guest + signed-in Free) get the locked row (CsvExportCard `locked`); Pro users
+  // get the live export. Guest-inclusive and !isPro-aware, mirroring
+  // shouldShowSpendingInsightsTeaser, so the upsell is visible instead of hidden.
+  const shouldShowCsvExport = !isAccountLoading;
   const statusBadgeLabel = isAccountLoading
     ? 'Checking'
     : isAuthenticated
@@ -839,6 +882,17 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
     });
 
     if (!access.allowed) {
+      // Non-Pro taps route through the plan-access decision instead of exporting:
+      // guest → the sign-in-required path (onSignIn; no Guest Pro purchase in v1),
+      // signed-in Free → the paywall (handleUpgradePress). Matches planAccess.ts's
+      // guestRequiresAccountDecision ('showSignInRequired') and
+      // signedInFreeRequiresProDecision ('showPaywall').
+      if (access.recommendedAction === 'showSignInRequired') {
+        onSignIn?.();
+      } else if (access.recommendedAction === 'showPaywall') {
+        handleUpgradePress();
+      }
+
       return;
     }
 
@@ -1132,6 +1186,7 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
           {shouldShowCsvExport ? (
             <CsvExportCard
               disabled={isExportingCsv}
+              locked={!isPro}
               onPress={handleCsvExportPress}
             />
           ) : null}
@@ -1378,6 +1433,12 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     marginTop: 2,
   },
+  // Locked subtitle lightened one step from theme.colors.muted (#6F7468 →
+  // rgb(111, 116, 104)) to rgba(111, 116, 104, 0.7). Only the subtitle color softens;
+  // the title stays fully legible and the card gets no opacity.
+  csvExportBodyLocked: {
+    color: 'rgba(111, 116, 104, 0.7)',
+  },
   csvExportCard: {
     alignItems: 'center',
     alignSelf: 'stretch',
@@ -1402,6 +1463,12 @@ const styles = StyleSheet.create({
   },
   csvExportCardDisabled: {
     opacity: 0.56,
+  },
+  // Softer, less-bright fill than the active row (#FFFDF8 → #FDFBF5) so the locked
+  // state reads as subtly set-back — NOT disabled. No opacity, border, or shadow
+  // change; the row must still invite the tap that opens the paywall.
+  csvExportCardLocked: {
+    backgroundColor: '#FDFBF5',
   },
   csvExportCardPressed: {
     opacity: 0.82,
