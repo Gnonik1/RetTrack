@@ -1,6 +1,6 @@
-import { LinearGradient } from 'expo-linear-gradient';
-import { useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { LinearGradient } from "expo-linear-gradient";
+import { useFocusEffect } from "expo-router";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Animated,
@@ -10,31 +10,31 @@ import {
   ScrollView,
   StyleSheet,
   View,
-} from 'react-native';
-import Svg, { Path } from 'react-native-svg';
+} from "react-native";
+import Svg, { Path } from "react-native-svg";
 
-import { AppButton } from '../../../components/AppButton';
-import { AppScreen } from '../../../components/AppScreen';
-import { AppText } from '../../../components/AppText';
+import { AppButton } from "../../../components/AppButton";
+import { AppScreen } from "../../../components/AppScreen";
+import { AppText } from "../../../components/AppText";
 import {
   lockedPreviewBar,
   lockedPreviewBarSlot,
   ProLockedOverlay,
-} from '../../../components/ProLockedOverlay';
-import { theme } from '../../../constants/theme';
-import { signOut } from '../../../services/authService';
-import { useAuth } from '../../../state/AuthState';
+} from "../../../components/ProLockedOverlay";
+import { theme } from "../../../constants/theme";
+import { signOut } from "../../../services/authService";
+import { useAuth } from "../../../state/AuthState";
 import {
   getPlanAccessSubject,
   getProFeatureAccess,
   type ProFeatureKey,
-} from '../../monetization/access/planAccess';
-import { usePlan } from '../../monetization/state/PlanState';
-import { usePurchases } from '../../purchases/state/PurchasesState';
-import { exportPurchasesCsv } from '../../purchases/utils/purchaseCsvExport';
+} from "../../monetization/access/planAccess";
+import { usePlan } from "../../monetization/state/PlanState";
+import { usePurchases } from "../../purchases/state/PurchasesState";
+import { exportPurchasesCsv } from "../../purchases/utils/purchaseCsvExport";
 
 const APP_STORE_REVIEW_URL =
-  'https://apps.apple.com/app/id6775811683?action=write-review';
+  "https://apps.apple.com/app/id6775811683?action=write-review";
 
 type ProfileScreenProps = {
   onSignIn?: () => void;
@@ -66,7 +66,7 @@ function getAccountInitial(fullName?: string | null, email?: string) {
     return trimmedFullName.charAt(0).toUpperCase();
   }
 
-  return trimmedEmail ? trimmedEmail.charAt(0).toUpperCase() : 'A';
+  return trimmedEmail ? trimmedEmail.charAt(0).toUpperCase() : "A";
 }
 
 function getUserAvatarUrl(
@@ -75,11 +75,11 @@ function getUserAvatarUrl(
   const avatarUrl = metadata?.avatar_url;
   const picture = metadata?.picture;
 
-  if (typeof avatarUrl === 'string' && avatarUrl.trim()) {
+  if (typeof avatarUrl === "string" && avatarUrl.trim()) {
     return avatarUrl.trim();
   }
 
-  if (typeof picture === 'string' && picture.trim()) {
+  if (typeof picture === "string" && picture.trim()) {
     return picture.trim();
   }
 
@@ -107,18 +107,19 @@ function parsePurchaseAmount(priceText: string): number | null {
     return null;
   }
 
-  const digits = match[0].replace(/[.,]+$/, '');
+  const digits = match[0].replace(/[.,]+$/, "");
   const separatorIndex = Math.max(
-    digits.lastIndexOf(','),
-    digits.lastIndexOf('.'),
+    digits.lastIndexOf(","),
+    digits.lastIndexOf("."),
   );
-  const fraction = separatorIndex === -1 ? '' : digits.slice(separatorIndex + 1);
+  const fraction =
+    separatorIndex === -1 ? "" : digits.slice(separatorIndex + 1);
   // A trailing run of 1-2 digits is a decimal mark; anything longer ("1,299") is
   // thousands grouping.
   const hasDecimalMark = fraction.length > 0 && fraction.length <= 2;
   const normalized = hasDecimalMark
-    ? `${digits.slice(0, separatorIndex).replace(/[.,]/g, '')}.${fraction}`
-    : digits.replace(/[.,]/g, '');
+    ? `${digits.slice(0, separatorIndex).replace(/[.,]/g, "")}.${fraction}`
+    : digits.replace(/[.,]/g, "");
   const value = Number(normalized);
 
   return Number.isFinite(value) ? value : null;
@@ -142,7 +143,7 @@ function parsePurchasePrice(
   const codeMatch = /^[A-Za-z]{2,}/.exec(trimmed);
 
   return {
-    code: codeMatch ? codeMatch[0].toUpperCase() : '',
+    code: codeMatch ? codeMatch[0].toUpperCase() : "",
     value,
   };
 }
@@ -154,7 +155,7 @@ function formatInsightAmount(value: number): string {
 
   // Sums of decimal-pad prices can be fractional; keep at most 2 decimals and drop
   // a trailing ".00" / ".50" zero so whole sums read as "450", not "450.00".
-  return value.toFixed(2).replace(/\.?0+$/, '');
+  return value.toFixed(2).replace(/\.?0+$/, "");
 }
 
 function formatMoneyBucket(
@@ -166,7 +167,7 @@ function formatMoneyBucket(
     .sort();
 
   if (codes.length === 0) {
-    return '0';
+    return "0";
   }
 
   if (!isMultiCurrency) {
@@ -183,7 +184,7 @@ function formatMoneyBucket(
   // Multiple currencies: list each separately, never summed across codes.
   return codes
     .map((code) => `${code} ${formatInsightAmount(totals[code])}`)
-    .join(' · ');
+    .join(" · ");
 }
 
 function ProSparkleIcon() {
@@ -245,10 +246,10 @@ function ProHairlineShimmer({ cardWidth }: { cardWidth: number }) {
     >
       <LinearGradient
         colors={[
-          'rgba(255, 255, 255, 0)',
-          'rgba(255, 255, 255, 0.95)',
-          'rgba(255, 255, 255, 0.95)',
-          'rgba(255, 255, 255, 0)',
+          "rgba(255, 255, 255, 0)",
+          "rgba(255, 255, 255, 0.95)",
+          "rgba(255, 255, 255, 0.95)",
+          "rgba(255, 255, 255, 0)",
         ]}
         end={{ x: 1, y: 0 }}
         locations={[0, 0.4, 0.6, 1]}
@@ -264,31 +265,31 @@ function StatusBadge({
   tone,
 }: {
   label: string;
-  tone: 'guest' | 'loading' | 'signedIn';
+  tone: "guest" | "loading" | "signedIn";
 }) {
   return (
     <View
       style={[
         styles.statusBadge,
-        tone === 'signedIn' && styles.statusBadgeSignedIn,
-        tone === 'guest' && styles.statusBadgeGuest,
-        tone === 'loading' && styles.statusBadgeLoading,
+        tone === "signedIn" && styles.statusBadgeSignedIn,
+        tone === "guest" && styles.statusBadgeGuest,
+        tone === "loading" && styles.statusBadgeLoading,
       ]}
     >
       <View
         style={[
           styles.statusDot,
-          tone === 'signedIn' && styles.statusDotSignedIn,
-          tone === 'guest' && styles.statusDotGuest,
-          tone === 'loading' && styles.statusDotLoading,
+          tone === "signedIn" && styles.statusDotSignedIn,
+          tone === "guest" && styles.statusDotGuest,
+          tone === "loading" && styles.statusDotLoading,
         ]}
       />
       <AppText
         style={[
           styles.statusBadgeText,
-          tone === 'signedIn' && styles.statusBadgeTextSignedIn,
-          tone === 'guest' && styles.statusBadgeTextGuest,
-          tone === 'loading' && styles.statusBadgeTextLoading,
+          tone === "signedIn" && styles.statusBadgeTextSignedIn,
+          tone === "guest" && styles.statusBadgeTextGuest,
+          tone === "loading" && styles.statusBadgeTextLoading,
         ]}
         variant="caption"
       >
@@ -300,8 +301,8 @@ function StatusBadge({
 
 function showReviewUnavailableAlert() {
   Alert.alert(
-    'Review unavailable',
-    'RetTrack is not available on the App Store yet. Please try again after release.',
+    "Review unavailable",
+    "RetTrack is not available on the App Store yet. Please try again after release.",
   );
 }
 
@@ -373,7 +374,9 @@ function CurrentSnapshotCard({ snapshot }: { snapshot: SnapshotCounts }) {
           </AppText>
         </View>
         <View style={[styles.snapshotItem, styles.snapshotItemReturned]}>
-          <View style={[styles.snapshotAccent, styles.snapshotAccentReturned]} />
+          <View
+            style={[styles.snapshotAccent, styles.snapshotAccentReturned]}
+          />
           <AppText style={styles.snapshotValue} variant="body">
             {snapshot.returned}
           </AppText>
@@ -404,7 +407,7 @@ function CurrentSnapshotCard({ snapshot }: { snapshot: SnapshotCounts }) {
 function SpendingInsightsCard({ insights }: { insights: SpendingInsights }) {
   const returnRateLabel =
     insights.returnRatePercent === null
-      ? '—'
+      ? "—"
       : `${insights.returnRatePercent}%`;
 
   return (
@@ -419,14 +422,19 @@ function SpendingInsightsCard({ insights }: { insights: SpendingInsights }) {
 
       <View style={styles.snapshotGrid}>
         <View style={[styles.snapshotItem, styles.snapshotItemReturned]}>
-          <View style={[styles.snapshotAccent, styles.snapshotAccentReturned]} />
+          <View
+            style={[styles.snapshotAccent, styles.snapshotAccentReturned]}
+          />
           <AppText
             adjustsFontSizeToFit
             numberOfLines={1}
             style={[styles.snapshotValue, styles.insightsValue]}
             variant="body"
           >
-            {formatMoneyBucket(insights.returnedTotals, insights.isMultiCurrency)}
+            {formatMoneyBucket(
+              insights.returnedTotals,
+              insights.isMultiCurrency,
+            )}
           </AppText>
           <AppText
             style={[styles.snapshotLabel, styles.snapshotLabelReturned]}
@@ -520,9 +528,11 @@ function LockedSpendingInsightsCard() {
 
       <View style={styles.snapshotGrid}>
         <View style={[styles.snapshotItem, styles.snapshotItemReturned]}>
-          <View style={[styles.snapshotAccent, styles.snapshotAccentReturned]} />
+          <View
+            style={[styles.snapshotAccent, styles.snapshotAccentReturned]}
+          />
           <View style={lockedPreviewBarSlot}>
-            <View style={[lockedPreviewBar, { width: '52%' }]} />
+            <View style={[lockedPreviewBar, { width: "52%" }]} />
           </View>
           <AppText
             style={[styles.snapshotLabel, styles.snapshotLabelReturned]}
@@ -534,7 +544,7 @@ function LockedSpendingInsightsCard() {
         <View style={[styles.snapshotItem, styles.snapshotItemOpen]}>
           <View style={[styles.snapshotAccent, styles.snapshotAccentOpen]} />
           <View style={lockedPreviewBarSlot}>
-            <View style={[lockedPreviewBar, { width: '70%' }]} />
+            <View style={[lockedPreviewBar, { width: "70%" }]} />
           </View>
           <AppText
             style={[styles.snapshotLabel, styles.snapshotLabelOpen]}
@@ -549,7 +559,7 @@ function LockedSpendingInsightsCard() {
         <View style={[styles.snapshotItem, styles.snapshotItemKept]}>
           <View style={[styles.snapshotAccent, styles.snapshotAccentKept]} />
           <View style={lockedPreviewBarSlot}>
-            <View style={[lockedPreviewBar, { width: '52%' }]} />
+            <View style={[lockedPreviewBar, { width: "52%" }]} />
           </View>
           <AppText
             style={[styles.snapshotLabel, styles.snapshotLabelKept]}
@@ -561,7 +571,7 @@ function LockedSpendingInsightsCard() {
         <View style={styles.snapshotItem}>
           <View style={[styles.snapshotAccent, styles.insightsAccentRate]} />
           <View style={lockedPreviewBarSlot}>
-            <View style={[lockedPreviewBar, { width: '42%' }]} />
+            <View style={[lockedPreviewBar, { width: "42%" }]} />
           </View>
           <AppText
             style={[styles.snapshotLabel, styles.insightsLabelRate]}
@@ -648,7 +658,11 @@ function CsvExportCard({
         </AppText>
       </View>
 
-      {locked ? <CsvExportLockGlyph /> : <View style={styles.csvExportChevron} />}
+      {locked ? (
+        <CsvExportLockGlyph />
+      ) : (
+        <View style={styles.csvExportChevron} />
+      )}
     </Pressable>
   );
 }
@@ -671,14 +685,14 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
   const { isPro, limits } = usePlan();
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [isExportingCsv, setIsExportingCsv] = useState(false);
-  const [signOutError, setSignOutError] = useState('');
+  const [signOutError, setSignOutError] = useState("");
   const [hasAvatarLoadError, setHasAvatarLoadError] = useState(false);
   const [proUsageCardWidth, setProUsageCardWidth] = useState(0);
   const userEmail = user?.email;
   const googleAvatarUrl = getUserAvatarUrl(user?.user_metadata);
   const shouldShowAvatarImage =
     isAuthenticated && Boolean(googleAvatarUrl) && !hasAvatarLoadError;
-  const accountDisplayName = profileFullName ?? userEmail ?? 'Signed in';
+  const accountDisplayName = profileFullName ?? userEmail ?? "Signed in";
   const guestRemainingItems = effectiveGuestRemaining;
   const guestPurchaseLimit = limits.guestPurchases;
   const signedInPurchaseLimit = limits.signedInFreePurchases;
@@ -699,20 +713,20 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
   );
   const proSavedPurchaseCountLabel =
     accountPurchaseEntriesUsed === 1
-      ? '1 saved purchase'
+      ? "1 saved purchase"
       : `${accountPurchaseEntriesUsed} saved purchases`;
   const snapshot = useMemo(
     () =>
       purchases.reduce<SnapshotCounts>(
         (counts, purchase) => {
-          if (purchase.status === 'returned') {
+          if (purchase.status === "returned") {
             return {
               ...counts,
               returned: counts.returned + 1,
             };
           }
 
-          if (purchase.status === 'kept') {
+          if (purchase.status === "kept") {
             return {
               ...counts,
               kept: counts.kept + 1,
@@ -763,10 +777,10 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
 
       // Mirror the Purchase status card's buckets: 'returned' and 'kept' are their
       // own tiles, everything else ('active' + 'pending') is the "Open" bucket.
-      if (purchase.status === 'returned') {
+      if (purchase.status === "returned") {
         bucket = returnedTotals;
         returnedCount += 1;
-      } else if (purchase.status === 'kept') {
+      } else if (purchase.status === "kept") {
         bucket = keptTotals;
         keptCount += 1;
       } else {
@@ -777,7 +791,8 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
       const parsedPrice = parsePurchasePrice(purchase.price);
 
       if (parsedPrice) {
-        bucket[parsedPrice.code] = (bucket[parsedPrice.code] ?? 0) + parsedPrice.value;
+        bucket[parsedPrice.code] =
+          (bucket[parsedPrice.code] ?? 0) + parsedPrice.value;
         currencyCodes.add(parsedPrice.code);
       }
     }
@@ -812,28 +827,28 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
   // shouldShowSpendingInsightsTeaser, so the upsell is visible instead of hidden.
   const shouldShowCsvExport = !isAccountLoading;
   const statusBadgeLabel = isAccountLoading
-    ? 'Checking'
+    ? "Checking"
     : isAuthenticated
-      ? 'Signed in'
-      : 'Guest mode';
-  const statusBadgeTone: 'guest' | 'loading' | 'signedIn' = isAccountLoading
-    ? 'loading'
+      ? "Signed in"
+      : "Guest mode";
+  const statusBadgeTone: "guest" | "loading" | "signedIn" = isAccountLoading
+    ? "loading"
     : isAuthenticated
-      ? 'signedIn'
-      : 'guest';
+      ? "signedIn"
+      : "guest";
   const accountName = isAccountLoading
-    ? 'Checking account'
+    ? "Checking account"
     : isAuthenticated
       ? accountDisplayName
-      : 'Guest User';
+      : "Guest User";
   const accountMeta = isAccountLoading
-    ? 'Loading your RetTrack account.'
+    ? "Loading your RetTrack account."
     : isAuthenticated
       ? userEmail
       : undefined;
   const avatarLabel = isAuthenticated
     ? getAccountInitial(profileFullName, userEmail)
-    : 'G';
+    : "G";
 
   useEffect(() => {
     setHasAvatarLoadError(false);
@@ -844,7 +859,7 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
       return;
     }
 
-    setSignOutError('');
+    setSignOutError("");
     setIsSigningOut(true);
 
     try {
@@ -865,7 +880,7 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
     // teaser. The paywall screen isn't built yet, so this surfaces a lightweight
     // "coming soon" notice; replace this body with paywall navigation
     // (e.g. router.push('/paywall')) once that screen exists.
-    Alert.alert('RetTrack Pro', 'Spending insights and more are coming soon.');
+    Alert.alert("RetTrack Pro", "Spending insights and more are coming soon.");
   };
 
   // Shared gate for locked Pro surfaces (Spending insights teaser, CSV export row).
@@ -884,9 +899,9 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
       subject,
     });
 
-    if (access.recommendedAction === 'showSignInRequired') {
+    if (access.recommendedAction === "showSignInRequired") {
       onSignIn?.();
-    } else if (access.recommendedAction === 'showPaywall') {
+    } else if (access.recommendedAction === "showPaywall") {
       handleUpgradePress();
     }
   };
@@ -901,7 +916,7 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
       isPro,
     });
     const access = getProFeatureAccess({
-      feature: 'csvExport',
+      feature: "csvExport",
       subject,
     });
 
@@ -909,7 +924,7 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
       // Non-Pro taps route through the shared plan-access gate instead of exporting
       // (guest → sign-in, signed-in Free → paywall). Same split as the Spending
       // insights teaser; the routing lives once, in handleProFeaturePress.
-      handleProFeaturePress('csvExport');
+      handleProFeaturePress("csvExport");
 
       return;
     }
@@ -923,25 +938,25 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
         return;
       }
 
-      if (result.reason === 'empty') {
+      if (result.reason === "empty") {
         Alert.alert(
-          'Nothing to export',
-          'Add a purchase before exporting your CSV',
+          "Nothing to export",
+          "Add a purchase before exporting your CSV",
         );
         return;
       }
 
-      if (result.reason === 'sharingUnavailable') {
+      if (result.reason === "sharingUnavailable") {
         Alert.alert(
-          'Sharing unavailable',
-          'CSV export is ready, but sharing is not available on this device',
+          "Sharing unavailable",
+          "CSV export is ready, but sharing is not available on this device",
         );
         return;
       }
 
       Alert.alert(
-        'Export failed',
-        'Something went wrong while creating your CSV',
+        "Export failed",
+        "Something went wrong while creating your CSV",
       );
     } finally {
       setIsExportingCsv(false);
@@ -951,7 +966,7 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
   return (
     <AppScreen stableTopInset style={styles.screen}>
       <LinearGradient
-        colors={['#FBFAF3', '#F0F5E9', '#FFF8EC']}
+        colors={["#FBFAF3", "#F0F5E9", "#FFF8EC"]}
         end={{ x: 0.94, y: 1 }}
         locations={[0, 0.52, 1]}
         pointerEvents="none"
@@ -1026,10 +1041,10 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
             <View style={styles.syncDot} />
             <AppText style={styles.syncText} variant="caption">
               {isAccountLoading
-                ? 'Preparing your account details'
+                ? "Preparing your account details"
                 : isAuthenticated
-                  ? 'Purchases sync across devices'
-                  : 'Saved only on this device'}
+                  ? "Purchases sync across devices"
+                  : "Saved only on this device"}
             </AppText>
           </View>
 
@@ -1037,7 +1052,7 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
             isPro ? (
               <View style={styles.proUsageCardWrapper}>
                 <LinearGradient
-                  colors={['#2F442F', '#415C3D', '#314832']}
+                  colors={["#2F442F", "#415C3D", "#314832"]}
                   end={{ x: 1, y: 1 }}
                   onLayout={(event) => {
                     setProUsageCardWidth(event.nativeEvent.layout.width);
@@ -1058,9 +1073,18 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
                       Account usage
                     </AppText>
                     <View style={styles.proUsagePillWrapper}>
-                      <View pointerEvents="none" style={styles.proUsagePillGlowOuter} />
-                      <View pointerEvents="none" style={styles.proUsagePillGlowMid} />
-                      <View pointerEvents="none" style={styles.proUsagePillGlowInner} />
+                      <View
+                        pointerEvents="none"
+                        style={styles.proUsagePillGlowOuter}
+                      />
+                      <View
+                        pointerEvents="none"
+                        style={styles.proUsagePillGlowMid}
+                      />
+                      <View
+                        pointerEvents="none"
+                        style={styles.proUsagePillGlowInner}
+                      />
                       <View
                         style={[
                           styles.proIdentityPill,
@@ -1101,7 +1125,8 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
                 </View>
 
                 <AppText style={styles.usageTitle} variant="body">
-                  {accountPurchaseEntriesUsed} / {signedInPurchaseLimit} saved purchases
+                  {accountPurchaseEntriesUsed} / {signedInPurchaseLimit} saved
+                  purchases
                 </AppText>
                 <View style={styles.progressTrack}>
                   <View
@@ -1117,6 +1142,21 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
                     Photos, notes, and return dates
                   </AppText>
                 </View>
+                <View style={styles.usageProHintDivider} />
+                <Pressable
+                  accessibilityLabel="Upgrade to RetTrack Pro to remove the purchase limit"
+                  accessibilityRole="button"
+                  onPress={() => handleProFeaturePress("unlimitedPurchases")}
+                  style={({ pressed }) => [
+                    styles.usageProHintRow,
+                    pressed && styles.usageProHintRowPressed,
+                  ]}
+                >
+                  <AppText style={styles.usageProHintText} variant="caption">
+                    No limit with RetTrack Pro
+                  </AppText>
+                  <View style={styles.usageProHintChevron} />
+                </Pressable>
               </View>
             )
           ) : null}
@@ -1136,11 +1176,15 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
                 </View>
 
                 <AppText style={styles.usageTitle} variant="body">
-                  {guestPurchaseEntriesUsed} / {guestPurchaseLimit} guest entries used
+                  {guestPurchaseEntriesUsed} / {guestPurchaseLimit} guest
+                  entries used
                 </AppText>
                 <View style={styles.progressTrack}>
                   <View
-                    style={[styles.progressFill, getProgressStyle(usagePercent)]}
+                    style={[
+                      styles.progressFill,
+                      getProgressStyle(usagePercent),
+                    ]}
                   />
                 </View>
                 <View style={styles.featureLine}>
@@ -1186,7 +1230,9 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
             </>
           ) : null}
 
-          {shouldShowSnapshot ? <CurrentSnapshotCard snapshot={snapshot} /> : null}
+          {shouldShowSnapshot ? (
+            <CurrentSnapshotCard snapshot={snapshot} />
+          ) : null}
 
           {shouldShowSpendingInsights ? (
             <SpendingInsightsCard insights={spendingInsights} />
@@ -1195,7 +1241,7 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
           {shouldShowSpendingInsightsTeaser ? (
             <ProLockedOverlay
               caption="Unlock spending insights with Pro"
-              onUpgrade={() => handleProFeaturePress('spendingInsights')}
+              onUpgrade={() => handleProFeaturePress("spendingInsights")}
             >
               <LockedSpendingInsightsCard />
             </ProLockedOverlay>
@@ -1217,7 +1263,13 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
         ) : null}
 
         {!isAccountLoading && !isAuthenticated ? (
-          <View style={[styles.actions, styles.guestActions, styles.guestCtaSection]}>
+          <View
+            style={[
+              styles.actions,
+              styles.guestActions,
+              styles.guestCtaSection,
+            ]}
+          >
             <AppButton
               onPress={onSignUp}
               style={styles.guestActionButton}
@@ -1245,7 +1297,7 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
               ]}
             >
               <AppText style={styles.signOutButtonText} variant="button">
-                {isSigningOut ? 'Signing out...' : 'Sign out'}
+                {isSigningOut ? "Signing out..." : "Sign out"}
               </AppText>
             </Pressable>
             {signOutError ? (
@@ -1278,19 +1330,19 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   actions: {
-    alignSelf: 'stretch',
+    alignSelf: "stretch",
     gap: 10,
     marginTop: 14,
   },
   avatar: {
-    alignItems: 'center',
-    backgroundColor: '#E6EEDF',
-    borderColor: '#DDE6D5',
+    alignItems: "center",
+    backgroundColor: "#E6EEDF",
+    borderColor: "#DDE6D5",
     borderRadius: theme.radius.pill,
     borderWidth: 1,
     height: 68,
-    justifyContent: 'center',
-    overflow: 'hidden',
+    justifyContent: "center",
+    overflow: "hidden",
     shadowColor: theme.colors.greenDark,
     shadowOffset: {
       height: 5,
@@ -1301,8 +1353,8 @@ const styles = StyleSheet.create({
     width: 68,
   },
   avatarImage: {
-    height: '100%',
-    width: '100%',
+    height: "100%",
+    width: "100%",
   },
   avatarText: {
     color: theme.colors.greenDark,
@@ -1314,66 +1366,66 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
   },
   backgroundCardWash: {
-    backgroundColor: '#EEEBDC',
+    backgroundColor: "#EEEBDC",
     borderRadius: 108,
     height: 650,
     left: -2,
     opacity: 0.46,
-    position: 'absolute',
+    position: "absolute",
     right: -2,
     top: 260,
   },
   backgroundGlowBottom: {
-    backgroundColor: '#EFE2C9',
+    backgroundColor: "#EFE2C9",
     borderRadius: 460,
     bottom: -136,
     height: 920,
     left: -655,
     opacity: 0.28,
-    position: 'absolute',
+    position: "absolute",
     width: 920,
   },
   backgroundGlowTop: {
-    backgroundColor: '#E3EEDB',
+    backgroundColor: "#E3EEDB",
     borderRadius: 470,
     height: 940,
     opacity: 0.32,
-    position: 'absolute',
+    position: "absolute",
     right: -700,
     top: -540,
     width: 940,
   },
   backgroundMossGlow: {
-    backgroundColor: '#D7E5CF',
+    backgroundColor: "#D7E5CF",
     borderRadius: 250,
     height: 500,
     opacity: 0.18,
-    position: 'absolute',
+    position: "absolute",
     right: -215,
     top: 430,
-    transform: [{ rotate: '10deg' }],
+    transform: [{ rotate: "10deg" }],
     width: 560,
   },
   backgroundSageVeil: {
-    backgroundColor: '#E8F1E0',
+    backgroundColor: "#E8F1E0",
     borderRadius: 220,
     height: 420,
     opacity: 0.26,
-    position: 'absolute',
+    position: "absolute",
     right: -175,
     top: 190,
-    transform: [{ rotate: '-12deg' }],
+    transform: [{ rotate: "-12deg" }],
     width: 600,
   },
   backgroundWarmVeil: {
-    backgroundColor: '#F4E8D2',
+    backgroundColor: "#F4E8D2",
     borderRadius: 260,
     height: 520,
     left: -250,
     opacity: 0.22,
-    position: 'absolute',
+    position: "absolute",
     top: 660,
-    transform: [{ rotate: '-18deg' }],
+    transform: [{ rotate: "-18deg" }],
     width: 520,
   },
   benefitDot: {
@@ -1385,7 +1437,7 @@ const styles = StyleSheet.create({
     width: 4,
   },
   benefitRow: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 8,
     marginTop: 6,
   },
@@ -1396,9 +1448,9 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   benefitsCard: {
-    alignSelf: 'stretch',
-    backgroundColor: '#F5F5EA',
-    borderColor: '#DCE5D3',
+    alignSelf: "stretch",
+    backgroundColor: "#F5F5EA",
+    borderColor: "#DCE5D3",
     borderRadius: 18,
     borderWidth: 1,
     marginTop: 12,
@@ -1414,15 +1466,15 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   benefitsHeader: {
-    alignItems: 'center',
-    flexDirection: 'row',
+    alignItems: "center",
+    flexDirection: "row",
     gap: 12,
-    justifyContent: 'space-between',
+    justifyContent: "space-between",
     marginBottom: 1,
   },
   benefitsPill: {
-    backgroundColor: '#EEF4EA',
-    borderColor: '#D5E1CC',
+    backgroundColor: "#EEF4EA",
+    borderColor: "#D5E1CC",
     borderRadius: theme.radius.pill,
     borderWidth: 1,
     paddingHorizontal: 9,
@@ -1455,16 +1507,16 @@ const styles = StyleSheet.create({
   // rgb(111, 116, 104)) to rgba(111, 116, 104, 0.7). Only the subtitle color softens;
   // the title stays fully legible and the card gets no opacity.
   csvExportBodyLocked: {
-    color: 'rgba(111, 116, 104, 0.7)',
+    color: "rgba(111, 116, 104, 0.7)",
   },
   csvExportCard: {
-    alignItems: 'center',
-    alignSelf: 'stretch',
-    backgroundColor: '#FFFDF8',
-    borderColor: 'rgba(92, 111, 82, 0.13)',
+    alignItems: "center",
+    alignSelf: "stretch",
+    backgroundColor: "#FFFDF8",
+    borderColor: "rgba(92, 111, 82, 0.13)",
     borderRadius: 18,
     borderWidth: 1,
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 12,
     marginTop: 8,
     minHeight: 58,
@@ -1486,18 +1538,18 @@ const styles = StyleSheet.create({
   // state reads as subtly set-back — NOT disabled. No opacity, border, or shadow
   // change; the row must still invite the tap that opens the paywall.
   csvExportCardLocked: {
-    backgroundColor: '#FDFBF5',
+    backgroundColor: "#FDFBF5",
   },
   csvExportCardPressed: {
     opacity: 0.82,
   },
   csvExportChevron: {
-    borderColor: '#7F8778',
+    borderColor: "#7F8778",
     borderRightWidth: 1.2,
     borderTopWidth: 1.2,
     height: 7,
     opacity: 0.42,
-    transform: [{ rotate: '45deg' }],
+    transform: [{ rotate: "45deg" }],
     width: 7,
   },
   csvExportCopy: {
@@ -1519,13 +1571,13 @@ const styles = StyleSheet.create({
     width: 4,
   },
   featureLine: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 9,
     marginTop: 12,
   },
   featureText: {
     ...theme.typography.meta,
-    color: '#787D72',
+    color: "#787D72",
     flex: 1,
     lineHeight: 20,
   },
@@ -1536,7 +1588,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   guestActions: {
-    flexDirection: 'row',
+    flexDirection: "row",
   },
   guestCtaSection: {
     marginTop: 14,
@@ -1545,14 +1597,14 @@ const styles = StyleSheet.create({
     gap: 7,
   },
   identityContent: {
-    alignItems: 'flex-start',
+    alignItems: "flex-start",
     flex: 1,
     minWidth: 0,
   },
   identityRow: {
-    alignItems: 'center',
-    alignSelf: 'stretch',
-    flexDirection: 'row',
+    alignItems: "center",
+    alignSelf: "stretch",
+    flexDirection: "row",
     gap: 15,
   },
   insightsAccentRate: {
@@ -1586,9 +1638,9 @@ const styles = StyleSheet.create({
     marginTop: 0,
   },
   profileCard: {
-    alignSelf: 'stretch',
-    backgroundColor: '#FFFDFB',
-    borderColor: '#E3E5DD',
+    alignSelf: "stretch",
+    backgroundColor: "#FFFDFB",
+    borderColor: "#E3E5DD",
     borderRadius: 28,
     borderWidth: 1,
     marginTop: 28,
@@ -1611,8 +1663,8 @@ const styles = StyleSheet.create({
     minHeight: 548,
   },
   proIdentityPill: {
-    backgroundColor: '#FFF6E5',
-    borderColor: '#D6C28F',
+    backgroundColor: "#FFF6E5",
+    borderColor: "#D6C28F",
     borderRadius: theme.radius.pill,
     borderWidth: 1,
     paddingHorizontal: 10,
@@ -1627,7 +1679,7 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   proIdentityPillText: {
-    color: '#604B25',
+    color: "#604B25",
     fontSize: 11,
     fontWeight: theme.fontWeight.semibold,
     lineHeight: 14,
@@ -1637,53 +1689,53 @@ const styles = StyleSheet.create({
     height: 2,
     left: -1,
     opacity: 0.85,
-    position: 'absolute',
+    position: "absolute",
     right: -1,
     top: -1,
   },
   proUsageBlobInner: {
-    backgroundColor: 'rgba(255, 255, 255, 0.26)',
+    backgroundColor: "rgba(255, 255, 255, 0.26)",
     borderRadius: 26,
     bottom: -26,
     height: 52,
-    position: 'absolute',
+    position: "absolute",
     right: -26,
     width: 52,
   },
   proUsageBlobMid: {
-    backgroundColor: 'rgba(255, 255, 255, 0.18)',
+    backgroundColor: "rgba(255, 255, 255, 0.18)",
     borderRadius: 32,
     bottom: -32,
     height: 64,
-    position: 'absolute',
+    position: "absolute",
     right: -32,
     width: 64,
   },
   proUsageBlobOuter: {
-    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    backgroundColor: "rgba(255, 255, 255, 0.12)",
     borderRadius: 40,
     bottom: -40,
     height: 80,
-    position: 'absolute',
+    position: "absolute",
     right: -40,
     width: 80,
   },
   proUsageCard: {
-    borderColor: 'rgba(255, 255, 255, 0.14)',
+    borderColor: "rgba(255, 255, 255, 0.14)",
     elevation: 0,
     marginTop: 0,
-    overflow: 'hidden',
+    overflow: "hidden",
     paddingBottom: 18,
     paddingTop: 19,
     shadowOpacity: 0,
   },
   proUsageCardWrapper: {
-    alignSelf: 'stretch',
-    backgroundColor: '#2F442F',
+    alignSelf: "stretch",
+    backgroundColor: "#2F442F",
     borderRadius: 22,
     elevation: 6,
     marginTop: 20,
-    shadowColor: '#0F1A0F',
+    shadowColor: "#0F1A0F",
     shadowOffset: {
       height: 16,
       width: 0,
@@ -1699,50 +1751,50 @@ const styles = StyleSheet.create({
     opacity: 0.78,
   },
   proUsageLabel: {
-    color: 'rgba(255, 255, 255, 0.7)',
+    color: "rgba(255, 255, 255, 0.7)",
   },
   proUsagePill: {
-    alignItems: 'center',
-    flexDirection: 'row',
+    alignItems: "center",
+    flexDirection: "row",
     gap: 5,
     paddingHorizontal: 9,
   },
   proUsagePillGlowInner: {
-    backgroundColor: 'rgba(199, 146, 62, 0.24)',
+    backgroundColor: "rgba(199, 146, 62, 0.24)",
     borderRadius: theme.radius.pill,
     bottom: -3,
     left: -3,
-    position: 'absolute',
+    position: "absolute",
     right: -3,
     top: -3,
   },
   proUsagePillGlowMid: {
-    backgroundColor: 'rgba(199, 146, 62, 0.16)',
+    backgroundColor: "rgba(199, 146, 62, 0.16)",
     borderRadius: theme.radius.pill,
     bottom: -7,
     left: -7,
-    position: 'absolute',
+    position: "absolute",
     right: -7,
     top: -7,
   },
   proUsagePillGlowOuter: {
-    backgroundColor: 'rgba(199, 146, 62, 0.1)',
+    backgroundColor: "rgba(199, 146, 62, 0.1)",
     borderRadius: theme.radius.pill,
     bottom: -11,
     left: -11,
-    position: 'absolute',
+    position: "absolute",
     right: -11,
     top: -11,
   },
   proUsagePillOnDark: {
-    borderColor: 'rgba(255, 246, 229, 0.62)',
+    borderColor: "rgba(255, 246, 229, 0.62)",
     elevation: 0,
-    position: 'relative',
+    position: "relative",
     shadowOpacity: 0,
     zIndex: 1,
   },
   proUsagePillWrapper: {
-    position: 'relative',
+    position: "relative",
   },
   proUsageShimmerGradient: {
     flex: 1,
@@ -1750,12 +1802,12 @@ const styles = StyleSheet.create({
   proUsageShimmerWrap: {
     height: 3,
     left: 0,
-    position: 'absolute',
+    position: "absolute",
     top: -1.5,
     width: SHIMMER_BAND_WIDTH,
   },
   proUsageTitle: {
-    color: '#FFFDF7',
+    color: "#FFFDF7",
     fontSize: 24,
     fontWeight: theme.fontWeight.medium,
     letterSpacing: 0.4,
@@ -1765,14 +1817,14 @@ const styles = StyleSheet.create({
   progressFill: {
     backgroundColor: theme.colors.greenDark,
     borderRadius: theme.radius.pill,
-    height: '100%',
+    height: "100%",
   },
   progressTrack: {
-    backgroundColor: '#DDE8D5',
+    backgroundColor: "#DDE8D5",
     borderRadius: theme.radius.pill,
     height: 6,
     marginTop: 15,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   ratingBody: {
     color: theme.colors.muted,
@@ -1780,13 +1832,13 @@ const styles = StyleSheet.create({
     lineHeight: 17,
     marginTop: 3,
     maxWidth: 274,
-    textAlign: 'center',
+    textAlign: "center",
   },
   ratingCard: {
-    alignItems: 'center',
-    alignSelf: 'stretch',
-    backgroundColor: '#FFF8EC',
-    borderColor: '#E9DCC8',
+    alignItems: "center",
+    alignSelf: "stretch",
+    backgroundColor: "#FFF8EC",
+    borderColor: "#E9DCC8",
     borderRadius: 22,
     borderWidth: 1,
     marginTop: 10,
@@ -1805,8 +1857,8 @@ const styles = StyleSheet.create({
     opacity: 0.82,
   },
   ratingCta: {
-    backgroundColor: 'rgba(255, 253, 248, 0.5)',
-    borderColor: 'rgba(225, 215, 200, 0.7)',
+    backgroundColor: "rgba(255, 253, 248, 0.5)",
+    borderColor: "rgba(225, 215, 200, 0.7)",
     borderRadius: theme.radius.pill,
     borderWidth: 1,
     marginTop: 7,
@@ -1825,11 +1877,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: theme.fontWeight.medium,
     lineHeight: 21,
-    textAlign: 'center',
+    textAlign: "center",
   },
   remainingPill: {
     backgroundColor: theme.colors.card,
-    borderColor: '#DBE1D4',
+    borderColor: "#DBE1D4",
     borderRadius: theme.radius.pill,
     borderWidth: 1,
     paddingHorizontal: 13,
@@ -1842,7 +1894,7 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
   screen: {
-    backgroundColor: '#FBFAF3',
+    backgroundColor: "#FBFAF3",
     paddingBottom: 0,
     paddingTop: theme.spacing.xl,
   },
@@ -1850,13 +1902,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   signOutButton: {
-    alignItems: 'center',
-    alignSelf: 'center',
-    backgroundColor: '#FFFBF8',
-    borderColor: '#E8CFC8',
+    alignItems: "center",
+    alignSelf: "center",
+    backgroundColor: "#FFFBF8",
+    borderColor: "#E8CFC8",
     borderRadius: 24,
     borderWidth: 1,
-    justifyContent: 'center',
+    justifyContent: "center",
     maxWidth: 278,
     minHeight: 55,
     paddingHorizontal: 28,
@@ -1868,7 +1920,7 @@ const styles = StyleSheet.create({
     },
     shadowOpacity: 0.03,
     shadowRadius: 14,
-    width: '72%',
+    width: "72%",
     elevation: 1,
   },
   signOutButtonDisabled: {
@@ -1878,16 +1930,16 @@ const styles = StyleSheet.create({
     opacity: 0.76,
   },
   signOutButtonText: {
-    color: '#8E5D55',
+    color: "#8E5D55",
     fontSize: 15,
     fontWeight: theme.fontWeight.medium,
     lineHeight: 20,
-    textAlign: 'center',
+    textAlign: "center",
   },
   signOutErrorCard: {
-    alignSelf: 'stretch',
+    alignSelf: "stretch",
     backgroundColor: theme.colors.softPending,
-    borderColor: '#E4C8C1',
+    borderColor: "#E4C8C1",
     borderRadius: theme.radius.md,
     borderWidth: 1,
     marginTop: theme.spacing.sm,
@@ -1899,16 +1951,16 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: theme.fontWeight.medium,
     lineHeight: 18,
-    textAlign: 'center',
+    textAlign: "center",
   },
   signOutSection: {
-    alignSelf: 'stretch',
+    alignSelf: "stretch",
     marginTop: 12,
   },
   snapshotCard: {
-    alignSelf: 'stretch',
-    backgroundColor: '#FFFCF3',
-    borderColor: '#E9E0D0',
+    alignSelf: "stretch",
+    backgroundColor: "#FFFCF3",
+    borderColor: "#E9E0D0",
     borderRadius: 20,
     borderWidth: 1,
     marginTop: 9,
@@ -1924,16 +1976,16 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   snapshotGrid: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 8,
     marginTop: 12,
   },
   snapshotHeader: {
-    alignItems: 'flex-start',
+    alignItems: "flex-start",
   },
   snapshotItem: {
-    backgroundColor: '#F7F4EC',
-    borderColor: '#E8E2D6',
+    backgroundColor: "#F7F4EC",
+    borderColor: "#E8E2D6",
     borderRadius: 14,
     borderWidth: 1,
     flex: 1,
@@ -1949,25 +2001,25 @@ const styles = StyleSheet.create({
     width: 22,
   },
   snapshotAccentKept: {
-    backgroundColor: '#9A743D',
+    backgroundColor: "#9A743D",
   },
   snapshotAccentOpen: {
     backgroundColor: theme.colors.greenDark,
   },
   snapshotAccentReturned: {
-    backgroundColor: '#65845D',
+    backgroundColor: "#65845D",
   },
   snapshotItemKept: {
-    backgroundColor: '#FBF4E8',
-    borderColor: '#E9DDC8',
+    backgroundColor: "#FBF4E8",
+    borderColor: "#E9DDC8",
   },
   snapshotItemOpen: {
-    backgroundColor: '#F3F6EE',
-    borderColor: '#DDE7D6',
+    backgroundColor: "#F3F6EE",
+    borderColor: "#DDE7D6",
   },
   snapshotItemReturned: {
-    backgroundColor: '#F4F8F0',
-    borderColor: '#DCE8D4',
+    backgroundColor: "#F4F8F0",
+    borderColor: "#DCE8D4",
   },
   snapshotLabel: {
     color: theme.colors.muted,
@@ -1976,13 +2028,13 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   snapshotLabelKept: {
-    color: '#8A6A3E',
+    color: "#8A6A3E",
   },
   snapshotLabelOpen: {
     color: theme.colors.greenDark,
   },
   snapshotLabelReturned: {
-    color: '#5F7C58',
+    color: "#5F7C58",
   },
   snapshotTitle: {
     color: theme.colors.greenDark,
@@ -1991,7 +2043,7 @@ const styles = StyleSheet.create({
     lineHeight: 19,
   },
   snapshotTitleBlock: {
-    alignItems: 'flex-start',
+    alignItems: "flex-start",
   },
   snapshotValue: {
     color: theme.colors.greenDark,
@@ -2000,25 +2052,25 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   statusBadge: {
-    alignItems: 'center',
+    alignItems: "center",
     borderRadius: theme.radius.pill,
     borderWidth: 1,
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 7,
     paddingHorizontal: 12,
     paddingVertical: 6,
   },
   statusBadgeGuest: {
-    backgroundColor: '#F6F1E8',
-    borderColor: '#E6DCCB',
+    backgroundColor: "#F6F1E8",
+    borderColor: "#E6DCCB",
   },
   statusBadgeLoading: {
-    backgroundColor: '#F5F6F0',
-    borderColor: '#E1E5DC',
+    backgroundColor: "#F5F6F0",
+    borderColor: "#E1E5DC",
   },
   statusBadgeSignedIn: {
-    backgroundColor: '#EEF4EA',
-    borderColor: '#D9E5D3',
+    backgroundColor: "#EEF4EA",
+    borderColor: "#D9E5D3",
   },
   statusBadgeText: {
     ...theme.typography.chipText,
@@ -2063,14 +2115,14 @@ const styles = StyleSheet.create({
     width: 6,
   },
   syncRow: {
-    alignItems: 'center',
-    alignSelf: 'stretch',
-    flexDirection: 'row',
+    alignItems: "center",
+    alignSelf: "stretch",
+    flexDirection: "row",
     gap: 10,
     marginTop: 18,
   },
   syncText: {
-    color: '#4D6048',
+    color: "#4D6048",
     flex: 1,
     fontSize: 14,
     fontWeight: theme.fontWeight.medium,
@@ -2078,14 +2130,14 @@ const styles = StyleSheet.create({
   },
   title: {
     ...theme.typography.accountTitle,
-    color: '#12322D',
+    color: "#12322D",
     fontWeight: theme.fontWeight.bold,
     lineHeight: 38,
   },
   usageCard: {
-    alignSelf: 'stretch',
-    backgroundColor: '#F2F7EE',
-    borderColor: '#DCE8D5',
+    alignSelf: "stretch",
+    backgroundColor: "#F2F7EE",
+    borderColor: "#DCE8D5",
     borderRadius: 22,
     borderWidth: 1,
     marginTop: 20,
@@ -2101,16 +2153,71 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   usageHeader: {
-    alignItems: 'center',
-    flexDirection: 'row',
+    alignItems: "center",
+    flexDirection: "row",
     gap: 12,
-    justifyContent: 'space-between',
+    justifyContent: "space-between",
   },
   usageLabel: {
     color: theme.colors.greenDark,
     fontSize: 13,
     fontWeight: theme.fontWeight.semibold,
     lineHeight: 18,
+  },
+  // Amber chevron for the Pro action chip — the same CSS-border chevron as
+  // csvExportChevron (a 45°-rotated corner), amber and crisp. Bumped 6→7px / 1.4→1.5
+  // stroke so it sits balanced beside the label inside the filled chip rather than
+  // looking incidental.
+  usageProHintChevron: {
+    borderColor: theme.colors.amber,
+    borderRightWidth: 1.5,
+    borderTopWidth: 1.5,
+    height: 7,
+    transform: [{ rotate: "45deg" }],
+    width: 7,
+  },
+  // Hairline separating the informational bullets from the Pro action row. Reuses the
+  // usageCard's own borderColor (#DCE8D5) rather than a new colour, and sits inside the
+  // card's padding so it spans the content width with no negative margins.
+  usageProHintDivider: {
+    backgroundColor: "#DCE8D5",
+    height: 1,
+    marginTop: 14,
+  },
+  // The Pro entry point, styled as a soft amber chip — mirroring remainingPill's
+  // filled-pill language in this same card, but in amber: a low-alpha amber fill + a
+  // 1px amber border so it reads as a tap target, not a green footnote. Content-width
+  // and centred so the chip hugs its label. No shadow, elevation, or gradient — the
+  // solid gold pill (Spending Insights) stays the tier above this.
+  usageProHintRow: {
+    alignItems: "center",
+    alignSelf: "center",
+    backgroundColor: "rgba(199, 146, 62, 0.12)",
+    borderColor: "rgba(199, 146, 62, 0.5)",
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 6,
+    justifyContent: "center",
+    marginTop: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+  },
+  // Pressed feedback: a deeper step of the chip's own amber fill (0.12 → 0.2), so the
+  // press reads as the same chip darkening rather than a colour change.
+  usageProHintRowPressed: {
+    backgroundColor: "rgba(199, 146, 62, 0.2)",
+  },
+  // Label for the Pro action chip. theme.colors.amber (#C7923E) is the only amber and
+  // is too light for caption text on its own tint, so the label keeps greenDark — the
+  // card's on-brand dark, already used on every other line here — for strong contrast
+  // on the soft amber fill. The chip's fill + border (not the text colour) carries the
+  // affordance now. Not flexed — the row centres label + chevron as a unit.
+  usageProHintText: {
+    ...theme.typography.meta,
+    color: theme.colors.greenDark,
+    fontWeight: theme.fontWeight.medium,
+    lineHeight: 20,
   },
   usageTitle: {
     color: theme.colors.greenDark,
