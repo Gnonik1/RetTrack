@@ -27,9 +27,9 @@ import { useAuth } from "../../../state/AuthState";
 import {
   getPlanAccessSubject,
   getProFeatureAccess,
-  type ProFeatureKey,
 } from "../../monetization/access/planAccess";
 import { usePlan } from "../../monetization/state/PlanState";
+import { useProFeatureGate } from "../../monetization/state/useProFeatureGate";
 import { usePurchases } from "../../purchases/state/PurchasesState";
 import { exportPurchasesCsv } from "../../purchases/utils/purchaseCsvExport";
 
@@ -688,6 +688,7 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
   const [signOutError, setSignOutError] = useState("");
   const [hasAvatarLoadError, setHasAvatarLoadError] = useState(false);
   const [proUsageCardWidth, setProUsageCardWidth] = useState(0);
+  const handleProFeaturePress = useProFeatureGate({ signInSource: "profile" });
   const userEmail = user?.email;
   const googleAvatarUrl = getUserAvatarUrl(user?.user_metadata);
   const shouldShowAvatarImage =
@@ -872,37 +873,6 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
       setSignOutError("We couldn't sign you out. Please try again.");
     } finally {
       setIsSigningOut(false);
-    }
-  };
-
-  const handleUpgradePress = () => {
-    // Single integration point for the Pro paywall, shared by every ProLockedOverlay
-    // teaser. The paywall screen isn't built yet, so this surfaces a lightweight
-    // "coming soon" notice; replace this body with paywall navigation
-    // (e.g. router.push('/paywall')) once that screen exists.
-    Alert.alert("RetTrack Pro", "Spending insights and more are coming soon.");
-  };
-
-  // Shared gate for locked Pro surfaces (Spending insights teaser, CSV export row).
-  // The guest/Free split lives HERE only: guest → sign-in first (RevenueCat's App
-  // User ID is the Supabase user id, so a Guest has no account for an entitlement to
-  // attach to — they must sign in before any purchase flow), signed-in Free → the
-  // paywall integration point. A Pro subject yields recommendedAction 'allow', so
-  // neither branch fires (no-op); callers that need the export gate check allowed.
-  const handleProFeaturePress = (feature: ProFeatureKey) => {
-    const subject = getPlanAccessSubject({
-      isAuthenticated,
-      isPro,
-    });
-    const access = getProFeatureAccess({
-      feature,
-      subject,
-    });
-
-    if (access.recommendedAction === "showSignInRequired") {
-      onSignIn?.();
-    } else if (access.recommendedAction === "showPaywall") {
-      handleUpgradePress();
     }
   };
 
