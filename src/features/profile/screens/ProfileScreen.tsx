@@ -16,6 +16,7 @@ import Svg, { Path } from "react-native-svg";
 import { AppButton } from "../../../components/AppButton";
 import { AppScreen } from "../../../components/AppScreen";
 import { AppText } from "../../../components/AppText";
+import { ProSparkleIcon } from "../../../components/ProBadge";
 import {
   lockedPreviewBar,
   lockedPreviewBarSlot,
@@ -185,23 +186,6 @@ function formatMoneyBucket(
   return codes
     .map((code) => `${code} ${formatInsightAmount(totals[code])}`)
     .join(" · ");
-}
-
-function ProSparkleIcon() {
-  return (
-    <Svg
-      accessibilityElementsHidden
-      focusable={false}
-      height={12}
-      viewBox="0 0 12 12"
-      width={12}
-    >
-      <Path
-        d="M6 0.8 7.45 4.55 11.2 6 7.45 7.45 6 11.2 4.55 7.45 0.8 6 4.55 4.55 6 0.8Z"
-        fill={theme.colors.amber}
-      />
-    </Svg>
-  );
 }
 
 const SHIMMER_BAND_WIDTH = 90;

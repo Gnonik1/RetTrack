@@ -24,6 +24,7 @@ import Svg, { Path } from 'react-native-svg';
 
 import { AppScreen } from '../../../components/AppScreen';
 import { AppText } from '../../../components/AppText';
+import { ProBadge } from '../../../components/ProBadge';
 import { theme } from '../../../constants/theme';
 import { useAuth } from '../../../state/AuthState';
 import { getDelayUntilNextLocalHomeDay } from '../../notifications/homeReminderNudge';
@@ -33,6 +34,7 @@ import {
   requestNotificationPermissions,
 } from '../../notifications/notifications';
 import { usePlan } from '../../monetization/state/PlanState';
+import { useProFeatureGate } from '../../monetization/state/useProFeatureGate';
 import { useAppSettings } from '../../settings/state/AppSettingsState';
 import {
   purchaseStatusLabels,
@@ -1116,7 +1118,8 @@ export function PurchasesHomeScreen({
     setNotificationPromptStatus,
     setRemindersEnabled,
   } = useAppSettings();
-  const { features } = usePlan();
+  const { features, isPro } = usePlan();
+  const openProGate = useProFeatureGate({ signInSource: 'home' });
   const isAdvancedSearchEnabled = features.advancedSearch;
   const isAdvancedSortingEnabled = features.advancedSorting;
   const [isScrollEnabled, setIsScrollEnabled] = useState(true);
@@ -1839,9 +1842,22 @@ export function PurchasesHomeScreen({
       >
         <View style={styles.header}>
           <View style={styles.headerCopy}>
-            <AppText style={styles.greeting} variant="caption">
-              {greeting}
-            </AppText>
+            <View style={styles.greetingRow}>
+              <AppText style={styles.greeting} variant="caption">
+                {greeting}
+              </AppText>
+              <View style={styles.greetingSpacerLeft} />
+              {isPro ? (
+                <ProBadge variant="status" />
+              ) : (
+                <ProBadge
+                  accessibilityLabel="Get RetTrack Pro"
+                  onPress={() => openProGate('unlimitedPurchases')}
+                  variant="action"
+                />
+              )}
+              <View style={styles.greetingSpacerRight} />
+            </View>
             <AppText style={styles.title} variant="title">
               Your purchases
             </AppText>
@@ -2204,6 +2220,23 @@ const styles = StyleSheet.create({
   headerCopy: {
     flex: 1,
     gap: 3,
+  },
+  // Inline row holding the greeting + the Pro badge, left-aligned so the badge
+  // follows the greeting text rather than being pushed to the far edge. alignItems
+  // center vertically aligns the badge with the caption; the badge sizes to content.
+  greetingRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+  },
+  // Flex spacers around the badge place it ~a third into the free space after the
+  // greeting (left flex 1 : right flex 2), rather than centred. This 1 : 2 ratio is
+  // the single knob for the badge's horizontal position.
+  greetingSpacerLeft: {
+    flex: 1,
+  },
+  greetingSpacerRight: {
+    flex: 2,
   },
   greeting: {
     color: theme.colors.muted,
