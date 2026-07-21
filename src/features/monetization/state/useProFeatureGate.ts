@@ -1,6 +1,5 @@
 import { useRouter } from 'expo-router';
 import { useCallback } from 'react';
-import { Alert } from 'react-native';
 
 import { useAuth } from '../../../state/AuthState';
 import {
@@ -48,13 +47,10 @@ export function useProFeatureGate({
         );
       } else if (access.recommendedAction === 'showPaywall') {
         // Single integration point for the Pro paywall, shared by every Pro-gated
-        // surface. The paywall screen isn't built yet, so this surfaces a
-        // lightweight "coming soon" notice; replace this body with paywall
-        // navigation (e.g. router.push('/paywall')) once that screen exists.
-        Alert.alert(
-          'RetTrack Pro',
-          'Spending insights and more are coming soon.',
-        );
+        // surface: a signed-in Free user is routed to the paywall, which presents
+        // the plans and the purchase/restore flow. (Guests never reach here — they
+        // hit 'showSignInRequired' above and go to sign-in first.)
+        router.push('/paywall');
       }
     },
     [isAuthenticated, isPro, router, signInSource],
