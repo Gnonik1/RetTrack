@@ -1846,17 +1846,22 @@ export function PurchasesHomeScreen({
               <AppText style={styles.greeting} variant="caption">
                 {greeting}
               </AppText>
-              <View style={styles.greetingSpacerLeft} />
-              {isPro ? (
-                <ProBadge variant="status" />
-              ) : (
-                <ProBadge
-                  accessibilityLabel="Get RetTrack Pro"
-                  onPress={() => openProGate('unlimitedPurchases')}
-                  variant="action"
-                />
+              {/* Pro users get the quiet STATUS badge on the attention card
+                  below, so the greeting row stays clean — no badge and no flex
+                  spacers (rendering the spacers alone would leave stray empty
+                  flex children). Non-Pro users keep the ACTION badge and its
+                  spacers here, where the upgrade entry point is seen first. */}
+              {isPro ? null : (
+                <>
+                  <View style={styles.greetingSpacerLeft} />
+                  <ProBadge
+                    accessibilityLabel="Get RetTrack Pro"
+                    onPress={() => openProGate('unlimitedPurchases')}
+                    variant="action"
+                  />
+                  <View style={styles.greetingSpacerRight} />
+                </>
               )}
-              <View style={styles.greetingSpacerRight} />
             </View>
             <AppText style={styles.title} variant="title">
               Your purchases
@@ -1904,6 +1909,15 @@ export function PurchasesHomeScreen({
               </View>
             ))}
           </View>
+          {/* Pro users: the quiet STATUS badge lives on this premium surface,
+              parked in the top-right corner (the label and count are stacked and
+              left-aligned, so the corner is clear). Non-Pro users see nothing
+              here — their entry point is the ACTION badge in the greeting row. */}
+          {isPro ? (
+            <View style={styles.attentionProBadge}>
+              <ProBadge onDark variant="status" />
+            </View>
+          ) : null}
         </LinearGradient>
 
         <View style={styles.searchField}>
@@ -2365,6 +2379,18 @@ const styles = StyleSheet.create({
     right: -72,
     top: -82,
     width: 180,
+  },
+  // Pro STATUS badge in the card's top-right corner. zIndex 2 lifts it above the
+  // decorative glow (unlayered) and the content rows (zIndex 1). Insets moved in
+  // from the card's 15/16 padding to 22/22 so ProBadge's on-dark glow ring — which
+  // now extends 11px beyond the badge — clears the card's overflow:'hidden' + 28px
+  // rounded corner; the outer ring settles ~11px inside the card edges instead of
+  // being clipped at the corner.
+  attentionProBadge: {
+    position: 'absolute',
+    right: 22,
+    top: 22,
+    zIndex: 2,
   },
   attentionTopRow: {
     gap: 2,

@@ -35,7 +35,7 @@ export function ProSparkleIcon() {
 }
 
 type ProBadgeProps =
-  | { variant: 'status' }
+  | { variant: 'status'; onDark?: boolean }
   | {
       variant: 'action';
       accessibilityLabel?: string;
@@ -90,14 +90,36 @@ export function ProBadge(props: ProBadgeProps) {
     );
   }
 
-  return (
+  const statusBadge = (
     <View
       onLayout={(event) => setBadgeWidth(event.nativeEvent.layout.width)}
-      style={[styles.badge, styles.statusBadge]}
+      style={[
+        styles.badge,
+        styles.statusBadge,
+        props.onDark && styles.statusBadgeOnDark,
+      ]}
     >
       {content}
     </View>
   );
+
+  // On-dark, the status badge gains the Profile hero's three-ring amber glow. The
+  // rings are ABSOLUTE siblings of the measured badge (not children), so they
+  // never inflate its onLayout width, and they render BEFORE the badge while the
+  // badge carries zIndex 1 (via statusBadgeOnDark) so they sit strictly behind it.
+  // Values are ProfileScreen's proUsagePillGlow* verbatim; non-interactive.
+  if (props.onDark) {
+    return (
+      <View style={styles.statusGlowWrapper}>
+        <View pointerEvents="none" style={styles.statusGlowOuter} />
+        <View pointerEvents="none" style={styles.statusGlowMid} />
+        <View pointerEvents="none" style={styles.statusGlowInner} />
+        {statusBadge}
+      </View>
+    );
+  }
+
+  return statusBadge;
 }
 
 const styles = StyleSheet.create({
@@ -126,6 +148,53 @@ const styles = StyleSheet.create({
     },
     shadowOpacity: 0.035,
     shadowRadius: 8,
+  },
+  // On-dark override of the reward tier, opt-in via the status variant's `onDark`
+  // prop, for placement on the app's dark-green premium surfaces (e.g. the Home
+  // "Needs attention" card). ProfileScreen's proUsagePillOnDark values verbatim:
+  // a lighter cream border and no shadow so the cream fill reads against dark
+  // green. The default (on-light) status badge is unchanged.
+  statusBadgeOnDark: {
+    borderColor: 'rgba(255, 246, 229, 0.62)',
+    elevation: 0,
+    position: 'relative',
+    shadowOpacity: 0,
+    zIndex: 1,
+  },
+  // Profile hero's three-ring amber glow for the on-dark status badge, values
+  // verbatim from ProfileScreen's proUsagePillGlow{Inner,Mid,Outer} and
+  // proUsagePillWrapper: concentric amber rings inset -3 / -7 / -11 and fading
+  // 0.24 -> 0.16 -> 0.1, rounded to the pill, anchored to the badge box by the
+  // relative wrapper. Rendered only for the on-dark status badge.
+  statusGlowWrapper: {
+    position: 'relative',
+  },
+  statusGlowInner: {
+    backgroundColor: 'rgba(199, 146, 62, 0.24)',
+    borderRadius: theme.radius.pill,
+    bottom: -3,
+    left: -3,
+    position: 'absolute',
+    right: -3,
+    top: -3,
+  },
+  statusGlowMid: {
+    backgroundColor: 'rgba(199, 146, 62, 0.16)',
+    borderRadius: theme.radius.pill,
+    bottom: -7,
+    left: -7,
+    position: 'absolute',
+    right: -7,
+    top: -7,
+  },
+  statusGlowOuter: {
+    backgroundColor: 'rgba(199, 146, 62, 0.1)',
+    borderRadius: theme.radius.pill,
+    bottom: -11,
+    left: -11,
+    position: 'absolute',
+    right: -11,
+    top: -11,
   },
   // Invitation tier: same shape and gold border, no shadow, plus a soft amber fill so
   // it reads as present and tappable rather than a bare outline. The value is
