@@ -40,11 +40,17 @@ const TERMS_OF_USE_URL =
 
 // Product copy (not prices) — safe to author here. Every price and currency on
 // this screen comes from the SDK's priceString; nothing money-related is hard
-// coded.
+// coded. Each line maps to real PlanFeatures keys (see planAccess.ts
+// PRO_FEATURE_KEYS): unlimitedPurchases, smartReminders, advancedSearch +
+// advancedFilters + advancedSorting, spendingInsights, proPhotos
+// (PRO_PHOTO_LIMIT = 3), csvExport. Do not list a benefit the plan model does
+// not gate.
 const PRO_BENEFITS = [
-  'Unlimited purchase tracking',
+  'Unlimited saved purchases',
+  'Smart reminders on your schedule',
+  'Search and sort across everything',
   'Spending insights and trends',
-  'More photos on every item',
+  'Up to 3 photos per item',
   'Export your history to CSV',
 ] as const;
 
@@ -192,6 +198,16 @@ function PlanCard({
         <AppText style={styles.planPrice}>{pkg.product.priceString}</AppText>
         <AppText style={styles.planPriceSuffix}>{getPriceSuffix(pkg)}</AppText>
       </View>
+      {/* Authored "Best value" marker on the annual card only — statusBadge's
+          cream/gold pill straddling the top border, shown regardless of
+          selection. Deliberately no computed percentage. */}
+      {pkg.packageType === PACKAGE_TYPE.ANNUAL ? (
+        <View pointerEvents="none" style={styles.bestValuePill}>
+          <AppText style={styles.bestValuePillText} variant="caption">
+            Best value
+          </AppText>
+        </View>
+      ) : null}
     </Pressable>
   );
 }
@@ -385,30 +401,43 @@ export function PaywallScreen({ onDismiss }: { onDismiss: () => void }) {
 
   return (
     <AppScreen>
-      <View style={styles.header}>
-        <AppText variant="title">RetTrack Pro</AppText>
-        <Pressable
-          accessibilityLabel="Close"
-          accessibilityRole="button"
-          hitSlop={12}
-          onPress={onDismiss}
-          style={({ pressed }) => [
-            styles.closeButton,
-            pressed && styles.closeButtonPressed,
-          ]}
-        >
-          <AppText style={styles.closeGlyph}>{'✕'}</AppText>
-        </Pressable>
-      </View>
+      {/* Dark-green Pro hero: the proUsageCard/attentionCard gradient with the
+          amber top hairline (insightsHairline values), carrying the title and
+          subtitle in the established on-dark text colours. The close control
+          sits inside on the dark surface, tinted for contrast. */}
+      <LinearGradient
+        colors={['#2F442F', '#415C3D', '#314832']}
+        end={{ x: 1, y: 1 }}
+        start={{ x: 0, y: 0 }}
+        style={styles.hero}
+      >
+        <View style={styles.heroTopRow}>
+          <AppText style={styles.heroTitle} variant="title">
+            RetTrack Pro
+          </AppText>
+          <Pressable
+            accessibilityLabel="Close"
+            accessibilityRole="button"
+            hitSlop={12}
+            onPress={onDismiss}
+            style={({ pressed }) => [
+              styles.closeButton,
+              pressed && styles.closeButtonPressed,
+            ]}
+          >
+            <AppText style={styles.closeGlyph}>{'✕'}</AppText>
+          </Pressable>
+        </View>
+        <AppText style={styles.heroSubtitle} variant="subtitle">
+          Track every purchase, never miss a return, and see where your money
+          goes.
+        </AppText>
+      </LinearGradient>
 
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        <AppText style={styles.intro} variant="subtitle">
-          Everything you need to track, remember, and understand what you buy.
-        </AppText>
-
         <View style={styles.benefits}>
           {PRO_BENEFITS.map((benefit) => (
             <View key={benefit} style={styles.benefitRow}>
@@ -523,16 +552,43 @@ export function PaywallScreen({ onDismiss }: { onDismiss: () => void }) {
 }
 
 const styles = StyleSheet.create({
-  header: {
-    alignItems: 'center',
+  // Dark-green hero surface: proUsageCard/attentionCard's gradient underneath
+  // (set on the LinearGradient), rounded to the screen's card radius, with
+  // insightsHairline's amber top accent. Shadowless — the gradient element in
+  // proUsageCard carries elevation 0 / shadowOpacity 0, and the paywall stays
+  // calm without lift.
+  hero: {
+    borderRadius: theme.radius.lg,
+    borderTopColor: theme.colors.amber,
+    borderTopWidth: 2,
+    // lg below (was md): more air between the dark slab and the benefits list.
+    marginBottom: theme.spacing.lg,
+    marginTop: theme.spacing.sm,
+    overflow: 'hidden',
+    paddingHorizontal: theme.spacing.md,
+    // sm (was md): a shallower slab — same identity, less dark mass.
+    paddingVertical: theme.spacing.sm,
+  },
+  heroTopRow: {
+    alignItems: 'flex-start',
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingBottom: theme.spacing.md,
-    paddingTop: theme.spacing.sm,
+  },
+  // proUsageTitle/attentionCount's on-dark cream, verbatim.
+  heroTitle: {
+    color: '#FFFDF7',
+  },
+  // proUsageCount's softer on-dark tone, verbatim: sage at 0.78.
+  heroSubtitle: {
+    color: theme.colors.sage,
+    marginTop: theme.spacing.xs,
+    opacity: 0.78,
   },
   closeButton: {
     alignItems: 'center',
-    backgroundColor: theme.colors.sage,
+    // attentionCardGlow's white tint, the established light wash on this exact
+    // dark gradient, so the control reads clearly without a new colour.
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
     borderRadius: theme.radius.pill,
     height: 34,
     justifyContent: 'center',
@@ -542,7 +598,8 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   closeGlyph: {
-    color: theme.colors.muted,
+    // On-dark cream (proUsageTitle/attentionCount), replacing muted-on-sage.
+    color: '#FFFDF7',
     fontSize: 15,
     fontWeight: theme.fontWeight.semibold,
     lineHeight: 18,
@@ -550,12 +607,11 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingBottom: theme.spacing.xl,
   },
-  intro: {
-    marginBottom: theme.spacing.lg,
-  },
   benefits: {
     gap: theme.spacing.sm,
-    marginBottom: theme.spacing.lg,
+    // xl (was lg): this single margin is all that separates the benefits from
+    // the plan list, so it carries the full breathing room between sections.
+    marginBottom: theme.spacing.xl,
   },
   benefitRow: {
     alignItems: 'center',
@@ -564,16 +620,20 @@ const styles = StyleSheet.create({
   },
   benefitCheck: {
     alignItems: 'center',
-    // Warm cream-gold tint behind the gold check, matching the Pro accent.
-    backgroundColor: '#FBF3E2',
+    // The Pro family's cream fill + gold hairline (proIdentityPill/statusBadge
+    // values) at the reduced 18px size: small cream/gold emblems that keep the
+    // benefit rows light against the dark hero.
+    backgroundColor: '#FFF6E5',
+    borderColor: '#D6C28F',
     borderRadius: theme.radius.pill,
-    height: 22,
+    borderWidth: 1,
+    height: 18,
     justifyContent: 'center',
-    width: 22,
+    width: 18,
   },
   benefitCheckGlyph: {
     color: theme.colors.amber,
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: theme.fontWeight.bold,
   },
   benefitText: {
@@ -581,7 +641,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   planList: {
-    gap: theme.spacing.sm,
+    // md (not sm): the Best value pill straddles the annual card's top border by
+    // ~11px, so the list needs the wider existing token to keep clear air between
+    // cards. Also applies to the loading skeleton, keeping the two layouts in step.
+    gap: theme.spacing.md,
   },
   planCard: {
     alignItems: 'center',
@@ -595,8 +658,9 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.md,
   },
   planCardSelected: {
-    // Barely-there gold tint plus the amber border so the choice reads warm.
-    backgroundColor: '#FFFCF4',
+    // The Pro family's cream fill (#FFF6E5, per proIdentityPill/statusBadge) plus
+    // the amber border so the choice reads warm and unmistakably Pro.
+    backgroundColor: '#FFF6E5',
     borderColor: theme.colors.amber,
     borderWidth: 2,
     // Pull padding in by 1 so the thicker border does not shift the layout.
@@ -605,6 +669,27 @@ const styles = StyleSheet.create({
   },
   planCardPressed: {
     opacity: 0.9,
+  },
+  // statusBadge's cream/gold pill values (fill, hairline, radius) sized down for a
+  // marker; straddles the annual card's top border. No shadow — the marker stays
+  // flat so the screen keeps its calm.
+  bestValuePill: {
+    backgroundColor: '#FFF6E5',
+    borderColor: '#D6C28F',
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    position: 'absolute',
+    right: 12,
+    top: -11,
+  },
+  // proIdentityPillText verbatim: the Pro family's deep gold on cream.
+  bestValuePillText: {
+    color: '#604B25',
+    fontSize: 11,
+    fontWeight: theme.fontWeight.semibold,
+    lineHeight: 14,
   },
   radio: {
     alignItems: 'center',
@@ -656,8 +741,11 @@ const styles = StyleSheet.create({
     marginTop: theme.spacing.lg,
   },
   costSummary: {
-    color: theme.colors.muted,
+    // One step up from muted/regular: the cost confirmation above the buy button
+    // should read deliberate, not incidental.
+    color: theme.colors.greenDark,
     fontSize: theme.fontSize.sm,
+    fontWeight: theme.fontWeight.medium,
     textAlign: 'center',
   },
   primaryButton: {
