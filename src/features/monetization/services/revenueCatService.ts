@@ -2,6 +2,7 @@ import Purchases, {
   PURCHASES_ERROR_CODE,
   type CustomerInfo,
   type PurchasesPackage,
+  type Store,
 } from 'react-native-purchases';
 
 export { type CustomerInfo };
@@ -91,6 +92,71 @@ export function getIsProFromCustomerInfo(
   return (
     customerInfo?.entitlements.active[PRO_ENTITLEMENT_ID]?.isActive === true
   );
+}
+
+// --- Active Pro plan summary -----------------------------------------------
+// A typed view of the CURRENT Pro entitlement for the Manage Pro screen. Reads
+// only the active 'pro' entitlement and never throws: returns null on any
+// failure or when Pro is not active.
+
+export type ActiveProPlanKind = 'monthly' | 'annual' | 'lifetime' | 'unknown';
+
+export type ActiveProPlan = {
+  productIdentifier: string;
+  planKind: ActiveProPlanKind;
+  expirationDate: Date | null;
+  willRenew: boolean;
+  store: Store;
+};
+
+// Authoritative product-id -> plan kind map (RevenueCat dashboard product ids).
+// An explicit map is the primary signal, never substring guessing on the id.
+const PRO_PLAN_KIND_BY_PRODUCT_ID: Record<string, ActiveProPlanKind> = {
+  'com.rettrack.pro.monthly': 'monthly',
+  'com.rettrack.pro.yearly': 'annual',
+  'com.rettrack.pro.lifetime': 'lifetime',
+};
+
+function getProPlanKind(
+  productIdentifier: string,
+  expirationDate: Date | null,
+): ActiveProPlanKind {
+  const mapped = PRO_PLAN_KIND_BY_PRODUCT_ID[productIdentifier];
+
+  if (mapped) {
+    return mapped;
+  }
+
+  // Typed fallback for an unmapped id: an entitlement with no expirationDate is
+  // lifetime (non-expiring) access per the SDK's own contract, so trust that
+  // field over any heuristic. A present expiration means a subscription of a
+  // period we do not recognise -> 'unknown'.
+  return expirationDate === null ? 'lifetime' : 'unknown';
+}
+
+export async function getActiveProPlan(): Promise<ActiveProPlan | null> {
+  try {
+    const customerInfo = await refreshRevenueCatCustomerInfo();
+    const entitlement = customerInfo?.entitlements.active[PRO_ENTITLEMENT_ID];
+
+    if (!entitlement || entitlement.isActive !== true) {
+      return null;
+    }
+
+    const expirationDate = entitlement.expirationDate
+      ? new Date(entitlement.expirationDate)
+      : null;
+
+    return {
+      productIdentifier: entitlement.productIdentifier,
+      planKind: getProPlanKind(entitlement.productIdentifier, expirationDate),
+      expirationDate,
+      willRenew: entitlement.willRenew,
+      store: entitlement.store,
+    };
+  } catch {
+    return null;
+  }
 }
 
 export async function resetRevenueCatForSignedOutUser(): Promise<void> {
@@ -214,5 +280,22 @@ export async function restoreProPurchases(): Promise<RestoreProResult> {
       code: readPurchaseErrorCode(error),
       message: readPurchaseErrorMessage(error),
     };
+  }
+}
+
+// Presents Apple's native manage-subscriptions sheet (iOS 13+, via
+// Purchases.showManageSubscriptions). Never throws: returns false when the SDK
+// is unready or the presentation fails, so the caller can fall back to the App
+// Store account-subscriptions link.
+export async function presentManageSubscriptions(): Promise<boolean> {
+  if (!isRevenueCatReady()) {
+    return false;
+  }
+
+  try {
+    await Purchases.showManageSubscriptions();
+    return true;
+  } catch {
+    return false;
   }
 }

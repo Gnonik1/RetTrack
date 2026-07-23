@@ -35,7 +35,12 @@ export function ProSparkleIcon() {
 }
 
 type ProBadgeProps =
-  | { variant: 'status'; onDark?: boolean }
+  | {
+      variant: 'status';
+      onDark?: boolean;
+      onPress?: () => void;
+      accessibilityLabel?: string;
+    }
   | {
       variant: 'action';
       accessibilityLabel?: string;
@@ -45,8 +50,11 @@ type ProBadgeProps =
 // One Pro marker in two tiers that share a single shape + palette (cream/gold, both
 // lifted from ProfileScreen's proIdentityPill) so they read as one family with a
 // clear tier between them:
-// - 'status': a filled, non-interactive reward badge ("Pro"). A plain View — never a
-//   Pressable, never a button role. It states a fact, it is not a control.
+// - 'status': a filled reward badge ("Pro"). By default a plain, non-interactive
+//   View that states a fact. When given an `onPress` it ALSO becomes an entry
+//   point to the Manage Pro screen — a Pressable with a button role — since the
+//   badge now has a real destination. With no handler it stays exactly a plain
+//   View (no button role), so existing non-interactive usages are unchanged.
 // - 'action': an OUTLINED invitation ("Get Pro") for non-Pro users. A Pressable. The
 //   wording is deliberate: "Get Pro" (not "Pro") so it never implies the user already
 //   has it.
@@ -90,7 +98,27 @@ export function ProBadge(props: ProBadgeProps) {
     );
   }
 
-  const statusBadge = (
+  // With a handler the reward badge doubles as the Manage Pro entry point: a
+  // Pressable with a button role and a fill-darkening press (the action tier's
+  // treatment, not whole-badge opacity). With no handler it is the plain,
+  // non-interactive View exactly as before. onLayout is kept on both paths so the
+  // one-shot shimmer still measures its width.
+  const statusBadge = props.onPress ? (
+    <Pressable
+      accessibilityLabel={props.accessibilityLabel}
+      accessibilityRole="button"
+      onLayout={(event) => setBadgeWidth(event.nativeEvent.layout.width)}
+      onPress={props.onPress}
+      style={({ pressed }) => [
+        styles.badge,
+        styles.statusBadge,
+        props.onDark && styles.statusBadgeOnDark,
+        pressed && styles.statusBadgePressed,
+      ]}
+    >
+      {content}
+    </Pressable>
+  ) : (
     <View
       onLayout={(event) => setBadgeWidth(event.nativeEvent.layout.width)}
       style={[
@@ -148,6 +176,13 @@ const styles = StyleSheet.create({
     },
     shadowOpacity: 0.035,
     shadowRadius: 8,
+  },
+  // Pressed feedback for the status badge when it acts as the Manage Pro entry
+  // point: a subtly deeper step of the cream fill (#FFF6E5 -> #F4E7C4), the same
+  // fill-darkening approach actionBadgePressed uses for the amber tier, so the
+  // press reads as the pill deepening rather than the whole badge fading.
+  statusBadgePressed: {
+    backgroundColor: '#F4E7C4',
   },
   // On-dark override of the reward tier, opt-in via the status variant's `onDark`
   // prop, for placement on the app's dark-green premium surfaces (e.g. the Home

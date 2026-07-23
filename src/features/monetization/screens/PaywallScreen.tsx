@@ -18,6 +18,7 @@ import { AppScreen } from '../../../components/AppScreen';
 import { AppText } from '../../../components/AppText';
 import { ShimmerSweep } from '../../../components/ShimmerSweep';
 import { theme } from '../../../constants/theme';
+import { PRO_BENEFITS } from '../constants';
 import {
   getProOfferings,
   purchaseProPackage,
@@ -37,22 +38,6 @@ const PRIVACY_POLICY_URL =
   'https://gnonik1.github.io/rettrack-legal/privacy-policy/';
 const TERMS_OF_USE_URL =
   'https://gnonik1.github.io/rettrack-legal/terms-of-use/';
-
-// Product copy (not prices) — safe to author here. Every price and currency on
-// this screen comes from the SDK's priceString; nothing money-related is hard
-// coded. Each line maps to real PlanFeatures keys (see planAccess.ts
-// PRO_FEATURE_KEYS): unlimitedPurchases, smartReminders, advancedSearch +
-// advancedFilters + advancedSorting, spendingInsights, proPhotos
-// (PRO_PHOTO_LIMIT = 3), csvExport. Do not list a benefit the plan model does
-// not gate.
-const PRO_BENEFITS = [
-  'Unlimited saved purchases',
-  'Smart reminders on your schedule',
-  'Search and sort across everything',
-  'Spending insights and trends',
-  'Up to 3 photos per item',
-  'Export your history to CSV',
-] as const;
 
 // Honest outcome messaging. notConfigured is a sign-in prompt, never a payment
 // error; payment-pending is Ask to Buy awaiting approval, not a failure.

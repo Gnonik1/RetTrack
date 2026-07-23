@@ -1915,7 +1915,12 @@ export function PurchasesHomeScreen({
               here — their entry point is the ACTION badge in the greeting row. */}
           {isPro ? (
             <View style={styles.attentionProBadge}>
-              <ProBadge onDark variant="status" />
+              <ProBadge
+                accessibilityLabel="Manage RetTrack Pro"
+                onDark
+                onPress={() => openProGate('unlimitedPurchases')}
+                variant="status"
+              />
             </View>
           ) : null}
         </LinearGradient>

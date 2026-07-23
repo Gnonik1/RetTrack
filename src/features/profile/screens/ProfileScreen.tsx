@@ -1039,21 +1039,32 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
                         pointerEvents="none"
                         style={styles.proUsagePillGlowInner}
                       />
-                      <View
-                        style={[
-                          styles.proIdentityPill,
-                          styles.proUsagePill,
-                          styles.proUsagePillOnDark,
+                      <Pressable
+                        accessibilityLabel="Manage RetTrack Pro"
+                        accessibilityRole="button"
+                        onPress={() =>
+                          handleProFeaturePress("unlimitedPurchases")
+                        }
+                        style={({ pressed }) => [
+                          pressed && styles.proUsagePillPressed,
                         ]}
                       >
-                        <ProSparkleIcon />
-                        <AppText
-                          style={styles.proIdentityPillText}
-                          variant="caption"
+                        <View
+                          style={[
+                            styles.proIdentityPill,
+                            styles.proUsagePill,
+                            styles.proUsagePillOnDark,
+                          ]}
                         >
-                          Pro
-                        </AppText>
-                      </View>
+                          <ProSparkleIcon />
+                          <AppText
+                            style={styles.proIdentityPillText}
+                            variant="caption"
+                          >
+                            Pro
+                          </AppText>
+                        </View>
+                      </Pressable>
                     </View>
                   </View>
 
@@ -1746,6 +1757,12 @@ const styles = StyleSheet.create({
     position: "relative",
     shadowOpacity: 0,
     zIndex: 1,
+  },
+  // Pressed feedback for the pill now that it is the Manage Pro entry point: a
+  // subtle dim on the pill only (the glow rings are outside this Pressable), so
+  // the press reads without distorting the pill's shape or colour.
+  proUsagePillPressed: {
+    opacity: 0.7,
   },
   proUsagePillWrapper: {
     position: "relative",

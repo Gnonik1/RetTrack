@@ -24,9 +24,9 @@ type UseProFeatureGateOptions = {
 // The guest/Free split lives HERE only: guest → sign-in first (RevenueCat's App
 // User ID is the Supabase user id, so a Guest has no account for an entitlement to
 // attach to — they must sign in before any purchase flow), signed-in Free → the
-// paywall integration point. A Pro subject yields recommendedAction 'allow', so
-// neither branch fires (no-op); callers that need the export gate check `allowed`
-// themselves via planAccess.
+// paywall integration point. A Pro subject yields recommendedAction 'allow' and
+// is routed to the Manage Pro screen; callers that need the export gate still
+// check `allowed` themselves via planAccess.
 export function useProFeatureGate({
   signInSource,
 }: UseProFeatureGateOptions = {}) {
@@ -51,6 +51,12 @@ export function useProFeatureGate({
         // the plans and the purchase/restore flow. (Guests never reach here — they
         // hit 'showSignInRequired' above and go to sign-in first.)
         router.push('/paywall');
+      } else if (access.recommendedAction === 'allow') {
+        // A Pro subject: the same gate now opens the Manage Pro screen (current
+        // plan, benefits, and manage/cancel via Apple) instead of doing nothing.
+        // Guests and Free never reach here — they resolve to showSignInRequired /
+        // showPaywall above, so their routing is unchanged.
+        router.push('/manage-pro');
       }
     },
     [isAuthenticated, isPro, router, signInSource],
