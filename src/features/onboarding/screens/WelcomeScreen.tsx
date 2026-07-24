@@ -52,7 +52,8 @@ export function WelcomeScreen({
             Return on time
           </AppText>
           <AppText style={styles.subtitle} variant="subtitle">
-            Never lose track of what you purchased.
+            Return windows close quietly. Get a reminder before yours does — and
+            keep the money you'd have lost.
           </AppText>
         </View>
       </View>
