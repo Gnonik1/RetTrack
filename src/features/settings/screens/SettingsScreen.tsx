@@ -1,3 +1,4 @@
+import Constants from 'expo-constants';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
@@ -772,6 +773,10 @@ export function SettingsScreen() {
   } = useAppSettings();
   const { isAuthenticated, isAuthLoading } = useAuth();
   const { isPro } = usePlan();
+  // Read from app.json's expo.version rather than a literal, so the footer can
+  // never drift from the shipped version the way the previous hardcoded "1.0"
+  // did against 1.0.1. The fallback only covers expoConfig being unavailable.
+  const appVersion = Constants.expoConfig?.version ?? '1.0.2';
   const [activeModal, setActiveModal] = useState<SettingsModalKey | null>(null);
   const [deleteAccountError, setDeleteAccountError] = useState('');
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
@@ -1030,7 +1035,7 @@ export function SettingsScreen() {
             </AppText>
           </View>
           <AppText style={styles.appMetadataText} variant="caption">
-            Version 1.0
+            {`Version ${appVersion}`}
           </AppText>
         </View>
       </ScrollView>
