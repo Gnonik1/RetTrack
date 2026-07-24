@@ -156,7 +156,7 @@ function FormBackground() {
   return (
     <>
       <LinearGradient
-        colors={['#FBFAF3', '#F5F7EF', '#FFF8EB']}
+        colors={['#FBFAF3', '#F4F7EF', '#FFF8EC']}
         end={{ x: 1, y: 1 }}
         pointerEvents="none"
         start={{ x: 0, y: 0 }}

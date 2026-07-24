@@ -920,11 +920,10 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
   return (
     <AppScreen stableTopInset style={styles.screen}>
       <LinearGradient
-        colors={["#FBFAF3", "#F0F5E9", "#FFF8EC"]}
-        end={{ x: 0.94, y: 1 }}
-        locations={[0, 0.52, 1]}
+        colors={["#FBFAF3", "#F4F7EF", "#FFF8EC"]}
+        end={{ x: 1, y: 1 }}
         pointerEvents="none"
-        start={{ x: 0.08, y: 0 }}
+        start={{ x: 0, y: 0 }}
         style={styles.backgroundBaseGradient}
       />
       <View pointerEvents="none" style={styles.backgroundGlowTop} />

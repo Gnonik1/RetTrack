@@ -1812,7 +1812,7 @@ export function PurchasesHomeScreen({
   return (
     <AppScreen stableTopInset style={styles.screen}>
       <LinearGradient
-        colors={['#FBFAF3', '#F4F7EE', '#FFF7EC']}
+        colors={['#FBFAF3', '#F4F7EF', '#FFF8EC']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         pointerEvents="none"

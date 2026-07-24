@@ -215,8 +215,8 @@ export function HistoryScreen() {
   return (
     <AppScreen stableTopInset style={styles.screen}>
       <LinearGradient
-        colors={['#FCFAF3', '#F4F7EF', '#FAF5E9']}
-        end={{ x: 0.82, y: 1 }}
+        colors={['#FBFAF3', '#F4F7EF', '#FFF8EC']}
+        end={{ x: 1, y: 1 }}
         pointerEvents="none"
         start={{ x: 0, y: 0 }}
         style={styles.backgroundBase}
