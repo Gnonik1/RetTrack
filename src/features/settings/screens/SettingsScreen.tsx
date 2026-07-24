@@ -19,6 +19,7 @@ import {
 import { AppButton } from '../../../components/AppButton';
 import { AppScreen } from '../../../components/AppScreen';
 import { AppText } from '../../../components/AppText';
+import { CheckIcon, CrossIcon } from '../../../components/MarkIcons';
 import { theme } from '../../../constants/theme';
 import { deleteCurrentAccount } from '../../../services/accountDeletionService';
 import {
@@ -647,16 +648,10 @@ function ReturnReminderChips({
                   isOnlySelected && styles.returnReminderChipDeleteDisabled,
                 ]}
               >
-                <AppText
-                  style={[
-                    styles.returnReminderChipDeleteLabel,
-                    isSelected &&
-                      styles.returnReminderChipTextSelectedInteractive,
-                  ]}
-                  variant="caption"
-                >
-                  ×
-                </AppText>
+                <CrossIcon
+                  color={isSelected ? theme.colors.card : '#747A70'}
+                  size={11}
+                />
               </Pressable>
             </Pressable>
           );
@@ -750,12 +745,7 @@ function ReturnReminderChips({
               pressed && styles.returnReminderChipPressed,
             ]}
           >
-            <AppText
-              style={styles.returnReminderStepperConfirmLabel}
-              variant="caption"
-            >
-              ✓
-            </AppText>
+            <CheckIcon color={theme.colors.card} size={14} />
           </Pressable>
         </View>
         {isStepperValueTaken && (
@@ -1837,12 +1827,6 @@ const styles = StyleSheet.create({
   returnReminderChipDeleteDisabled: {
     opacity: 0.4,
   },
-  returnReminderChipDeleteLabel: {
-    color: '#747A70',
-    fontSize: 15,
-    fontWeight: theme.fontWeight.semibold,
-    lineHeight: 16,
-  },
   returnReminderChipDisabled: {
     opacity: 0.4,
   },
@@ -1932,12 +1916,6 @@ const styles = StyleSheet.create({
   },
   returnReminderStepperConfirmDisabled: {
     opacity: 0.4,
-  },
-  returnReminderStepperConfirmLabel: {
-    color: theme.colors.card,
-    fontSize: 14,
-    fontWeight: theme.fontWeight.semibold,
-    lineHeight: 16,
   },
   returnReminderStepperHint: {
     color: '#747A70',

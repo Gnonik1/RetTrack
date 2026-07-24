@@ -16,6 +16,7 @@ import {
 
 import { AppScreen } from '../../../components/AppScreen';
 import { AppText } from '../../../components/AppText';
+import { CheckIcon, CrossIcon } from '../../../components/MarkIcons';
 import { ShimmerSweep } from '../../../components/ShimmerSweep';
 import { theme } from '../../../constants/theme';
 import { PRO_BENEFITS } from '../constants';
@@ -410,7 +411,7 @@ export function PaywallScreen({ onDismiss }: { onDismiss: () => void }) {
               pressed && styles.closeButtonPressed,
             ]}
           >
-            <AppText style={styles.closeGlyph}>{'✕'}</AppText>
+            <CrossIcon color="#FFFDF7" size={14} />
           </Pressable>
         </View>
         <AppText style={styles.heroSubtitle} variant="subtitle">
@@ -427,7 +428,7 @@ export function PaywallScreen({ onDismiss }: { onDismiss: () => void }) {
           {PRO_BENEFITS.map((benefit) => (
             <View key={benefit} style={styles.benefitRow}>
               <View style={styles.benefitCheck}>
-                <AppText style={styles.benefitCheckGlyph}>{'✓'}</AppText>
+                <CheckIcon color={theme.colors.amber} size={10} />
               </View>
               <AppText style={styles.benefitText}>{benefit}</AppText>
             </View>
@@ -582,13 +583,6 @@ const styles = StyleSheet.create({
   closeButtonPressed: {
     opacity: 0.7,
   },
-  closeGlyph: {
-    // On-dark cream (proUsageTitle/attentionCount), replacing muted-on-sage.
-    color: '#FFFDF7',
-    fontSize: 15,
-    fontWeight: theme.fontWeight.semibold,
-    lineHeight: 18,
-  },
   scrollContent: {
     paddingBottom: theme.spacing.xl,
   },
@@ -615,11 +609,6 @@ const styles = StyleSheet.create({
     height: 18,
     justifyContent: 'center',
     width: 18,
-  },
-  benefitCheckGlyph: {
-    color: theme.colors.amber,
-    fontSize: 10,
-    fontWeight: theme.fontWeight.bold,
   },
   benefitText: {
     color: theme.colors.text,

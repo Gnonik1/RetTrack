@@ -24,6 +24,7 @@ import Svg, { Path } from 'react-native-svg';
 
 import { AppScreen } from '../../../components/AppScreen';
 import { AppText } from '../../../components/AppText';
+import { CrossIcon } from '../../../components/MarkIcons';
 import { ProBadge } from '../../../components/ProBadge';
 import { theme } from '../../../constants/theme';
 import { useAuth } from '../../../state/AuthState';
@@ -1953,9 +1954,7 @@ export function PurchasesHomeScreen({
                 pressed && styles.searchClearPressed,
               ]}
             >
-              <AppText style={styles.searchClearText} variant="caption">
-                ×
-              </AppText>
+              <CrossIcon color="#747A70" size={13} />
             </Pressable>
           ) : null}
         </View>
@@ -2561,12 +2560,6 @@ const styles = StyleSheet.create({
   },
   searchClearPressed: {
     opacity: theme.press.pressedOpacity,
-  },
-  searchClearText: {
-    color: '#747A70',
-    fontSize: 18,
-    fontWeight: theme.fontWeight.semibold,
-    lineHeight: 20,
   },
   searchMatchHighlight: {
     // Applied over both itemName (semibold) and storeName (regular), so the
