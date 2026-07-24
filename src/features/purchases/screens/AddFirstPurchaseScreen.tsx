@@ -28,6 +28,7 @@ import { AppScreen } from '../../../components/AppScreen';
 import { AppText } from '../../../components/AppText';
 import { theme } from '../../../constants/theme';
 import { usePlan } from '../../monetization/state/PlanState';
+import { useProFeatureGate } from '../../monetization/state/useProFeatureGate';
 import {
   DEFAULT_CURRENCY,
   currencyOptions,
@@ -362,6 +363,10 @@ export function AddFirstPurchaseScreen({
 }: AddFirstPurchaseScreenProps) {
   const { defaultCurrency } = useAppSettings();
   const { limits, photoLimit: planPhotoLimit } = usePlan();
+  // Shared Pro gate, same integration point Profile and Home use. A signed-in Free
+  // subject resolves to showPaywall → /paywall; `signInSource` reuses the existing
+  // 'limit' attribution already carried by onLimitSignUp's /sign-up?source=limit.
+  const openProGate = useProFeatureGate({ signInSource: 'limit' });
   const isEditMode = mode === 'editPurchase';
   const hasInitialPrice = Boolean(initialValues?.price?.trim());
   const hasInitialReturnDate = Boolean(
@@ -463,7 +468,7 @@ export function AddFirstPurchaseScreen({
       : 'Guest limit reached';
   const limitBody =
     activeLimitKind === 'account'
-      ? `Your account can keep up to ${limits.signedInFreePurchases} saved purchases`
+      ? `Your account can keep up to ${limits.signedInFreePurchases} saved purchases. RetTrack Pro removes the limit.`
       : `Guest mode includes ${limits.guestPurchases} purchase entries. Create an account to add more.`;
   const saveSuccessText =
     mode === 'editPurchase' ? 'Purchase updated' : 'Purchase added';
@@ -1171,6 +1176,14 @@ export function AddFirstPurchaseScreen({
     onLimitSignUp?.();
   };
 
+  // Account (signed-in Free) counterpart to handleGuestLimitSignUp: same
+  // clearSaveSuccess() first, then the shared gate rather than a direct
+  // router.push, so paywall routing stays centralized in useProFeatureGate.
+  const handleAccountLimitUpgrade = () => {
+    clearSaveSuccess();
+    openProGate('unlimitedPurchases');
+  };
+
   return (
     <AppScreen style={styles.screen}>
       <FormBackground />
@@ -1533,6 +1546,21 @@ export function AddFirstPurchaseScreen({
                 >
                   <AppText style={styles.guestLimitPrimaryText} variant="button">
                     Sign up
+                  </AppText>
+                </Pressable>
+              ) : null}
+
+              {activeLimitKind === 'account' ? (
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={handleAccountLimitUpgrade}
+                  style={({ pressed }) => [
+                    styles.guestLimitPrimaryAction,
+                    pressed && styles.guestLimitActionPressed,
+                  ]}
+                >
+                  <AppText style={styles.guestLimitPrimaryText} variant="button">
+                    Upgrade to Pro
                   </AppText>
                 </Pressable>
               ) : null}
