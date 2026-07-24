@@ -180,9 +180,36 @@ function RowChevron() {
   return <View style={styles.rowChevron} accessibilityElementsHidden />;
 }
 
+// Shown while the purchases store has not yet hydrated for the CURRENT scope, so
+// an unhydrated `purchases: []` is never mistaken for a genuinely empty archive.
+// Mirrors the month-group geometry below (label, then 82pt rows with a 42pt
+// marker) so the layout does not shift when real content replaces it. Static by
+// design — no shimmer, no spinner — matching the calm treatment the paywall and
+// Manage Pro screens already use for their plan skeletons.
+function HistoryLoadingPlaceholder() {
+  return (
+    <View accessibilityElementsHidden style={styles.placeholderTimeline}>
+      <View style={styles.placeholderMonthLabel} />
+
+      <View style={styles.placeholderMonthItems}>
+        {[0, 1, 2].map((rowKey) => (
+          <View key={rowKey} style={styles.placeholderCard}>
+            <View style={styles.placeholderMarker} />
+
+            <View style={styles.placeholderCopy}>
+              <View style={styles.placeholderLineWide} />
+              <View style={styles.placeholderLineNarrow} />
+            </View>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
 export function HistoryScreen() {
   const router = useRouter();
-  const { purchases } = usePurchases();
+  const { isPurchasesScopeReady, purchases } = usePurchases();
   const historyGroups = useMemo(() => getHistoryGroups(purchases), [purchases]);
 
   return (
@@ -214,7 +241,9 @@ export function HistoryScreen() {
           </AppText>
         </View>
 
-        {historyGroups.length === 0 ? (
+        {!isPurchasesScopeReady ? (
+          <HistoryLoadingPlaceholder />
+        ) : historyGroups.length === 0 ? (
           <View style={styles.emptyCard}>
             <HistoryEmptyIcon />
             <AppText style={styles.emptyTitle} variant="body">
@@ -593,6 +622,55 @@ const styles = StyleSheet.create({
     letterSpacing: 1.2,
     lineHeight: 15,
     marginLeft: 2,
+  },
+  placeholderCard: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.card,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.xl,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 12,
+    minHeight: 82,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  placeholderCopy: {
+    flex: 1,
+    gap: theme.spacing.sm,
+    minWidth: 0,
+  },
+  placeholderLineNarrow: {
+    backgroundColor: theme.colors.sage,
+    borderRadius: theme.radius.sm,
+    height: 10,
+    width: '42%',
+  },
+  placeholderLineWide: {
+    backgroundColor: theme.colors.sage,
+    borderRadius: theme.radius.sm,
+    height: 12,
+    width: '68%',
+  },
+  placeholderMarker: {
+    backgroundColor: theme.colors.sage,
+    borderRadius: theme.radius.lg,
+    height: 42,
+    width: 42,
+  },
+  placeholderMonthItems: {
+    gap: 12,
+  },
+  placeholderMonthLabel: {
+    backgroundColor: theme.colors.sage,
+    borderRadius: theme.radius.sm,
+    height: 11,
+    marginLeft: 2,
+    width: 96,
+  },
+  placeholderTimeline: {
+    gap: 10,
+    marginTop: 26,
   },
   returnedMarker: {
     backgroundColor: '#EEF4EA',
