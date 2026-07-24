@@ -33,6 +33,11 @@ import { usePlan } from "../../monetization/state/PlanState";
 import { useProFeatureGate } from "../../monetization/state/useProFeatureGate";
 import { usePurchases } from "../../purchases/state/PurchasesState";
 import { exportPurchasesCsv } from "../../purchases/utils/purchaseCsvExport";
+import {
+  formatMoneyBucket,
+  getPurchaseValueTotals,
+  type CurrencyTotals,
+} from "../../purchases/utils/purchaseValue";
 
 const APP_STORE_REVIEW_URL =
   "https://apps.apple.com/app/id6775811683?action=write-review";
@@ -47,8 +52,6 @@ type SnapshotCounts = {
   kept: number;
   returned: number;
 };
-
-type CurrencyTotals = Record<string, number>;
 
 type SpendingInsights = {
   activeTotals: CurrencyTotals;
@@ -91,101 +94,6 @@ function getProgressStyle(percent: number) {
   return {
     width: `${percent}%` as `${number}%`,
   };
-}
-
-// Prices are stored as `${CurrencyCode} ${amount}` (e.g. "USD 180"). Grouping the
-// money metrics by currency needs both halves. PurchasesHomeScreen already parses
-// the amount for price sorting, but that helper is file-local there and returns only
-// the number (not the code), so the small numeric-normalization is duplicated here —
-// adapted to also read the code — rather than extracted, which would mean editing the
-// out-of-scope Home screen for no other shared caller.
-const PROFILE_PRICE_NUMBER_PATTERN = /[.,]?\d[\d.,]*/;
-
-function parsePurchaseAmount(priceText: string): number | null {
-  const match = PROFILE_PRICE_NUMBER_PATTERN.exec(priceText);
-
-  if (!match) {
-    return null;
-  }
-
-  const digits = match[0].replace(/[.,]+$/, "");
-  const separatorIndex = Math.max(
-    digits.lastIndexOf(","),
-    digits.lastIndexOf("."),
-  );
-  const fraction =
-    separatorIndex === -1 ? "" : digits.slice(separatorIndex + 1);
-  // A trailing run of 1-2 digits is a decimal mark; anything longer ("1,299") is
-  // thousands grouping.
-  const hasDecimalMark = fraction.length > 0 && fraction.length <= 2;
-  const normalized = hasDecimalMark
-    ? `${digits.slice(0, separatorIndex).replace(/[.,]/g, "")}.${fraction}`
-    : digits.replace(/[.,]/g, "");
-  const value = Number(normalized);
-
-  return Number.isFinite(value) ? value : null;
-}
-
-function parsePurchasePrice(
-  priceText?: string,
-): { code: string; value: number } | null {
-  const trimmed = priceText?.trim();
-
-  if (!trimmed) {
-    return null;
-  }
-
-  const value = parsePurchaseAmount(trimmed);
-
-  if (value === null) {
-    return null;
-  }
-
-  const codeMatch = /^[A-Za-z]{2,}/.exec(trimmed);
-
-  return {
-    code: codeMatch ? codeMatch[0].toUpperCase() : "",
-    value,
-  };
-}
-
-function formatInsightAmount(value: number): string {
-  if (Number.isInteger(value)) {
-    return String(value);
-  }
-
-  // Sums of decimal-pad prices can be fractional; keep at most 2 decimals and drop
-  // a trailing ".00" / ".50" zero so whole sums read as "450", not "450.00".
-  return value.toFixed(2).replace(/\.?0+$/, "");
-}
-
-function formatMoneyBucket(
-  totals: CurrencyTotals,
-  isMultiCurrency: boolean,
-): string {
-  const codes = Object.keys(totals)
-    .filter((code) => totals[code] > 0)
-    .sort();
-
-  if (codes.length === 0) {
-    return "0";
-  }
-
-  if (!isMultiCurrency) {
-    const [code] = codes;
-
-    // One currency across the whole card: show the ISO code with the amount. We
-    // keep the code rather than mapping to a "$" glyph — the data stores codes and a
-    // code→symbol table would be wrong for a non-USD single-currency user.
-    return code
-      ? `${code} ${formatInsightAmount(totals[code])}`
-      : formatInsightAmount(totals[code]);
-  }
-
-  // Multiple currencies: list each separately, never summed across codes.
-  return codes
-    .map((code) => `${code} ${formatInsightAmount(totals[code])}`)
-    .join(" · ");
 }
 
 const SHIMMER_BAND_WIDTH = 90;
@@ -749,45 +657,24 @@ export function ProfileScreen({ onSignIn, onSignUp }: ProfileScreenProps) {
       };
     }
 
-    const returnedTotals: CurrencyTotals = {};
-    const activeTotals: CurrencyTotals = {};
-    const keptTotals: CurrencyTotals = {};
-    const currencyCodes = new Set<string>();
-    let returnedCount = 0;
-    let keptCount = 0;
-    let openCount = 0;
-
-    for (const purchase of purchases) {
-      let bucket: CurrencyTotals;
-
-      // Mirror the Purchase status card's buckets: 'returned' and 'kept' are their
-      // own tiles, everything else ('active' + 'pending') is the "Open" bucket.
-      if (purchase.status === "returned") {
-        bucket = returnedTotals;
-        returnedCount += 1;
-      } else if (purchase.status === "kept") {
-        bucket = keptTotals;
-        keptCount += 1;
-      } else {
-        bucket = activeTotals;
-        openCount += 1;
-      }
-
-      const parsedPrice = parsePurchasePrice(purchase.price);
-
-      if (parsedPrice) {
-        bucket[parsedPrice.code] =
-          (bucket[parsedPrice.code] ?? 0) + parsedPrice.value;
-        currencyCodes.add(parsedPrice.code);
-      }
-    }
-
+    // The bucket loop itself now lives in purchases/utils/purchaseValue so History's
+    // ungated hero reads the same numbers. It is ungated by design; this card keeps
+    // its own isPro guard above, so Free/Guest still reach the teaser, never this.
+    const {
+      activeTotals,
+      isMultiCurrency,
+      keptCount,
+      keptTotals,
+      openCount,
+      returnedCount,
+      returnedTotals,
+    } = getPurchaseValueTotals(purchases);
     const resolvedCount = returnedCount + keptCount;
 
     return {
       activeTotals,
       hasData: returnedCount + keptCount + openCount > 0,
-      isMultiCurrency: currencyCodes.size > 1,
+      isMultiCurrency,
       keptTotals,
       returnRatePercent:
         resolvedCount === 0

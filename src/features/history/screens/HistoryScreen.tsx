@@ -12,6 +12,10 @@ import {
 } from '../../purchases/data/mockPurchases';
 import { usePurchases } from '../../purchases/state/PurchasesState';
 import { formatCompactDate } from '../../purchases/utils/purchaseDates';
+import {
+  formatInsightAmount,
+  getReturnedValueSummary,
+} from '../../purchases/utils/purchaseValue';
 
 type HistoryGroup = {
   items: MockPurchase[];
@@ -211,6 +215,33 @@ export function HistoryScreen() {
   const router = useRouter();
   const { isPurchasesScopeReady, purchases } = usePurchases();
   const historyGroups = useMemo(() => getHistoryGroups(purchases), [purchases]);
+  // Ungated on purpose: recovered value is visible to Free, Guest and Pro alike.
+  // Only the detailed Spending Insights breakdown on Profile stays Pro-locked.
+  const returnedSummary = useMemo(
+    () => getReturnedValueSummary(purchases),
+    [purchases],
+  );
+  // Gated on the same hydration flag as the list below, so a returning user never
+  // sees a wrong count flash before their purchases resolve.
+  const shouldShowRecoveredHero =
+    isPurchasesScopeReady && returnedSummary.returnedCount > 0;
+  // One rendered line per currency instead of formatMoneyBucket's single joined
+  // string, so a multi-currency total can never wrap mid-amount. Same filter and
+  // sort formatMoneyBucket applies, and the same `${code} ${formatInsightAmount()}`
+  // shape, so each line reads exactly as it does on the Profile insights card.
+  // The empty code is already stripped upstream by getReturnedValueSummary.
+  const recoveredAmountLines = useMemo(() => {
+    const { returnedTotals } = returnedSummary;
+
+    return Object.keys(returnedTotals)
+      .filter((code) => returnedTotals[code] > 0)
+      .sort()
+      .map((code) => `${code} ${formatInsightAmount(returnedTotals[code])}`);
+  }, [returnedSummary]);
+  // Empty exactly when formatMoneyBucket would have returned its '0' sentinel:
+  // every returned item either had no price or no parseable currency code.
+  const hasRecoveredAmount = recoveredAmountLines.length > 0;
+  const isSingleRecoveredAmount = recoveredAmountLines.length === 1;
 
   return (
     <AppScreen stableTopInset style={styles.screen}>
@@ -239,6 +270,50 @@ export function HistoryScreen() {
           <AppText style={styles.subtitle} variant="subtitle">
             A simple archive of your decisions.
           </AppText>
+
+          {shouldShowRecoveredHero ? (
+            <View style={styles.recoveredCard}>
+              <AppText style={styles.recoveredLabel} variant="caption">
+                Recovered
+              </AppText>
+
+              {hasRecoveredAmount ? (
+                <>
+                  <View style={styles.recoveredAmountRow}>
+                    {recoveredAmountLines.map((amountLine) => (
+                      <AppText
+                        key={amountLine}
+                        style={[
+                          styles.recoveredAmount,
+                          isSingleRecoveredAmount
+                            ? styles.recoveredAmountSingle
+                            : styles.recoveredAmountMulti,
+                        ]}
+                        variant="body"
+                      >
+                        {amountLine}
+                      </AppText>
+                    ))}
+                  </View>
+
+                  <AppText style={styles.recoveredSupport} variant="caption">
+                    {returnedSummary.returnedCount === 1
+                      ? 'from 1 returned item'
+                      : `from ${returnedSummary.returnedCount} returned items`}
+                  </AppText>
+                </>
+              ) : (
+                // No parseable amount on any returned item, so there is no money to
+                // lead with — the count carries the card at full size instead of
+                // shrinking to a support line under nothing.
+                <AppText style={styles.recoveredCountOnly} variant="body">
+                  {returnedSummary.returnedCount === 1
+                    ? '1 returned item'
+                    : `${returnedSummary.returnedCount} returned items`}
+                </AppText>
+              )}
+            </View>
+          ) : null}
         </View>
 
         {!isPurchasesScopeReady ? (
@@ -671,6 +746,71 @@ const styles = StyleSheet.create({
   placeholderTimeline: {
     gap: 10,
     marginTop: 26,
+  },
+  // greenDark on a light surface: the recovered figure is not Pro-only, so it wears
+  // the app's ordinary emphasis ink rather than the dark-card hero light. No amber
+  // and no gold — those read as the Pro signature on this app's cards.
+  recoveredAmount: {
+    color: theme.colors.greenDark,
+    fontWeight: theme.fontWeight.semibold,
+  },
+  recoveredAmountMulti: {
+    fontSize: 17,
+    lineHeight: 21,
+  },
+  // Side by side, not stacked: two figures read as one total split by currency,
+  // where a column reads as a list. columnGap carries the separation so a wrap on
+  // a narrow screen still lands cleanly.
+  recoveredAmountRow: {
+    alignItems: 'flex-end',
+    columnGap: theme.spacing.md,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 3,
+    rowGap: 2,
+  },
+  recoveredAmountSingle: {
+    fontSize: 20,
+    lineHeight: 23,
+  },
+  // A small tinted summary strip, deliberately lighter in weight than the rows it
+  // sits above. sage is the fill, but the header wash behind it (the warm-cream base
+  // plus backgroundTopSageGlow) composites to roughly #F0F4E8 — within a few units of
+  // sage — so the tint cannot carry the separation on its own. The green rim does
+  // that instead: theme.colors.border is the app's usual hairline but reads as
+  // nothing against sage, so this takes the one green token that does. Elevation is
+  // dropped to the lightest level; the rows below keep the heavier shadow.
+  recoveredCard: {
+    ...theme.depth.surfaceLevel1,
+    backgroundColor: theme.colors.sage,
+    borderColor: theme.colors.green,
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    marginTop: theme.spacing.md,
+    overflow: 'hidden',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  recoveredCountOnly: {
+    color: theme.colors.text,
+    fontSize: 20,
+    fontWeight: theme.fontWeight.semibold,
+    lineHeight: 24,
+    marginTop: 3,
+  },
+  // capsMeta carries no lineHeight, so the eyebrow would otherwise fall back to the
+  // platform default and float the card's height. Pinned, since the whole point of
+  // this card is that it stays shorter than a purchase row.
+  recoveredLabel: {
+    ...theme.typography.capsMeta,
+    color: theme.colors.muted,
+    lineHeight: 13,
+  },
+  recoveredSupport: {
+    color: theme.colors.muted,
+    fontSize: 13,
+    lineHeight: 16,
+    marginTop: 3,
   },
   returnedMarker: {
     backgroundColor: '#EEF4EA',
