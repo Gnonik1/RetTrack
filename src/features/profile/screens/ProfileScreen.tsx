@@ -194,7 +194,7 @@ function StatusBadge({
 function showReviewUnavailableAlert() {
   Alert.alert(
     "Review unavailable",
-    "RetTrack is not available on the App Store yet. Please try again after release.",
+    "We could not open the App Store just now. Please try again in a moment.",
   );
 }
 

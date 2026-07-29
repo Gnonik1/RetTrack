@@ -28,6 +28,7 @@ import {
   syncPurchasePhotos,
   type SupabasePurchasePhotoRow,
 } from '../../../services/purchasePhotoSyncService';
+import { maybeRequestReviewAfterReturn } from '../../../services/storeReviewService';
 import { useAuth } from '../../../state/AuthState';
 import { usePlan } from '../../monetization/state/PlanState';
 import {
@@ -3028,6 +3029,10 @@ export function PurchasesProvider({ children }: { children: ReactNode }) {
       );
 
       void syncResolvedPurchase(resolvedPurchase, status);
+
+      if (status === 'returned') {
+        void maybeRequestReviewAfterReturn();
+      }
     },
     [purchases, signedInUserId, syncResolvedPurchase],
   );
